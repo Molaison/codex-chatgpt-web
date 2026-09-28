@@ -201,6 +201,14 @@ test("CI packages and smoke-launches on macOS, Windows, and Linux", () => {
   assert.match(ci, /macos-15, ubuntu-latest, windows-latest/);
   assert.match(ci, /bun run app:package/);
   assert.match(ci, /bun run app:smoke/);
+  assert.match(ci, /push: \{\}/);
+  assert.match(ci, /pull_request: \{\}/);
+  assert.match(ci, /workflow_dispatch: \{\}/);
+  assert.match(ci, /cancel-in-progress: true/);
+  assert.match(ci, /uses: actions\/upload-artifact@v4/);
+  assert.match(ci, /launcher\/artifacts\/\*\.AppImage/);
+  assert.match(ci, /launcher\/build\/runtime/);
+  assert.match(ci, /retention-days: 14/);
   assert.match(ci, /prepare-linux-libnotify\.sh/);
   assert.match(ci, /prepare-linux-appimage-tools\.cjs/);
   assert.match(ci, /archlinux:base/);

@@ -3,9 +3,9 @@ name: CI
 on:
   # Build every pushed commit, not just release tags, so the newest successful Actions run always
   # has installable packages available for download.
-  push:
-  pull_request:
-  workflow_dispatch:
+  push: {}
+  pull_request: {}
+  workflow_dispatch: {}
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
