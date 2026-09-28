@@ -1,9 +1,15 @@
 name: CI
 
 on:
+  # Build every pushed commit, not just release tags, so the newest successful Actions run always
+  # has installable packages available for download.
   push:
-    branches: [main]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -64,6 +70,18 @@ jobs:
         if: runner.os == 'Linux'
         run: command -v xvfb-run || (sudo apt-get update && sudo apt-get install -y xvfb)
       - run: bun run app:smoke
+      - name: Upload compiled snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-chatgpt-web-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          path: |
+            launcher/artifacts/*.dmg
+            launcher/artifacts/*.zip
+            launcher/artifacts/*.exe
+            launcher/artifacts/*.AppImage
+            launcher/build/runtime
+          if-no-files-found: error
+          retention-days: 14
 
   actionlint:
     runs-on: ubuntu-latest

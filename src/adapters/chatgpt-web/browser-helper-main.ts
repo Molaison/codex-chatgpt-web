@@ -21,12 +21,15 @@ interface RunMessage {
     turnTimeoutMs: number;
     autoApproveToolCalls: boolean;
     useSavedChats?: boolean;
+    standardConcurrencyLimit?: number;
+    proConcurrencyLimit?: number;
   };
   turn: {
     traceId: string;
     modelId: string;
     reasoning?: string;
     modelFamily?: "5.6" | "6";
+    proModel?: boolean;
     capabilities: ChatGptWebCapabilities;
     nativeConnector?: boolean;
     resumeAvailable?: boolean;
@@ -197,6 +200,8 @@ async function run(message: RunMessage): Promise<void> {
       turnTimeoutMs: message.config.turnTimeoutMs,
       autoApproveToolCalls: message.config.autoApproveToolCalls,
       useSavedChats: message.config.useSavedChats === true,
+      standardConcurrencyLimit: message.config.standardConcurrencyLimit,
+      proConcurrencyLimit: message.config.proConcurrencyLimit,
     },
   };
   const abortController = new AbortController();
@@ -221,6 +226,7 @@ async function run(message: RunMessage): Promise<void> {
     modelId: message.turn.modelId,
     reasoning: message.turn.reasoning,
     ...(message.turn.modelFamily ? { modelFamily: message.turn.modelFamily } : {}),
+    ...(message.turn.proModel ? { proModel: true } : {}),
     capabilities: message.turn.capabilities,
     ...(message.turn.nativeConnector ? { nativeConnector: true } : {}),
     prepare: prepareSelected,

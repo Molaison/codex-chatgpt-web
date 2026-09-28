@@ -323,6 +323,41 @@ test("browser turns run concurrently up to the five-tab limit", async () => {
   await Promise.all([...active.slice(1), sixth]);
 });
 
+test("Pro and standard browser turns honor independent configurable concurrency limits", async () => {
+  const releases = new Map<string, () => void>();
+  const worker = Object.assign(Object.create(ChatGptBrowserWorker.prototype), {
+    config: { browserHost: "managed-chrome", proConcurrencyLimit: 2, standardConcurrencyLimit: 3 },
+    activeRuns: new Map(),
+    activeProRuns: new Set(),
+    runExclusive: (turn: { traceId: string }) => new Promise<string>(resolve => {
+      releases.set(turn.traceId, () => resolve(turn.traceId));
+    }),
+  }) as ChatGptBrowserWorker;
+  const browserTurn = (traceId: string, proModel: boolean, reasoning: "high" | "max" = "high") => ({
+    traceId,
+    modelId: "chatgpt-web/high",
+    reasoning,
+    proModel,
+    capabilities: { localToolsEnabled: false, solAvailable: true, extraHighAvailable: true, proAvailable: true },
+    prepare: async () => ({ text: traceId, images: [], release() {} }),
+    onTextDelta() {},
+  });
+
+  const active = [
+    worker.run(browserTurn("pro_1", true)),
+    worker.run(browserTurn("pro_2", true)),
+    worker.run(browserTurn("standard_1", false)),
+    worker.run(browserTurn("standard_2", false, "max")),
+  ];
+  await Promise.resolve();
+  await expect(worker.run(browserTurn("pro_3", true, "high"))).rejects.toThrow("Pro supports at most 2");
+  const thirdStandard = worker.run(browserTurn("standard_3", false));
+  await Promise.resolve();
+  expect(releases.has("standard_3")).toBeTrue();
+  for (const release of releases.values()) release();
+  await Promise.all([...active, thirdStandard]);
+});
+
 test("browser turns have no absolute deadline unless one is explicitly configured", () => {
   const provider = { adapter: "chatgpt-web" as const, baseUrl: "browser://chatgpt" };
   expect(resolveBrowserConfig(provider).turnTimeoutMs).toBeUndefined();

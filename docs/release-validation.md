@@ -1,5 +1,18 @@
 # Release validation
 
+## Downloading the latest commit build
+
+Every pushed commit and pull request is compiled by the `CI` GitHub Actions workflow on macOS,
+Windows, and Linux. Open the newest successful workflow run and download the
+`codex-chatgpt-web-<OS>-<architecture>-<commit>` artifact from its **Artifacts** section. Each
+artifact contains the platform launcher package and the unpacked runtime used by its smoke test.
+Artifacts are retained for 14 days. Tagged, permanent builds continue to be published through the
+`Release` workflow and appear on the GitHub Releases page.
+
+When another commit is pushed to the same branch, GitHub cancels the older in-progress CI run so
+the newest downloadable result is unambiguous. Pull-request artifacts are test builds and are not
+automatically published as GitHub Releases.
+
 CI proves that the runtime builds, the launcher starts, and native packages pass their smoke
 contract on macOS, Windows, and Linux. It does not prove an authenticated ChatGPT session, a live
 MCP connector, or a complete Codex turn. A release candidate is not ready until those account-bound

@@ -112,6 +112,8 @@ export interface AppConfig {
   browserHostDescriptorPath?: string;
   chromeExecutablePath: string;
   storageStatePath: string;
+  /** Stable profile name used to isolate browser state and retained conversations. */
+  accountId?: string;
   brokerSocketPath: string;
   headed: boolean;
   solAvailable: boolean;
@@ -125,6 +127,10 @@ export interface AppConfig {
   zeroRiskProEnabled: boolean;
   /** Optional adapter-silence budget for the Responses watchdog. */
   stallTimeoutSec?: number;
+  /** Per-account concurrency limit for ordinary ChatGPT modes. */
+  standardConcurrencyLimit: number;
+  /** Per-account concurrency limit for ChatGPT Pro. */
+  proConcurrencyLimit: number;
   autoApproveToolCalls: boolean;
   controlToken: string;
   runtimeCommand: string[];
@@ -244,6 +250,7 @@ export function defaultConfig(mode: RuntimeMode = "browser-only"): AppConfig {
     browserInteractionMode: "automatic",
     chromeExecutablePath: defaultChromeExecutable(),
     storageStatePath: join(home, "browser", "storage-state.json"),
+    accountId: "default",
     brokerSocketPath: defaultBrokerEndpoint(home),
     headed: true,
     solAvailable: true,
@@ -254,6 +261,8 @@ export function defaultConfig(mode: RuntimeMode = "browser-only"): AppConfig {
     experimentalFreshConversationPerTurn: false,
     useSavedChats: false,
     zeroRiskProEnabled: false,
+    standardConcurrencyLimit: 5,
+    proConcurrencyLimit: 2,
     autoApproveToolCalls: false,
     controlToken: randomBytes(32).toString("base64url"),
     runtimeCommand: currentRuntimeCommand(),
@@ -437,6 +446,10 @@ function parseConfig(value: unknown, path: string): AppConfig {
     throw new Error(`Invalid contextWindow in ${path}`);
   }
   if (typeof parsed.headed !== "boolean") throw new Error(`Invalid headed in ${path}`);
+  if (parsed.accountId !== undefined
+    && (typeof parsed.accountId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(parsed.accountId))) {
+    throw new Error(`Invalid accountId in ${path}`);
+  }
   if (typeof parsed.autoApproveToolCalls !== "boolean") {
     throw new Error(`Invalid autoApproveToolCalls in ${path}`);
   }
@@ -541,6 +554,13 @@ function parseConfig(value: unknown, path: string): AppConfig {
     && (!Number.isFinite(parsed.stallTimeoutSec) || parsed.stallTimeoutSec <= 0)) {
     throw new Error(`Invalid stallTimeoutSec in ${path}`);
   }
+  for (const key of ["standardConcurrencyLimit", "proConcurrencyLimit"] as const) {
+    const limit = parsed[key] ?? (key === "proConcurrencyLimit" ? 2 : 5);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 5) {
+      throw new Error(`Invalid ${key} in ${path}; expected an integer from 1 to 5`);
+    }
+    parsed[key] = limit;
+  }
   const solAvailable = parsed.solAvailable !== false;
   const proAvailable = parsed.proAvailable === true;
   if (parsed.experimentalSkillAttachments !== undefined && typeof parsed.experimentalSkillAttachments !== "boolean") {
@@ -623,6 +643,7 @@ export function providerConfig(config: AppConfig): CodexProviderConfig {
     ),
     noReasoningModels: [],
     chatgptWeb: {
+      accountId: config.accountId ?? "default",
       appName: manual ? config.manualAppName : config.automaticAppName,
       browserInteractionMode: config.browserInteractionMode,
       browserHost: config.browserHost,
@@ -633,7 +654,9 @@ export function providerConfig(config: AppConfig): CodexProviderConfig {
       threadEnvironmentStatePath: join(getConfigDir(), "runtime", "thread-environments.json"),
       lunaCheckpointStatePath: join(getConfigDir(), "runtime", "luna-checkpoints.json"),
       headed: config.headed,
-      localToolsEnabled: config.mode === "full",
+      // Automatic ChatGPT is a model backend for Codex. Do not attach Codex's local MCP tools to
+      // that browser conversation; Zero Risk keeps its explicit manual control channel.
+      localToolsEnabled: manual && config.mode === "full",
       solAvailable: manual ? false : config.solAvailable,
       extraHighAvailable: !manual && config.extraHighAvailable === true,
       proAvailable: manual ? false : config.proAvailable,
@@ -641,6 +664,8 @@ export function providerConfig(config: AppConfig): CodexProviderConfig {
       experimentalSkillAttachments: manual ? false : config.experimentalSkillAttachments,
       experimentalFreshConversationPerTurn: !manual && config.experimentalFreshConversationPerTurn === true,
       useSavedChats: config.useSavedChats === true,
+      standardConcurrencyLimit: config.standardConcurrencyLimit,
+      proConcurrencyLimit: config.proConcurrencyLimit,
       ...(config.stallTimeoutSec !== undefined ? { stallTimeoutSec: config.stallTimeoutSec } : {}),
       autoApproveToolCalls: manual ? false : config.autoApproveToolCalls,
     },

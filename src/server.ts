@@ -366,6 +366,8 @@ export function routeChatGptWebRequest(parsed: CodexParsedRequest, config: AppCo
   const route = requireChatGptWebModelRoute(parsed.modelId, config, parsed.options.reasoning);
   if (route.interactionMode === "automatic" && route.modelFamily) parsed._chatgptModelFamily = route.modelFamily;
   else delete parsed._chatgptModelFamily;
+  if (route.requiresPro) parsed._chatgptProModel = true;
+  else delete parsed._chatgptProModel;
   parsed.modelId = route.backendModel;
   // Zero Risk preserves a distinct backend identity. Its immutable Codex effort is only a
   // protocol/catalog value; the manual adapter must never reinterpret it as a ChatGPT selection.
