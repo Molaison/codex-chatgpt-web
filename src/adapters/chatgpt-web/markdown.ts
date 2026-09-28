@@ -39,6 +39,17 @@ turndown.addRule("linkInlineFilePaths", {
     return `[${turndown.escape(path)}](<${target}>)`;
   },
 });
+
+// File links are deliverables, not navigation chrome. Keep their literal target so Codex can
+// expose/download the generated file instead of receiving label-only text.
+turndown.addRule("preserveFileLinks", {
+  filter: node => node.nodeName === "A"
+    && /^(?:file:|sandbox:|attachment:)/i.test((node as HTMLElement).getAttribute("href") ?? ""),
+  replacement: (content, node) => {
+    const target = (node as HTMLElement).getAttribute("href")!;
+    return `[${content || target}](<${target}>)`;
+  },
+});
 turndown.addRule("compactListItem", {
   filter: "li",
   replacement: (content, node, options) => {

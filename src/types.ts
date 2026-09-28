@@ -264,6 +264,8 @@ export interface CodexProviderConfig {
   modelDefaultReasoningEfforts?: Record<string, string>;
   noReasoningModels?: string[];
   chatgptWeb?: {
+    /** Stable, non-secret account profile name. Different profiles never share browser workers or conversations. */
+    accountId?: string;
     /** ChatGPT custom connector attached to tool-capable temporary chats. */
     appName?: string;
     /** Whether ChatGPT DOM interaction is automatic or explicitly driven by the user. */
@@ -288,6 +290,10 @@ export interface CodexProviderConfig {
     lunaCheckpointStatePath?: string;
     /** Optional explicit safety ceiling. Browser turns have no absolute deadline by default. */
     turnTimeoutMs?: number;
+    /** Maximum concurrent non-Pro browser turns. Defaults to five. */
+    standardConcurrencyLimit?: number;
+    /** Maximum concurrent Pro browser turns. Defaults to two. */
+    proConcurrencyLimit?: number;
     /**
      * Seconds of adapter silence before the Responses bridge cancels a turn as a hung upstream.
      * The adapter heartbeats every CHATGPT_WEB_ADAPTER_HEARTBEAT_MS for the whole of a turn, so a

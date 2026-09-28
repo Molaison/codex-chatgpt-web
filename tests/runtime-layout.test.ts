@@ -315,6 +315,23 @@ test("conversation preferences survive reload; saved chats also apply to Zero Ri
   expect(() => loadConfig()).toThrow("useSavedChats");
 });
 
+test("account profile identity reaches the provider namespace", () => {
+  const config = defaultConfig();
+  config.accountId = "work-account";
+  expect(providerConfig(config).chatgptWeb?.accountId).toBe("work-account");
+});
+
+test("model concurrency defaults and overrides reach the browser provider", () => {
+  const config = defaultConfig();
+  expect([config.standardConcurrencyLimit, config.proConcurrencyLimit]).toEqual([5, 2]);
+  config.standardConcurrencyLimit = 4;
+  config.proConcurrencyLimit = 1;
+  expect(providerConfig(config).chatgptWeb).toMatchObject({
+    standardConcurrencyLimit: 4,
+    proConcurrencyLimit: 1,
+  });
+});
+
 test("skill attachments config defaults off, reaches the adapter, and rejects invalid/manual settings", () => {
   const root = join(tmpdir(), `codex-skills-config-${process.pid}-${Date.now()}`);
   roots.push(root);

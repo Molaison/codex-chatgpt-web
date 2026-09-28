@@ -278,6 +278,8 @@ export class LauncherBrowserHelperClient {
             turnTimeoutMs: this.config.turnTimeoutMs,
             autoApproveToolCalls: this.config.autoApproveToolCalls,
             useSavedChats: this.config.useSavedChats,
+            standardConcurrencyLimit: this.config.standardConcurrencyLimit,
+            proConcurrencyLimit: this.config.proConcurrencyLimit,
           },
           turn: {
             traceId: turn.traceId,
