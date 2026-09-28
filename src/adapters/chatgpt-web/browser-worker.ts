@@ -76,13 +76,18 @@ import {
 } from "../../launcher-browser-host";
 import {
   CHATGPT_WEB_BIGGER_CONTEXT_MULTIPLIER,
+  CHATGPT_WEB_ZERO_RISK_PRO_BACKEND_MODEL,
   resolveChatGptWebContextLimits,
   resolveChatGptWebMessageTokenBudget,
   resolveChatGptWebTransportLimits,
 } from "../../chatgpt-web-models";
 import { LauncherBrowserHelperClient } from "./launcher-helper-client";
 import { assertChatGptModelFamily, selectChatGptModelFamily } from "./model-selection";
-import { MAX_CHATGPT_BROWSER_TABS } from "./concurrency";
+import {
+  DEFAULT_CHATGPT_PRO_CONCURRENCY,
+  DEFAULT_CHATGPT_STANDARD_CONCURRENCY,
+  MAX_CHATGPT_BROWSER_TABS,
+} from "./concurrency";
 import {
   ChatGptCompactionHandoffAccepted,
   ChatGptWebAdapterError,
@@ -1344,6 +1349,8 @@ export interface ResolvedBrowserConfig {
   headed: boolean;
   autoApproveToolCalls: boolean;
   useSavedChats: boolean;
+  standardConcurrencyLimit?: number;
+  proConcurrencyLimit?: number;
 }
 
 export function chatGptTurnIsComplete(state: {
@@ -2082,6 +2089,8 @@ export function resolveBrowserConfig(provider: CodexProviderConfig): ResolvedBro
     configured.browserDiagnosticsPath?.trim() || join(getConfigDir(), "diagnostics", "browser-turns"),
   ));
   const turnTimeoutMs = configured.turnTimeoutMs;
+  const standardConcurrencyLimit = configured.standardConcurrencyLimit ?? DEFAULT_CHATGPT_STANDARD_CONCURRENCY;
+  const proConcurrencyLimit = configured.proConcurrencyLimit ?? DEFAULT_CHATGPT_PRO_CONCURRENCY;
   if (browserHost === "launcher" && !browserHostDescriptorPath) {
     throw new Error("Launcher browser host requires chatgptWeb.browserHostDescriptorPath");
   }
@@ -2098,6 +2107,11 @@ export function resolveBrowserConfig(provider: CodexProviderConfig): ResolvedBro
     && (!Number.isFinite(turnTimeoutMs) || turnTimeoutMs <= 0)) {
     throw new Error("ChatGPT Web turnTimeoutMs must be a positive finite number");
   }
+  for (const [name, limit] of [["standardConcurrencyLimit", standardConcurrencyLimit], ["proConcurrencyLimit", proConcurrencyLimit]] as const) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_CHATGPT_BROWSER_TABS) {
+      throw new Error(`ChatGPT Web ${name} must be an integer from 1 to ${MAX_CHATGPT_BROWSER_TABS}`);
+    }
+  }
   if (isLegacyChatGptConnectorName(appName)) {
     throw new Error(legacyChatGptConnectorMigrationMessage(appName));
   }
@@ -2113,6 +2127,8 @@ export function resolveBrowserConfig(provider: CodexProviderConfig): ResolvedBro
     headed: configured.headed !== false,
     autoApproveToolCalls: configured.autoApproveToolCalls === true,
     useSavedChats: configured.useSavedChats === true,
+    standardConcurrencyLimit,
+    proConcurrencyLimit,
   };
 }
 
@@ -2224,6 +2240,7 @@ export class ChatGptBrowserWorker {
   private launcherHelper?: LauncherBrowserHelperClient;
   private maintenanceTail: Promise<void> = Promise.resolve();
   private readonly activeRuns = new Map<string, Promise<string>>();
+  private readonly activeProRuns = new Set<string>();
 
   private constructor(private readonly config: ResolvedBrowserConfig) {}
 
@@ -2288,14 +2305,27 @@ export class ChatGptBrowserWorker {
         `ChatGPT Web supports at most ${MAX_CHATGPT_BROWSER_TABS} simultaneous browser turns; close or finish a browser tab before starting another`,
       ));
     }
+    const pro = turn.reasoning === "max" || turn.modelId === CHATGPT_WEB_ZERO_RISK_PRO_BACKEND_MODEL;
+    const activeProRuns = this.activeProRuns ?? new Set<string>();
+    const activeForModel = pro ? activeProRuns.size : this.activeRuns.size - activeProRuns.size;
+    const limit = pro
+      ? this.config.proConcurrencyLimit ?? DEFAULT_CHATGPT_PRO_CONCURRENCY
+      : this.config.standardConcurrencyLimit ?? DEFAULT_CHATGPT_STANDARD_CONCURRENCY;
+    if (activeForModel >= limit) {
+      return Promise.reject(new Error(
+        `ChatGPT Web ${pro ? "Pro" : "standard"} supports at most ${limit} simultaneous browser turns`,
+      ));
+    }
     const useHelper = this.config.browserHost === "launcher" && process.env.CODEX_CHATGPT_WEB_BROWSER_HELPER_PROCESS !== "1";
     if (useHelper) {
       this.launcherHelper ??= new LauncherBrowserHelperClient(this.config);
     }
     const run = Promise.resolve().then(() => useHelper ? this.launcherHelper!.run(turn) : this.runExclusive(turn));
     this.activeRuns.set(turn.traceId, run);
+    if (pro) activeProRuns.add(turn.traceId);
     void run.finally(() => {
       if (this.activeRuns.get(turn.traceId) === run) this.activeRuns.delete(turn.traceId);
+      activeProRuns.delete(turn.traceId);
     }).catch(() => {});
     return run;
   }

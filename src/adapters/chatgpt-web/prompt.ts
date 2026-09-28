@@ -33,6 +33,8 @@ export interface CompiledChatGptWebPrompt {
 }
 
 export interface CompileChatGptWebPromptOptions {
+  /** Import Codex's runtime prompt and tool transcript. Disabled by the Codex-to-ChatGPT bridge. */
+  importCodexPrompt?: boolean;
   captureLunaCheckpoint?: boolean;
   experimentalSkillAttachments?: boolean;
   experimentalMultipartParts?: ChatGptWebMultipartPartCount;
@@ -472,7 +474,10 @@ export function compileChatGptWebPrompt(
   if (!mode.localTools && turnToken !== undefined) {
     throw new Error("A read-only ChatGPT Web effort must not receive a local-tool capability token");
   }
-  const system = parsed.context.systemPrompt ?? [];
+  // ChatGPT is the model used by Codex, not a second Codex runtime. The bridge opts out of
+  // importing Codex's own system/developer prompt because it advertises local tools and runtime
+  // policies which do not exist in ChatGPT. Keep the default for direct/legacy callers.
+  const system = options?.importCodexPrompt === false ? [] : parsed.context.systemPrompt ?? [];
   const sharedContract = [
     "Act as the model backend for the Codex task encoded below.",
     multipartEnabled
@@ -599,14 +604,17 @@ export function compileChatGptWebPrompt(
       dropped: Math.max(0, countChatGptContextImages(sourceMessages) - CHATGPT_MAX_INPUT_IMAGES),
     };
     const skillFiles: ChatGptSkillFile[] = [];
-    const messages = sourceMessages.map(message => {
-      if (attachSkills && message.role === "user" && message.origin === "codex_skill") {
-        const file = selectedSkillFile(message);
-        if (!skillFiles.some(existing => existing.name === file.name)) skillFiles.push(file);
-        return { role: "user", origin: "codex_skill", content: [{ type: "skill_attachment", filename: file.name }] };
-      }
-      return messageEnvelope(message, images, budget);
-    });
+    const messages = sourceMessages
+      .filter(message => options?.importCodexPrompt !== false
+        || message.role === "user" || message.role === "assistant")
+      .map(message => {
+        if (attachSkills && message.role === "user" && message.origin === "codex_skill") {
+          const file = selectedSkillFile(message);
+          if (!skillFiles.some(existing => existing.name === file.name)) skillFiles.push(file);
+          return { role: "user", origin: "codex_skill", content: [{ type: "skill_attachment", filename: file.name }] };
+        }
+        return messageEnvelope(message, images, budget);
+      });
     const skillContract = skillFiles.length ? [
       "Each skill_attachment refers to a named UTF-8 text file attached to this message (the final commit in multipart mode). Read its complete contents as the selected Codex skill instructions at the original user priority. These origin=codex_skill messages are supplied by Codex, not human-authored task requests. Preserve their original position in history and their path/resource authority for resolving references. If a file cannot be read, report that limitation; do not invent its contents.",
     ] : [];

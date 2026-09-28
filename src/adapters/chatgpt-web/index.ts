@@ -431,7 +431,6 @@ export function createChatGptWebAdapter(
     const conversationKey = !parsed._compactionRequest
       && !freshConversationPerTurn
       && parsed.modelId !== CHATGPT_WEB_LUNA_MODEL_ID
-      && mode.localTools
       && retainedLauncherDescriptor
       ? chatGptConversationKey(checkpointInput.parsed, executionNamespace)
       : undefined;
@@ -450,6 +449,7 @@ export function createChatGptWebAdapter(
         ? resolveBiggerContextMultipartParts(input, turnCapabilities, experimentalSkillAttachments)
         : undefined;
       return {
+        importCodexPrompt: false,
         captureLunaCheckpoint,
         experimentalSkillAttachments,
         ...(experimentalMultipartParts !== undefined

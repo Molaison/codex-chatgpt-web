@@ -21,6 +21,8 @@ interface RunMessage {
     turnTimeoutMs: number;
     autoApproveToolCalls: boolean;
     useSavedChats?: boolean;
+    standardConcurrencyLimit?: number;
+    proConcurrencyLimit?: number;
   };
   turn: {
     traceId: string;
@@ -197,6 +199,8 @@ async function run(message: RunMessage): Promise<void> {
       turnTimeoutMs: message.config.turnTimeoutMs,
       autoApproveToolCalls: message.config.autoApproveToolCalls,
       useSavedChats: message.config.useSavedChats === true,
+      standardConcurrencyLimit: message.config.standardConcurrencyLimit,
+      proConcurrencyLimit: message.config.proConcurrencyLimit,
     },
   };
   const abortController = new AbortController();
