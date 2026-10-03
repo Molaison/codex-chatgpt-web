@@ -31,7 +31,7 @@ test("PR packaging enables only credential-free macOS ad-hoc signing", () => {
   // filesystem mutation, signing, installer or subprocess can run.
   const setup = source.slice(0, source.indexOf('if (target === "--linux")'));
   const settings = (platform, environment = {}) => vm.runInNewContext(`${setup}\n({ env, builderArgs });`, {
-    require, __dirname: path.join(launcherRoot, "scripts"),
+    require: createRequire(path.join(launcherRoot, "scripts", "package.cjs")), __dirname: path.join(launcherRoot, "scripts"),
     process: { platform, argv: ["node", "package.cjs"], env: environment },
   });
   const input = { GITHUB_EVENT_NAME: "pull_request" };
