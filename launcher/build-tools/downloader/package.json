@@ -1,0 +1,8 @@
+{
+  "name": "@codex-chatgpt-web/build-downloader",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.cjs",
+  "license": "MIT",
+  "engines": { "node": ">=22.12.0" }
+}
