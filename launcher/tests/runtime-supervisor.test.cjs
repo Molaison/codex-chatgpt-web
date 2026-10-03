@@ -243,6 +243,27 @@ test("launcher runtime validation rejects a relative full-mode executable before
   }), descriptorPath), /absolute tunnel\.binaryPath/);
 });
 
+test("external HTTP validation accepts production Launcher Full automatic and Zero Risk", () => {
+  const descriptorPath = path.join(os.tmpdir(), "launcher-external-http.json");
+  const config = launcherConfig(descriptorPath, {
+    mode: "full", browserInteractionMode: "manual", mcpProvider: "external-http", solAvailable: true,
+  });
+  assert.equal(validateConfig(config, descriptorPath), config);
+  const automatic = { ...config, browserInteractionMode: "automatic", appName: "Codex Native2" };
+  assert.equal(validateConfig(automatic, descriptorPath), automatic);
+  for (const overrides of [
+    { mode: "browser-only" }, { browserInteractionMode: "invalid" },
+    { browserHost: "managed-chrome" }, { mcpProvider: "unknown" },
+  ]) {
+    assert.throws(() => validateConfig({ ...config, ...overrides }, descriptorPath));
+  }
+  assert.throws(() => validateConfig({ ...config, purpose: "dev-harness" }, descriptorPath,
+    process.platform, "development"), /external-http requires/);
+  for (const mcpProvider of [undefined, "openai-tunnel"]) {
+    assert.throws(() => validateConfig({ ...config, mcpProvider }, descriptorPath), /missing tunnel/);
+  }
+});
+
 test("launcher runtime validation accepts native Windows paths and a named pipe", () => {
   const descriptorPath = "C:\\Users\\Example\\AppData\\Local\\Codex Web GPT\\launcher-browser.json";
   const config = {
@@ -1857,7 +1878,8 @@ test("external migration clears only stale launcher ownership evidence", () => {
   }
 });
 
-test("launcher supervisor starts, health-checks, drains, and stops its daemon", async () => {
+for (const interaction of [undefined, "automatic", "manual"]) test(`launcher supervisor starts, recovers, drains, and stops its ${interaction ? `external HTTP Full ${interaction}` : "browser-only"} daemon`, async () => {
+  const externalHttp = interaction !== undefined;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "codex-web-gpt-supervisor-"));
   const descriptorPath = path.join(root, "runtime", "launcher-browser.json");
   const configPath = path.join(root, "config.json");
@@ -1867,6 +1889,7 @@ test("launcher supervisor starts, health-checks, drains, and stops its daemon", 
   fs.writeFileSync(descriptorPath, "{}\n");
   fs.writeFileSync(configPath, `${JSON.stringify(launcherConfig(descriptorPath, {
     port,
+    ...(externalHttp ? { mode: "full", browserInteractionMode: interaction, mcpProvider: "external-http" } : {}),
     controlToken: "runtime-supervisor-control-token-0123456789abcdef",
   }))}\n`);
   fs.writeFileSync(serverPath, `
@@ -1924,13 +1947,22 @@ process.once("SIGTERM", () => server.close(() => process.exit(0)));
     }),
   });
 
+  if (externalHttp) {
+    supervisor.runTunnelCommand = async () => { throw new Error("external HTTP used the managed tunnel"); };
+    supervisor.waitForKnownTunnelStatus = async () => { throw new Error("external HTTP probed the managed tunnel"); };
+  }
+
   try {
     const started = await supervisor.startIfConfigured();
     assert.equal(started.status, "ready");
     const state = JSON.parse(fs.readFileSync(path.join(root, "runtime", "launcher-supervisor.json"), "utf8"));
     assert.equal(state.status, "ready");
     assert.equal(Number.isInteger(state.daemonPid), true);
+    assert.equal(state.tunnelPid, null);
     assert.equal((await fetch(`http://127.0.0.1:${port}/healthz`)).ok, true);
+    assert.equal(await supervisor.ownedRuntimeReady(supervisor.readConfig()), true);
+    await supervisor.recover("daemon");
+    assert.equal(await supervisor.ownedRuntimeReady(supervisor.readConfig()), true);
 
     const stopped = await supervisor.stopForSetup();
     assert.equal(stopped.status, "stopped");
@@ -1938,6 +1970,30 @@ process.once("SIGTERM", () => server.close(() => process.exit(0)));
     assert.equal(records.some((record) => record.event === "runtime.daemon_started"), true);
   } finally {
     await supervisor.stopForSetup().catch(() => {});
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("external HTTP never adopts or terminates an unverified stale tunnel PID", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "codex-external-http-stale-"));
+  const descriptorPath = path.join(root, "launcher-browser.json");
+  const config = launcherConfig(descriptorPath, {
+    mode: "full", browserInteractionMode: "manual", mcpProvider: "external-http",
+  });
+  const supervisor = new RuntimeSupervisor({
+    app: { getVersion: () => "0.2.0", isPackaged: false },
+    logger: { info() {}, warn() {}, error() {} }, sourceRoot: root,
+    coreHome: root, browserDescriptorPath: descriptorPath,
+  });
+  supervisor.readState = () => ({
+    version: 1, ownerPid: process.pid, daemonPid: null, tunnelPid: process.pid,
+    status: "ready", updatedAt: new Date().toISOString(),
+  });
+  supervisor.proxyHealthPayload = async () => null;
+  supervisor.waitForKnownTunnelStatus = async () => { throw new Error("unexpected tunnel probe"); };
+  try {
+    await assert.rejects(supervisor.stopStaleOwnedRuntime(config), /no managed tunnel identity/);
+  } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });

@@ -92,10 +92,11 @@ function compactionAdapterFactory(
   };
 }
 
-test("compacts ChatGPT Web v1 through a dedicated read-only browser summarization turn", async () => {
+test.each(["openai-tunnel", "external-http"] as const)("compacts ChatGPT Web v1 through a dedicated read-only browser summarization turn (%s)", async mcpProvider => {
   const providers: CodexProviderConfig[] = [];
   const previousSummary = `${SUMMARY_PREFIX}\nPrevious cumulative checkpoint`;
   const config = defaultConfig("full");
+  config.mcpProvider = mcpProvider;
   const response = await compactRequest(new Request("http://127.0.0.1:17841/v1/responses/compact", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -112,7 +113,7 @@ test("compacts ChatGPT Web v1 through a dedicated read-only browser summarizatio
 
   expect(response.status).toBe(200);
   expect(providers).toHaveLength(1);
-  expect(providers[0]!.chatgptWeb?.localToolsEnabled).toBe(true);
+  expect(providers[0]!.chatgptWeb?.localToolsEnabled).toBe(mcpProvider === "external-http");
   const body = await response.json() as { output: Array<{ role: string; content: Array<{ text: string }> }> };
   expect(body.output.map(item => item.content[0]!.text)).toEqual([
     "First request",
@@ -351,9 +352,10 @@ for (const stream of [false, true]) test(`failed compaction cannot authorize a c
   expect(response.status).toBe(400);
 });
 
-test("returns exactly one native compaction item for a ChatGPT Web v2 request", async () => {
+test.each(["openai-tunnel", "external-http"] as const)("returns exactly one native compaction item for a ChatGPT Web v2 request (%s)", async mcpProvider => {
   const providers: CodexProviderConfig[] = [];
   const config = defaultConfig("full");
+  config.mcpProvider = mcpProvider;
   const response = await responseRequest(new Request("http://127.0.0.1:17841/v1/responses", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -369,7 +371,7 @@ test("returns exactly one native compaction item for a ChatGPT Web v2 request", 
 
   expect(response.status).toBe(200);
   expect(providers).toHaveLength(1);
-  expect(providers[0]!.chatgptWeb?.localToolsEnabled).toBe(true);
+  expect(providers[0]!.chatgptWeb?.localToolsEnabled).toBe(mcpProvider === "external-http");
   const body = await response.json() as {
     status: string;
     output: Array<{ type: string; encrypted_content?: string }>;

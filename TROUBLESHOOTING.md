@@ -214,6 +214,12 @@ after Sent until the plugin starts. Copying does not send another message or cha
 
 ### ChatGPT shows `Error creating connector`
 
+For an opt-in transport A/B experiment that keeps the existing tool authorization, see
+[Experimental HTTP alternative](docs/mcp-http-experiment.md). Its advanced CLI provider setup
+can run automatic Full with native tools, or Zero Risk/manual, without OpenAI Tunnel credentials.
+Automatic mode uses the existing browser harness without manual prompt/Sent handoffs. The adapter
+does not create a ChatGPT connector or prove that a registration failure is caused by OpenAI.
+
 1. Confirm that the Tunnel ID and the regular API key used by the launcher were created under the
    same OpenAI account.
 2. Confirm that the launcher has connected the local harness and the Tunnel is running before you
