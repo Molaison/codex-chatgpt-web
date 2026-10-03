@@ -176,7 +176,15 @@ export async function runDoctor(): Promise<DoctorReport> {
   }
   checks.push(await proxyCheck(config));
 
-  if (config.mode === "full") {
+  if (config.mode === "full" && config.mcpProvider === "external-http") {
+    checks.push({
+      id: "external-mcp",
+      status: "warning",
+      message: "External HTTP transport is explicitly managed outside the Launcher",
+      detail: "Local daemon health does not verify the loopback MCP listener, HTTPS proxy, or ChatGPT connector registration. "
+        + `Start the ${config.browserInteractionMode === "manual" ? "safe" : "native"} contract against this profile's broker endpoint separately; the connector must be named ${JSON.stringify(config.appName)}.`,
+    });
+  } else if (config.mode === "full") {
     const settings = config.tunnel!;
     if (!existsSync(settings.binaryPath)) {
       checks.push({ id: "tunnel-binary", status: "error", message: `tunnel-client is missing: ${settings.binaryPath}` });

@@ -2201,18 +2201,21 @@ describe("ChatGPT outer-native harness v4", () => {
     const broker = TurnBroker.forSocket(socketPath);
     const token = await broker.register(extractChatGptTurnEnvironment(parsed(environmentXml)), 10_000);
     const claimed = await callTurnBroker<{ bindingId: string }>(socketPath, { method: "claim", token });
+    // Attach the rejection handler before revoke: Bun 1.4 on Windows can stall its
+    // asynchronous .rejects matcher when the named-pipe reply rejects in this gap.
     const invocation = callTurnBroker(socketPath, {
       method: "invoke",
       bindingId: claimed.bindingId,
       wireName: "exec_command",
       freeform: false,
       arguments: { cmd: "sleep 30" },
-    }, 10_000);
+    }, 10_000).then(() => undefined, error => error);
     await broker.nextToolBatch(token);
     broker.revoke(token);
-    await expect(invocation).rejects.toThrow("revoked");
-    await expect(callTurnBroker(socketPath, { method: "resolve", bindingId: claimed.bindingId }))
-      .rejects.toThrow("has already finished");
+    expect(await invocation).toMatchObject({ message: expect.stringContaining("revoked") });
+    const resolved = await callTurnBroker(socketPath, { method: "resolve", bindingId: claimed.bindingId })
+      .then(() => undefined, error => error);
+    expect(resolved).toMatchObject({ message: expect.stringContaining("has already finished") });
     await broker.close();
   });
 

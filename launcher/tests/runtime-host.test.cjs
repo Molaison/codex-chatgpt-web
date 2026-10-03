@@ -452,6 +452,24 @@ test("launcher update preserves Zero Risk and never probes its account capabilit
   assert.equal(fixture.invocation().args.includes("--refresh-account-capabilities"), false);
 });
 
+for (const interaction of ["automatic", "manual"]) test(`external HTTP ${interaction} preserves its CLI-only selection and ignores saved official tunnel migration`, async () => {
+  const config = {
+    mode: "full", browserHost: "launcher", browserInteractionMode: interaction,
+    appName: interaction === "manual" ? "Codex Zero Risk" : "Codex Native2", releaseVersion: "1.1.3", mcpProvider: "external-http",
+    tunnel: { profileName: "old-automatic-profile", runtimeKeyFile: "/saved/runtime.key" },
+  };
+  const fixture = hostFor(config, interaction);
+  assert.deepEqual(await fixture.host.upgradeManagedRuntime(), { updated: false });
+  assert.equal(fixture.host.mcpCredentialsConfigured(), false);
+  assert.throws(() => fixture.host.setupMcp(), /External HTTP is configured through the CLI/);
+  assert.equal(fixture.invocation(), undefined);
+  config.releaseVersion = "1.1.1";
+  assert.equal((await fixture.host.upgradeManagedRuntime()).updated, true);
+  assert.equal(fixture.invocation().args.includes(interaction === "manual" ? "--zero-risk-browser-interaction" : "--automatic-browser-interaction"), true);
+  assert.equal(fixture.invocation().args.includes("--mcp-provider"), false, "setup preserves the saved provider when omitted");
+  assert.equal(fixture.invocation().args.includes("--tunnel-id"), false);
+});
+
 test("launcher update transaction leaves current and externally owned runtimes unchanged", async () => {
   const current = hostFor({ mode: "browser-only", browserHost: "launcher", releaseVersion: "1.1.3" });
   const currentFull = hostFor({
