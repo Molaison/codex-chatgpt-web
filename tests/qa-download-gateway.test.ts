@@ -6,7 +6,7 @@ import { createDownloadGateway, validateDownloadGatewayConfig } from "../src/dow
  * 因此这里用最小上游替身提供网关会触达的路径，只验证网关的账号前缀、
  * 文件路径与 estuary 参数白名单行为。
  */
-function accountRuntime(entry: { token: string; name: string; mime: string; bytes: Uint8Array }) {
+function accountRuntime(entry: { token: string; name: string; mime: string; bytes: Uint8Array<ArrayBuffer> }) {
   return Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(req) {
     const url = new URL(req.url);
     const match = /^\/files\/([a-f0-9]{64})\/([^/]+)$/.exec(url.pathname);
