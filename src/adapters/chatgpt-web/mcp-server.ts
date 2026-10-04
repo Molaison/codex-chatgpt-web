@@ -294,7 +294,13 @@ function gatewayToolCatalogPage(response: {
   }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(textBlocks[0]!);
+    // Native Codex exec wraps text() output with completion and timing metadata.
+    // Strip only the successful envelope; incomplete/error output must still fail.
+    const json = textBlocks[0]!.replace(
+      /^Script completed\r?\nWall time \d+(?:\.\d+)? seconds\r?\nOutput:\r?\n/,
+      "",
+    );
+    parsed = JSON.parse(json);
   } catch {
     throw new Error("Native nested tool inventory returned invalid JSON");
   }

@@ -28,6 +28,8 @@
 
 Full ハーネスモードでは、MCP を通じて ChatGPT を現在のタスクのファイル、ターミナル、ツール、承認に接続します。会話は Codex タスクに紐付いたままなので、コンテキストが増えても作業を続けられます。
 
+共有 Linux サーバーでチャットとツールを分離する場合は、[2 アカウントの Cloudflare デプロイ手順](docs/public-tools-deployment.md)を参照してください。API クライアントに必要なのは URL、ツール用キー、モデルだけで、クライアント側のトンネルは不要です。
+
 <div id="get-started"><a id="quick-start"></a></div>
 
 ## 使い始める

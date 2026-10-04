@@ -28,6 +28,8 @@ Use the ChatGPT Web models available on your account, including Pro, from Codexâ
 
 Full harness mode connects ChatGPT to the current taskâ€™s files, terminal, tools, and approvals through MCP. Conversations stay tied to your Codex task, so you can keep working as the context grows.
 
+For a shared Linux server with separate chat and tool routes, see the [dual-account Cloudflare deployment guide](docs/public-tools-deployment.md). API clients need only the URL, tool key and model; no client-side tunnel.
+
 <div id="get-started"><a id="quick-start"></a></div>
 
 ## Get started
