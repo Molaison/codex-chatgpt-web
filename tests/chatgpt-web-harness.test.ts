@@ -2819,6 +2819,7 @@ describe("ChatGPT outer-native harness v4", () => {
         query: string,
         includeSchema: boolean,
         nestedToolNames: string[],
+        nativeEnvelope = false,
       ) => {
         const pending = call("codex_tool_inventory", {
           turn_token: token,
@@ -2830,7 +2831,12 @@ describe("ChatGPT outer-native harness v4", () => {
         const gatewayCalls: GatewayProgramCall[] = [];
         const content = await executeGatewayProgram(request!.input!, nestedToolNames, gatewayCalls);
         expect(gatewayCalls).toEqual([]);
-        broker.completeTool(token, request!.callId, { content });
+        broker.completeTool(token, request!.callId, {
+          content: nativeEnvelope
+            ? [{ type: "text", text: "Script completed\nWall time 0.1 seconds\nOutput:\n"
+              + content.map(item => item.type === "text" ? item.text : "").join("") }]
+            : content,
+        });
         return await pending;
       };
 
@@ -2961,6 +2967,19 @@ describe("ChatGPT outer-native harness v4", () => {
           parameters: { type: "object", additionalProperties: true },
         }],
       });
+
+      // Codex 0.160 wraps text() output in a completed execution envelope.
+      const nativeInventory = await inventoryThroughGateway("web__run", true, ["exec", "web__run"], true);
+      expect(nativeInventory.structuredContent).toEqual(nestedInventory.structuredContent);
+      for (const invalidText of [
+        "Script completed\nWall time 0.1 seconds\nOutput:\nnot-json",
+        'Script running\nWall time 0.1 seconds\nOutput:\n{"tools":[],"total":0}',
+      ]) {
+        const pending = call("codex_tool_inventory", { turn_token: token, query: "web__run" });
+        const [request] = await broker.nextToolBatch(token);
+        broker.completeTool(token, request!.callId, { content: [{ type: "text", text: invalidText }] });
+        expect((await pending).isError).toBe(true);
+      }
 
       const nestedWeb = call("codex_tool_call", {
         turn_token: token,
