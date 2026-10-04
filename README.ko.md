@@ -28,6 +28,8 @@ Codex의 네이티브 모델 선택기에서 Pro를 포함해 계정에 제공�
 
 Full harness 모드는 MCP를 통해 ChatGPT를 현재 작업의 파일, 터미널, 도구 및 승인 절차에 연결합니다. 대화는 Codex 작업에 계속 연결되어 있으므로 컨텍스트가 늘어나도 작업을 이어갈 수 있습니다.
 
+공유 Linux 서버에서 채팅과 도구 경로를 분리하려면 [두 계정 Cloudflare 배포 안내](docs/public-tools-deployment.md)를 참고하세요. API 클라이언트에는 URL, 도구용 키, 모델만 필요하며 클라이언트 측 터널은 필요하지 않습니다.
+
 <div id="get-started"><a id="quick-start"></a></div>
 
 ## 시작하기
