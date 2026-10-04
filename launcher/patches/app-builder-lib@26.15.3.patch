@@ -1,0 +1,40 @@
+diff --git a/out/binDownload.js b/out/binDownload.js
+index 287e8735e53970c9787253e85b5980988719a668..60380718e1501365aba801ef73d1edf81bbb9e43 100644
+--- a/out/binDownload.js
++++ b/out/binDownload.js
+@@ -21,6 +21,8 @@ async function download(url, output, checksum) {
+     }
+     const { downloadArtifact, ElectronDownloadCacheMode } = await (0, dynamicImport_1.dynamicImport)("@electron/get");
+     const downloadedFile = await downloadArtifact({
++        downloader: require("@codex-chatgpt-web/build-downloader"),
++        downloadOptions: { timeout: { request: 10 * 60 * 1000 }, agent: (0, builder_util_1.buildGotProxyAgent)() },
+         version: "9.9.9",
+         artifactName: filenameWithExt,
+         cacheRoot: path.resolve((0, electronGet_1.getCacheDirectory)({ allowEnvVarOverride: true }), "downloads"),
+diff --git a/out/util/electronGet.js b/out/util/electronGet.js
+index a941f9d20c10ca58a84b9a600b0df468631aae01..6de2af7efe6df9e9c0ec5140da70afe30a274075 100644
+--- a/out/util/electronGet.js
++++ b/out/util/electronGet.js
+@@ -241,7 +241,7 @@ async function downloadArtifactToFile(config, label) {
+             return Promise.resolve();
+         },
+     };
+-    const configWithProgress = { ...config, downloadOptions };
++    const configWithProgress = { ...config, downloadOptions, downloader: config.downloader || require("@codex-chatgpt-web/build-downloader") };
+     try {
+         let filePath;
+         try {
+@@ -484,6 +484,13 @@ function buildElectronArtifactConfig(options) {
+         }
+     }
+     artifactConfig.cacheMode = resolveCacheMode();
++    if (artifactConfig.force) {
++        if (artifactConfig.cacheMode) {
++            throw new Error('Setting both "force" and "cacheMode" is not supported, please exclusively use "cacheMode"');
++        }
++        artifactConfig.cacheMode = get_1.ElectronDownloadCacheMode.WriteOnly;
++    }
++    delete artifactConfig.force;
+     return artifactConfig;
+ }
+ /**

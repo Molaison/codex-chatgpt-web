@@ -450,6 +450,7 @@ class RuntimeHost {
     if (interactionMode !== "automatic" && interactionMode !== "manual") {
       throw new Error("Browser interaction mode must be automatic or manual");
     }
+    if (config?.mcpProvider === "external-http") return false;
     const explicitTunnel = interactionMode === "manual"
       ? config?.manualTunnel
       : config?.automaticTunnel;
@@ -1271,7 +1272,8 @@ class RuntimeHost {
       ? existing.config?.manualTunnel
       : existing.config?.automaticTunnel;
     const activeTunnel = existing.config?.tunnel;
-    const tunnelProfileMigrationRequired = existing.mode === "full" && Boolean(activeTunnel) && Boolean(
+    const tunnelProfileMigrationRequired = existing.mode === "full"
+      && existing.config?.mcpProvider !== "external-http" && Boolean(activeTunnel) && Boolean(
       !explicitTunnel
       || explicitTunnel.tunnelId !== activeTunnel.tunnelId
       || activeTunnel.profileName !== expectedTunnelProfile
@@ -1317,6 +1319,9 @@ class RuntimeHost {
   setupMcp({ tunnelId = "", runtimeKey = "", replace = false, interactionMode } = {}, afterRuntimeReady) {
     this.assertProductionProfile("Native Codex MCP setup");
     if (this.currentOperation()) throw new Error(`Another launcher operation is active: ${this.currentOperation()}`);
+    if (this.runtimeConfigSnapshot().config?.mcpProvider === "external-http") {
+      throw new Error("External HTTP is configured through the CLI; switch explicitly to openai-tunnel before using the tunnel setup form");
+    }
     const targetMode = interactionMode ?? this.browserInteractionMode();
     const reuseSavedCredentials = replace !== true && this.mcpCredentialsConfigured(targetMode);
     if (!reuseSavedCredentials && !/^tunnel_[a-f0-9]{32}$/.test(tunnelId)) {

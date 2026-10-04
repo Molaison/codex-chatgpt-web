@@ -205,6 +205,48 @@ test("Zero Risk fails closed without the Launcher browser host", () => {
   expect(() => loadConfig()).toThrow("requires the launcher browser host");
 });
 
+test.each(["automatic", "manual"] as const)("external HTTP Full %s is an explicit production Launcher opt-in without tunnel credentials", interaction => {
+  const root = join(tmpdir(), `codex-web-external-config-${process.pid}-${Date.now()}`);
+  roots.push(root);
+  process.env.CODEX_CHATGPT_WEB_HOME = root;
+  mkdirSync(root, { recursive: true });
+  const config = {
+    ...defaultConfig("full"),
+    mcpProvider: "external-http" as const,
+    browserHost: "launcher" as const,
+    browserHostDescriptorPath: join(root, "launcher-browser.json"),
+    browserInteractionMode: interaction,
+    appName: interaction === "manual" ? ZERO_RISK_CHATGPT_CONNECTOR_NAME : CHATGPT_CONNECTOR_NAME,
+    autoApproveToolCalls: true,
+  };
+  const persist = (overrides: Record<string, unknown> = {}) => {
+    writeFileSync(join(root, "config.json"), JSON.stringify({ ...config, ...overrides }));
+  };
+  persist();
+  expect(loadConfig().mcpProvider).toBe("external-http");
+  expect(loadConfig().tunnel).toBeUndefined();
+  expect(providerConfig(loadConfig()).chatgptWeb).toMatchObject({
+    localToolsEnabled: true, browserInteractionMode: interaction, autoApproveToolCalls: interaction === "automatic",
+    appName: config.appName,
+    brokerSocketPath: config.brokerSocketPath,
+  });
+  for (const overrides of [
+    { browserInteractionMode: "invalid" }, { purpose: "dev-harness" },
+    { mcpProvider: "unknown" }, { mode: "browser-only" }, { browserHost: "managed-chrome" },
+  ]) {
+    persist(overrides);
+    expect(() => loadConfig()).toThrow();
+  }
+  for (const mcpProvider of [undefined, "openai-tunnel"]) {
+    persist({ mcpProvider });
+    expect(() => loadConfig()).toThrow("tunnel is missing");
+  }
+  expect(providerConfig({ ...config, browserInteractionMode: "automatic", mcpProvider: undefined })
+    .chatgptWeb?.localToolsEnabled).toBe(false);
+  expect(providerConfig({ ...config, mode: "browser-only" }).chatgptWeb?.localToolsEnabled).toBe(false);
+  expect(providerConfig({ ...config, autoApproveToolCalls: false }).chatgptWeb?.autoApproveToolCalls).toBe(false);
+});
+
 test("legacy temp-path wrapper and vendor are removed only after runtime ownership changes", () => {
   const root = join(tmpdir(), `codex-chatgpt-web-legacy-runtime-${process.pid}-${Date.now()}`);
   roots.push(root);

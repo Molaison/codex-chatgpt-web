@@ -25,6 +25,33 @@ test("the full verification gate audits launcher dependencies", () => {
   assert.match(verify, /await run\(\["run", "launcher:audit"\]\);/);
 });
 
+test("PR packaging enables only credential-free macOS ad-hoc signing", () => {
+  const source = fs.readFileSync(path.join(launcherRoot, "scripts", "package.cjs"), "utf8");
+  // Execute the real argument/environment setup, stopping before any packaging,
+  // filesystem mutation, signing, installer or subprocess can run.
+  const setup = source.slice(0, source.indexOf('if (target === "--linux")'));
+  const settings = (platform, environment = {}) => vm.runInNewContext(`${setup}\n({ env, builderArgs });`, {
+    require: createRequire(path.join(launcherRoot, "scripts", "package.cjs")), __dirname: path.join(launcherRoot, "scripts"),
+    process: { platform, argv: ["node", "package.cjs"], env: environment },
+  });
+  const input = { GITHUB_EVENT_NAME: "pull_request" };
+  const adhoc = settings("darwin", input);
+  assert.equal(adhoc.env.CSC_FOR_PULL_REQUEST, "true");
+  assert.equal(adhoc.env.CSC_IDENTITY_AUTO_DISCOVERY, "false");
+  assert.ok(adhoc.builderArgs.includes("--config.mac.identity=-"));
+  assert.equal(input.CSC_FOR_PULL_REQUEST, undefined, "caller environment remains unchanged");
+  for (const credentials of [{ CSC_LINK: "fixture-certificate" }, { CSC_NAME: "fixture-identity" }]) {
+    const configured = settings("darwin", { ...input, ...credentials });
+    assert.equal(configured.env.CSC_FOR_PULL_REQUEST, undefined);
+    assert.ok(!configured.builderArgs.includes("--config.mac.identity=-"));
+  }
+  for (const platform of ["win32", "linux"]) {
+    const other = settings(platform, input);
+    assert.equal(other.env.CSC_FOR_PULL_REQUEST, undefined);
+    assert.ok(!other.builderArgs.includes("--config.mac.identity=-"));
+  }
+});
+
 test("launcher publishes native packages for all supported desktop operating systems", () => {
   assert.equal(manifest.build.appId, "dev.codexwebgpt.launcher");
   assert.equal(manifest.build.artifactName, "codex-web-gpt-${version}-${os}-${arch}.${ext}");

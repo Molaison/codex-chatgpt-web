@@ -9,7 +9,7 @@ import * as tunnel from "../src/tunnel";
 import * as tunnelService from "../src/tunnel-service";
 import * as browserHost from "../src/launcher-browser-host";
 import * as browserLogin from "../src/browser-login";
-import { launcherCapabilityProbeRequired, setup, setupDevProfile, setupProxyIsReady } from "../src/setup";
+import { launcherCapabilityProbeRequired, preflightSetup, setup, setupDevProfile, setupProxyIsReady } from "../src/setup";
 
 const config = {
   mode: "browser-only" as const,
@@ -54,6 +54,69 @@ test("launcher setup refreshes account capabilities only when missing or explici
     ...verifiedLauncher,
     browserInteractionMode: "manual",
   } as never, false, "automatic")).toBe(true);
+});
+
+test.each(["automatic", "manual"] as const)("external HTTP setup retains Full %s broker inputs without acquiring a tunnel", async interaction => {
+  const root = mkdtempSync(join(tmpdir(), "codex-web-external-http-setup-"));
+  const configPath = join(root, "config.json");
+  const calls: string[] = [];
+  let saved: configModule.AppConfig | undefined;
+  const forbidden = () => { throw new Error("external HTTP attempted managed transport or browser work"); };
+  const mocks = [
+    spyOn(configModule, "getConfigPath").mockReturnValue(configPath),
+    spyOn(configModule, "saveConfig").mockImplementation(value => { saved = value; calls.push("save"); }),
+    spyOn(integration, "preflightCodexIntegration").mockImplementation(() => {}),
+    spyOn(integration, "installCodexIntegration").mockImplementation(() => { calls.push("integrate"); return {} as never; }),
+    spyOn(service, "getServiceStatus").mockReturnValue({ installed: false, loaded: false } as never),
+    spyOn(service, "removeLegacyRuntimeArtifacts").mockImplementation(() => {}),
+    spyOn(tunnelService, "getTunnelServiceStatus").mockReturnValue({ installed: false, loaded: false } as never),
+    spyOn(tunnel, "installTunnelClient").mockImplementation(forbidden),
+    spyOn(tunnel, "connectTunnel").mockImplementation(forbidden),
+    spyOn(tunnel, "stopTunnel").mockImplementation(forbidden),
+    spyOn(tunnelService, "installTunnelService").mockImplementation(forbidden),
+    spyOn(browserHost, "inspectLauncherBrowserHost").mockImplementation(async () => {
+      if (interaction === "manual") return forbidden();
+      calls.push("browser");
+      return { solAvailable: true, extraHighAvailable: true, proAvailable: true } as never;
+    }),
+    spyOn(browserLogin, "loginToChatGpt").mockImplementation(forbidden),
+  ];
+  try {
+    const listener = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response() });
+    const port = listener.port!;
+    await listener.stop(true);
+    const options = {
+      mode: "full" as const, mcpProvider: "external-http" as const,
+      browserInteractionMode: interaction, subagentProtocol: "native" as const,
+      browserHostDescriptorPath: join(root, "launcher-browser.json"),
+      acknowledgedUnofficial: true, port,
+    };
+    expect(() => preflightSetup(options)).not.toThrow();
+    const result = await setup(options);
+    expect(calls).toEqual(interaction === "automatic" ? ["browser", "save", "integrate"] : ["save", "integrate"]);
+    expect(saved).toMatchObject({ mode: "full", mcpProvider: "external-http", browserInteractionMode: interaction, browserHost: "launcher" });
+    expect(configModule.providerConfig(saved!).chatgptWeb).toMatchObject({
+      localToolsEnabled: true, browserInteractionMode: interaction, autoApproveToolCalls: false,
+      appName: interaction === "manual" ? configModule.ZERO_RISK_CHATGPT_CONNECTOR_NAME : configModule.CHATGPT_CONNECTOR_NAME,
+    });
+    expect(saved?.tunnel).toBeUndefined();
+    expect(result.tunnelReady).toBeNull();
+    expect(result.connectorSetupRequired).toBe(true);
+    const initial = structuredClone(saved!);
+    writeFileSync(configPath, JSON.stringify(initial));
+    mocks.push(spyOn(configModule, "loadConfigForSetup").mockImplementation(() => structuredClone(initial)));
+    await setup({ ...options, mcpProvider: undefined });
+    expect(saved?.mcpProvider).toBe("external-http");
+    await expect(setup({ ...options, tunnelId: `tunnel_${"a".repeat(32)}` })).rejects.toThrow("cannot be combined");
+    await expect(setup({ ...options, mode: "browser-only" })).rejects.toThrow("requires");
+    await expect(setup({ ...options, mcpProvider: "openai-tunnel" })).rejects.toThrow("requires its own Tunnel ID");
+    mocks.push(spyOn(tunnelService, "getTunnelServiceStatus").mockReturnValue({ installed: true, loaded: true } as never));
+    expect(() => preflightSetup(options)).toThrow("legacy background and tunnel services");
+    await expect(setup(options)).rejects.toThrow("legacy background and tunnel services");
+  } finally {
+    for (const mock of mocks.reverse()) mock.mockRestore();
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 for (const development of [false, true]) for (const interaction of ["manual", "automatic"] as const) {
