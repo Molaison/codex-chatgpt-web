@@ -81,6 +81,19 @@ if (!browserHelperBuild.success) {
 }
 
 copyFileSync(join(root, "package.json"), join(appDir, "package.json"));
+
+const downloadGatewayBuild = await Bun.build({
+  entrypoints: [join(root, "src", "download-gateway.ts")],
+  target: "bun",
+  minify: true,
+  packages: "external",
+  outdir: appDir,
+  naming: "download-gateway.js",
+});
+if (!downloadGatewayBuild.success) {
+  throw new Error(`Download gateway bundle failed: ${downloadGatewayBuild.logs.map(log => log.message).join("; ")}`);
+}
+
 copyFileSync(join(root, "bun.lock"), join(appDir, "bun.lock"));
 const install = Bun.spawnSync([process.execPath, "install", "--production", "--frozen-lockfile", "--ignore-scripts"], {
   cwd: appDir,

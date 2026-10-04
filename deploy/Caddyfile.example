@@ -1,0 +1,9 @@
+files.example.com {
+    @files path_regexp files ^/[A-Za-z0-9][A-Za-z0-9_-]{0,63}/files/[a-f0-9]{64}/[^/]+$
+    handle @files {
+        reverse_proxy 127.0.0.1:17860
+    }
+    handle {
+        respond "Not found" 404
+    }
+}

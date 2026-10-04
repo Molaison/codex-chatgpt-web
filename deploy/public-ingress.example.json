@@ -1,0 +1,14 @@
+{
+  "host": "127.0.0.1",
+  "port": 17870,
+  "pathPrefix": "/qa-files",
+  "proxyOrigin": "http://127.0.0.1:18082",
+  "accounts": {
+    "account-1": "http://127.0.0.1:17851",
+    "account-2": "http://127.0.0.1:17852"
+  },
+  "mcpAccounts": {
+    "account-1": "http://127.0.0.1:17961",
+    "account-2": "http://127.0.0.1:17962"
+  }
+}
