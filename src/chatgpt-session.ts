@@ -12,6 +12,7 @@ export const CHATGPT_COMPOSER_SELECTOR = [
   "#prompt-textarea",
   '[contenteditable="true"][data-lexical-editor="true"]',
   'form[data-chatgpt-composer] [data-composer-markdown][contenteditable="true"][role="textbox"]',
+  'form[data-chatgpt-composer] [contenteditable="true"][role="textbox"]',
 ].join(", ");
 export const CHATGPT_EFFORT_CONTROL_SELECTOR = [
   'button[aria-haspopup="menu"][data-tone="neutral"]',
@@ -229,9 +230,12 @@ export async function assertTemporaryChatPage(page: Page): Promise<void> {
   await assertNewChatPage(page);
 }
 
-export async function assertNewChatPage(page: Page, useSavedChats = false): Promise<void> {
+export async function assertNewChatPage(page: Page, useSavedChats = false, projectId?: string): Promise<void> {
   const url = new URL(page.url());
-  const expected = new URL(chatGptNewChatUrl(useSavedChats));
+  if (projectId && (!useSavedChats || !/^g-p-[a-f0-9]{32}$/.test(projectId))) {
+    throw new Error("A ChatGPT project requires saved chats and a valid project id");
+  }
+  const expected = new URL(projectId ? `https://chatgpt.com/g/${projectId}/project` : chatGptNewChatUrl(useSavedChats));
   if (url.origin !== expected.origin || url.pathname !== expected.pathname
     || (url.searchParams.get("temporary-chat") === "true") === useSavedChats) {
     throw new Error(`ChatGPT left the requested new ${useSavedChats ? "saved" : "Temporary"} Chat surface (${page.url()})`);

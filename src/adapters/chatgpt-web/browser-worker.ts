@@ -1,6 +1,12 @@
+import { collectGeneratedChatGptFiles } from "./downloads";
+import { preserveChatGptResponseImages, chatGptSavedImagesMarkdown, type ChatGptResponseImage } from "./response-images";
+import { storeGeneratedFile } from "../../generated-files";
+import {
+  canonicalSavedChatUrl, ChatGptConversationStore, conversationPersistenceError, type SavedChatConversation,
+} from "./conversation-persistence";
 import { randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { skillFileTokens, validateSkillFiles } from "./skill-attachments";
 import { detectChatGptLimitsPlan, readChatGptUsageAccount, readChatGptUsageModel, supportsChatGptUsageTracking, type ChatGptUsageModel } from "./limits";
 import { chromium, type Browser, type BrowserContext, type Locator, type Page, type Request, type Response } from "playwright-core";
@@ -1115,7 +1121,7 @@ export const browserStageTimeouts = {
   temporaryChatPreparation: 150_000,
   effortSelection: 120_000,
   promptAttachment: 60_000,
-  fileAttachment: 120_000,
+  fileAttachment: 360_000,
   send: 20_000,
   // A Bigger Context stage posts a much larger payload onto a conversation that already holds the
   // earlier parts. This budget covers ChatGPT accepting the submission, not just the click.
@@ -1255,6 +1261,8 @@ function withBrowserTurnAbort<T>(promise: Promise<T>, signal?: AbortSignal): Pro
 export interface BrowserTurn {
   traceId: string;
   modelId: string;
+  project?: { id: string; name: string };
+  sessionMode?: "temporary" | "persistent";
   reasoning?: string;
   modelFamily?: "5.6" | "6";
   capabilities: ChatGptWebCapabilities;
@@ -1338,6 +1346,11 @@ interface ChatGptSubmissionDomCache {
 }
 
 export interface ResolvedBrowserConfig {
+  accountId?: string;
+  conversationStoreDirectory?: string;
+  imageOutputDirectory?: string;
+  downloadDirectory?: string;
+  downloadBaseUrl?: string;
   appName: string;
   browserHost: "managed-chrome" | "launcher";
   browserHostDescriptorPath?: string;
@@ -1353,16 +1366,107 @@ export interface ResolvedBrowserConfig {
   proConcurrencyLimit?: number;
 }
 
-export function chatGptTurnIsComplete(state: {
+interface PersistentConversationContext {
+  store: ChatGptConversationStore;
+  key: string;
+  saved?: SavedChatConversation;
+  claim?: SavedChatConversation;
+}
+
+function persistentConversationContext(config: ResolvedBrowserConfig, turn: BrowserTurn): PersistentConversationContext | undefined {
+  if (!config.useSavedChats || !turn.conversationKey || turn.compaction
+    || turn.nativeConnector || turn.capabilities.localToolsEnabled) return undefined;
+  const account = config.accountId ?? "default";
+  const store = new ChatGptConversationStore(
+    config.conversationStoreDirectory ?? join(getConfigDir(), "runtime", "conversations"), account,
+  );
+  const saved = store.lookup(turn.conversationKey);
+  if (turn.sessionMode === "temporary" && !saved) return undefined;
+  return { store, key: turn.conversationKey, saved };
+}
+
+/** Native Save preserves the visible history but assigns a new saved conversation ID. */
+export async function saveTemporaryChat(page: Page): Promise<string> {
+  await page.getByRole("button", { name: /^(?:Save chat|保存聊天)$/ }).click({ timeout: 30_000 });
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: /^(?:Save|保存)$/ }).click({ timeout: 30_000 });
+  await page.waitForURL(url => !url.searchParams.has("temporary-chat") && /\/c\//.test(url.pathname), { timeout: 30_000 });
+  const url = canonicalSavedChatUrl(page.url());
+  await restoreSavedChatConversation(page, url);
+  return url;
+}
+
+export async function moveSavedChatToProject(page: Page, project: { id: string; name: string }): Promise<string> {
+  const before = canonicalSavedChatUrl(page.url());
+  const conversationId = before.split("/c/")[1];
+  await page.locator("header").getByRole("button", { name: /^(?:More|更多)$/ }).click({ timeout: 30_000 });
+  await page.getByRole("menuitem", { name: /^(?:Move to project|移至项目)$/ }).press("ArrowRight", { timeout: 30_000 });
+  await page.getByRole("menuitem", { name: project.name, exact: true }).press("Enter", { timeout: 30_000 });
+  await page.waitForURL(url => url.pathname.startsWith(`/g/${project.id}`) && url.pathname.endsWith(`/c/${conversationId}`), { timeout: 30_000 });
+  return canonicalSavedChatUrl(page.url());
+}
+
+/** Restore only the recorded chat. Missing history or a redirect must never become a fresh chat. */
+export async function restoreSavedChatConversation(
+  page: Page,
+  savedUrl: string,
+  options: { signal?: AbortSignal; timeoutMs?: number; capture?: (checkpoint: string) => Promise<void> } = {},
+): Promise<void> {
+  const expected = canonicalSavedChatUrl(savedUrl);
+  const timeout = options.timeoutMs ?? 30_000;
+  try {
+    throwIfPromptAttachmentAborted(options.signal);
+    let current: string | undefined;
+    try { current = canonicalSavedChatUrl(page.url()); } catch {}
+    if (current !== expected) {
+      const response = await withBrowserTurnAbort(page.goto(expected, { waitUntil: "domcontentloaded", timeout }), options.signal);
+      if (response && response.status() >= 400) throw new Error("The saved conversation returned an unsuccessful HTTP status");
+    }
+    if (canonicalSavedChatUrl(page.url()) !== expected) throw new Error("The browser left the recorded conversation");
+    await withBrowserTurnAbort(page.locator(
+      '[data-user-message-bubble], [data-message-author-role="user"]',
+    ).filter({ visible: true }).first().waitFor({ state: "visible", timeout }), options.signal);
+    await withBrowserTurnAbort(page.locator(CHATGPT_COMPOSER_SELECTOR)
+      .filter({ visible: true }).first().waitFor({ state: "visible", timeout }), options.signal);
+    await withBrowserTurnAbort(assertAuthenticatedChatGptPage(page), options.signal);
+    if (canonicalSavedChatUrl(page.url()) !== expected) throw new Error("The browser left the recorded conversation");
+    await options.capture?.("saved-chat-restored");
+  } catch (error) {
+    if (options.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error;
+    throw conversationPersistenceError(
+      "saved_conversation_unavailable",
+      "The saved ChatGPT conversation could not be reopened. It may be deleted or inaccessible. Its mapping was preserved; explicitly start a new session/fork instead of silently replacing it.", error,
+    );
+  }
+}
+
+type ChatGptAnswerContent = {
+  currentText: string;
+  allowImageOnlyCompletion?: boolean;
+  imageSources?: readonly string[];
+  pendingImages?: boolean;
+  /** Only ordinary QA with the generated-file download gateway configured. */
+  allowFileOnlyCompletion?: boolean;
+  /** Real downloadable cards in the bound assistant response, never page-wide. */
+  downloadableFiles?: readonly string[];
+};
+
+function chatGptTurnHasAnswer(state: ChatGptAnswerContent): boolean {
+  return state.currentText.length > 0
+    || (state.allowImageOnlyCompletion === true && (state.imageSources?.length ?? 0) > 0)
+    || (state.allowFileOnlyCompletion === true && (state.downloadableFiles?.length ?? 0) > 0);
+}
+
+export function chatGptTurnIsComplete(state: ChatGptAnswerContent & {
   responsePresent: boolean;
   running: boolean;
-  currentText: string;
   currentHtml?: string;
   completionActionVisible: boolean;
 }): boolean {
   return state.responsePresent
     && !state.running
-    && state.currentText.length > 0
+    && !state.pendingImages
+    && chatGptTurnHasAnswer(state)
     && state.completionActionVisible;
 }
 
@@ -1496,6 +1600,7 @@ export class ChatGptCompletionTracker {
   private candidate?: { signature: string; since: number };
   private lastToolBatchRevision = 0;
   private postToolAnswerBaselineText?: string;
+  private postToolAnswerBaselineImages = "[]";
   private missingPostToolAnswerSince?: number;
 
   constructor(
@@ -1510,11 +1615,12 @@ export class ChatGptCompletionTracker {
     return revision > this.lastToolBatchRevision;
   }
 
-  observeToolBatch(revision: number, currentText: string): boolean {
+  observeToolBatch(revision: number, currentText: string, imageSources: readonly string[] = []): boolean {
     if (!this.needsToolBatchObservation(revision)) return false;
     // The caller acknowledges the batch only after this projection is captured. The outer Codex
     // harness therefore cannot execute the tool until this exact pre-tool answer boundary exists.
     this.postToolAnswerBaselineText = currentText;
+    this.postToolAnswerBaselineImages = JSON.stringify(imageSources);
     this.lastToolBatchRevision = revision;
     this.missingPostToolAnswerSince = undefined;
     this.candidate = undefined;
@@ -1527,7 +1633,9 @@ export class ChatGptCompletionTracker {
     },
     now = Date.now(),
   ): boolean {
-    const signature = `${state.currentText}\0${state.currentHtml ?? state.currentText}`;
+    const signature = `${state.currentText}\0${state.currentHtml ?? state.currentText}`
+      + (state.allowImageOnlyCompletion ? JSON.stringify(state.imageSources ?? []) : "")
+      + (state.allowFileOnlyCompletion ? `\0${JSON.stringify(state.downloadableFiles ?? [])}` : "");
     // An outstanding tool call proves the model has more to say, whatever the rendered message
     // currently looks like. Completing here would return a truncated answer and retire the turn
     // while its own tool calls were still in flight.
@@ -1536,7 +1644,8 @@ export class ChatGptCompletionTracker {
       this.missingPostToolAnswerSince = undefined;
       return false;
     }
-    if (this.postToolAnswerBaselineText === state.currentText) {
+    if (this.postToolAnswerBaselineText === state.currentText
+      && this.postToolAnswerBaselineImages === JSON.stringify(state.imageSources ?? [])) {
       this.candidate = undefined;
       if (!chatGptTurnIsComplete(state)) {
         this.missingPostToolAnswerSince = undefined;
@@ -1584,15 +1693,14 @@ export class ChatGptTurnDomHealthTracker {
     this.missingResponseSince = undefined;
   }
 
-  update(state: {
+  update(state: ChatGptAnswerContent & {
     responsePresent: boolean;
     running: boolean;
-    currentText: string;
     completionActionVisible: boolean;
     externalProgressLive?: boolean;
   }, now = Date.now()): string | undefined {
     if (state.responsePresent) this.sawResponse = true;
-    if (state.externalProgressLive || state.running) {
+    if (state.externalProgressLive || state.running || state.pendingImages) {
       // Every conclusion below asserts that ChatGPT stopped producing this turn. A tool call that
       // is still completing or a visible Stop control disproves that, whatever response content
       // the renderer currently exposes. Start a fresh grace period once generation stops.
@@ -1614,7 +1722,7 @@ export class ChatGptTurnDomHealthTracker {
 
     const emptyCompletion = state.responsePresent
       && !state.running
-      && state.currentText.length === 0
+      && !chatGptTurnHasAnswer(state)
       && state.completionActionVisible;
     if (!emptyCompletion) {
       this.emptyCompletionSince = undefined;
@@ -1627,7 +1735,7 @@ export class ChatGptTurnDomHealthTracker {
 
     const missingCompletionAction = state.responsePresent
       && !state.running
-      && state.currentText.length > 0
+      && chatGptTurnHasAnswer(state)
       && !state.completionActionVisible;
     if (!missingCompletionAction) {
       this.missingCompletionAction = undefined;
@@ -1693,6 +1801,9 @@ export interface ChatGptVisibleTraceEvent {
 
 interface ChatGptResponseDomSnapshot {
   responsePresent: boolean;
+  downloadableFiles: string[];
+  images: ChatGptResponseImage[];
+  pendingImages: boolean;
   visibleText: string;
   fullHtml: string;
   markdownSegments: ChatGptMarkdownSegment[];
@@ -1710,6 +1821,9 @@ interface ChatGptResponseDomCache {
 
 const absentResponseDomSnapshot = (): ChatGptResponseDomSnapshot => ({
   responsePresent: false,
+  downloadableFiles: [],
+  images: [],
+  pendingImages: false,
   visibleText: "",
   fullHtml: "",
   markdownSegments: [],
@@ -2085,6 +2199,10 @@ export function resolveBrowserConfig(provider: CodexProviderConfig): ResolvedBro
   const browserHost = configured.browserHost ?? "managed-chrome";
   const browserHostDescriptorPath = configured.browserHostDescriptorPath?.trim();
   const browserHelperScriptPath = configured.browserHelperScriptPath?.trim();
+  const storageStatePath = resolve(expandUserPath(configured.storageStatePath?.trim() || join(getConfigDir(), "browser", "storage-state.json")));
+  const conversationStoreDirectory = configured.conversationStoreDirectory?.trim();
+  const useSavedChats = configured.useSavedChats
+    ?? (configured.browserInteractionMode !== "manual" && configured.localToolsEnabled !== true);
   const browserDiagnosticsPath = resolve(expandUserPath(
     configured.browserDiagnosticsPath?.trim() || join(getConfigDir(), "diagnostics", "browser-turns"),
   ));
@@ -2116,17 +2234,24 @@ export function resolveBrowserConfig(provider: CodexProviderConfig): ResolvedBro
     throw new Error(legacyChatGptConnectorMigrationMessage(appName));
   }
   return {
+    accountId: configured.accountId ?? "default",
+    ...(useSavedChats ? {
+      conversationStoreDirectory: resolve(getConfigDir(), expandUserPath(conversationStoreDirectory || join("runtime", "conversations"))),
+    } : {}),
+    imageOutputDirectory: resolve(expandUserPath(configured.imageOutputDirectory?.trim() || join(dirname(storageStatePath), "generated-images"))),
+    downloadDirectory: configured.downloadDirectory,
+    downloadBaseUrl: configured.downloadBaseUrl,
     appName,
     browserHost,
     ...(browserHostDescriptorPath ? { browserHostDescriptorPath: resolve(expandUserPath(browserHostDescriptorPath)) } : {}),
     ...(resolvedBrowserHelperScriptPath ? { browserHelperScriptPath: resolvedBrowserHelperScriptPath } : {}),
     browserDiagnosticsPath,
-    storageStatePath: resolve(expandUserPath(configured.storageStatePath?.trim() || join(getConfigDir(), "browser", "storage-state.json"))),
+    storageStatePath,
     chromeExecutablePath: resolve(expandUserPath(configured.chromeExecutablePath?.trim() || defaultChromeExecutable())),
     ...(turnTimeoutMs !== undefined ? { turnTimeoutMs } : {}),
     headed: configured.headed !== false,
     autoApproveToolCalls: configured.autoApproveToolCalls === true,
-    useSavedChats: configured.useSavedChats === true,
+    useSavedChats,
     standardConcurrencyLimit,
     proConcurrencyLimit,
   };
@@ -2162,9 +2287,9 @@ export function chatGptImageFilePayloads(images: ChatGptWebPromptImage[]): Array
 }
 
 function assertChatGptPromptAttachments(prompt: CompiledChatGptWebPrompt): void {
-  if (prompt.images.length + (prompt.skillFiles?.length ?? 0) > CHATGPT_MAX_INPUT_IMAGES) {
+  if (prompt.images.length + (prompt.skillFiles?.length ?? 0) + (prompt.files?.length ?? 0) > CHATGPT_MAX_INPUT_IMAGES) {
     throw new ChatGptWebAdapterError(
-      "Selected skills and images exceed ChatGPT's 10 attachments per message; disable Skills as files or reduce attachments.",
+      "Files, selected skills and images exceed ChatGPT's 10 attachments per message; disable Skills as files or reduce attachments.",
       { status: 400, errorType: "invalid_request_error", code: "too_many_attachments", retryable: false },
     );
   }
@@ -2175,7 +2300,17 @@ export function chatGptPromptFilePayloads(
   prompt: CompiledChatGptWebPrompt,
 ): Array<{ name: string; mimeType: string; buffer: Buffer }> {
   assertChatGptPromptAttachments(prompt);
-  const files = [...chatGptImageFilePayloads(prompt.images), ...(prompt.skillFiles ?? []).map(file => ({
+  const files = [...chatGptImageFilePayloads(prompt.images), ...(prompt.files ?? []).map(file => {
+    const parsed = file.fileData.startsWith("data:") ? parseDataUrl(file.fileData) : undefined;
+    const base64 = parsed?.base64 ?? file.fileData;
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64) || base64.length % 4 !== 0) {
+      throw new ChatGptWebAdapterError("input_file contains invalid base64 data", {
+        status: 400, errorType: "invalid_request_error", code: "invalid_file_data", retryable: false,
+      });
+    }
+    const mimeType = parsed?.mediaType ?? (file.filename.toLowerCase().endsWith(".zip") ? "application/zip" : "application/octet-stream");
+    return { name: file.filename, mimeType, buffer: Buffer.from(base64, "base64") };
+  }), ...(prompt.skillFiles ?? []).map(file => ({
     name: file.name, mimeType: "text/plain", buffer: Buffer.from(file.text, "utf8"),
   }))];
   if (files.reduce((sum, file) => sum + file.buffer.length, 0) > 50_000_000) {
@@ -2221,6 +2356,12 @@ export function insertPlainTextIntoComposer(element: HTMLElement, value: string)
   return document.execCommand("insertText", false, value);
 }
 
+function concurrencyLimitError(message: string): ChatGptWebAdapterError {
+  return new ChatGptWebAdapterError(message, {
+    status: 429, errorType: "rate_limit_error", code: "concurrency_limit_exceeded", retryable: true,
+  });
+}
+
 export class ChatGptBrowserWorker {
   static forProvider(provider: CodexProviderConfig): ChatGptBrowserWorker {
     const config = resolveBrowserConfig(provider);
@@ -2240,7 +2381,7 @@ export class ChatGptBrowserWorker {
   private launcherHelper?: LauncherBrowserHelperClient;
   private maintenanceTail: Promise<void> = Promise.resolve();
   private readonly activeRuns = new Map<string, Promise<string>>();
-  private readonly activeProRuns = new Set<string>();
+  private activeProRuns = new Set<string>();
 
   private constructor(private readonly config: ResolvedBrowserConfig) {}
 
@@ -2301,18 +2442,18 @@ export class ChatGptBrowserWorker {
       return Promise.reject(new Error(`Duplicate ChatGPT web browser turn: ${turn.traceId}`));
     }
     if (this.activeRuns.size >= MAX_CHATGPT_BROWSER_TABS) {
-      return Promise.reject(new Error(
+      return Promise.reject(concurrencyLimitError(
         `ChatGPT Web supports at most ${MAX_CHATGPT_BROWSER_TABS} simultaneous browser turns; close or finish a browser tab before starting another`,
       ));
     }
     const pro = turn.reasoning === "max" || turn.modelId === CHATGPT_WEB_ZERO_RISK_PRO_BACKEND_MODEL;
-    const activeProRuns = this.activeProRuns ?? new Set<string>();
+    const activeProRuns = this.activeProRuns ??= new Set<string>();
     const activeForModel = pro ? activeProRuns.size : this.activeRuns.size - activeProRuns.size;
     const limit = pro
       ? this.config.proConcurrencyLimit ?? DEFAULT_CHATGPT_PRO_CONCURRENCY
       : this.config.standardConcurrencyLimit ?? DEFAULT_CHATGPT_STANDARD_CONCURRENCY;
     if (activeForModel >= limit) {
-      return Promise.reject(new Error(
+      return Promise.reject(concurrencyLimitError(
         `ChatGPT Web ${pro ? "Pro" : "standard"} supports at most ${limit} simultaneous browser turns`,
       ));
     }
@@ -2739,7 +2880,12 @@ export class ChatGptBrowserWorker {
     page: Page,
     captureDiagnostic?: (checkpoint: string) => Promise<void>,
     useSavedChats = false,
+    project?: BrowserTurn["project"],
   ): Promise<Locator> {
+    if (project && (!useSavedChats || !/^g-p-[a-f0-9]{32}$/.test(project.id)
+      || typeof project.name !== "string" || !project.name.trim() || project.name.length > 128)) {
+      throw new Error("Invalid saved ChatGPT project route");
+    }
     // Launcher verification refreshes its owned page before attaching Playwright so a newly added
     // connector is present in the catalog. Navigating again here destroys that freshly hydrated
     // document and made the first verification race a second SPA bootstrap. A leased turn starts on
@@ -2752,6 +2898,34 @@ export class ChatGptBrowserWorker {
       });
       await captureDiagnostic?.(useSavedChats ? "saved-chat-navigation-complete" : "temporary-chat-navigation-complete");
     }
+    if (project) {
+      const name = project.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const button = page.getByRole("button", { name: new RegExp(
+        `^(?:Start (?:a )?new chat in ${name}|在 ${name} 中开启新聊天)$`, "i",
+      ) });
+      const sectionToggle = page.getByRole("button", { name: /^(?:Projects|项目)$/ });
+      await sectionToggle.waitFor({ timeout: 30_000 });
+      if (await sectionToggle.getAttribute("aria-expanded") === "false") await sectionToggle.click();
+      const section = sectionToggle.locator('xpath=ancestor::div[.//*[@role="list"]][1]');
+      const list = section.getByRole("list").first();
+      const more = list.locator(':scope > [role="listitem"] > button')
+        .filter({ hasText: /^(?:Show more|展开显示)$/i });
+      const deadline = Date.now() + 30_000;
+      while (await button.count() === 0 && Date.now() < deadline) {
+        if (await more.count()) {
+          await more.click({ timeout: 5_000 });
+        } else {
+          // Scrolling the last project triggers the sidebar's native cursor pagination.
+          await list.locator(':scope > [role="listitem"]').last().scrollIntoViewIfNeeded({ timeout: 5_000 });
+        }
+        await page.waitForTimeout(100);
+      }
+      await button.waitFor({ state: "attached", timeout: Math.max(1, deadline - Date.now()) });
+      // The native sidebar action is hover-hidden and its overlay intercepts pointer clicks.
+      await button.evaluate(element => (element as HTMLButtonElement).click());
+      await page.waitForURL(`https://chatgpt.com/g/${project.id}/project`, { timeout: 30_000 });
+      await captureDiagnostic?.("project-chat-selected");
+    }
     // A failed page read is not evidence of an expired login. Preserve the actual
     // observation error; the authenticated-session check below owns login failures.
     const composer = await this.activeComposer(page);
@@ -2761,7 +2935,7 @@ export class ChatGptBrowserWorker {
     await captureDiagnostic?.("composer-ready");
     await throwIfChatGptSessionFailureAlert(page);
     await assertAuthenticatedChatGptPage(page);
-    await assertNewChatPage(page, useSavedChats);
+    await assertNewChatPage(page, useSavedChats, project?.id);
     await captureDiagnostic?.("session-verified");
     return composer;
   }
@@ -4013,14 +4187,14 @@ export class ChatGptBrowserWorker {
     if (files.length === 0) return;
     const composer = await this.activeComposer(page);
     const composerForm = composer.locator("xpath=ancestor::form[1]");
-    const input = page.locator('input[data-testid="upload-photos-input"], form[data-chatgpt-composer] input[type="file"][multiple]:not([accept])');
+    const input = composerForm.locator('input[data-testid="upload-photos-input"], input[type="file"][multiple]:not([accept])');
     await input.waitFor({ state: "attached", timeout: 20_000 });
     await input.setInputFiles(files);
     try {
       await Promise.all(files.map(file => (
         composerForm.getByRole("group", { name: file.name, exact: true })
           .or(composerForm.locator(`.composer-attachment-surface:is(button, [role="button"])[aria-label=${JSON.stringify(file.name)}]`))
-          .waitFor({ state: "visible", timeout: 60_000 })
+          .waitFor({ state: "visible", timeout: 300_000 })
       )));
     } catch {
       const alerts = (await page.locator('[role="alert"]').allInnerTexts().catch(() => []))
@@ -4102,7 +4276,10 @@ export class ChatGptBrowserWorker {
           break;
         }
       }
-      const observerKey = `${registry.documentId}:${observerState.id}:${observerState.revision}`;
+      const imageLoadKey = [...root.querySelectorAll("img")].map(image =>
+        [image.complete, image.naturalWidth, image.naturalHeight].join(":"),
+      ).join("|");
+      const observerKey = `${registry.documentId}:${observerState.id}:${observerState.revision}:${imageLoadKey}`;
       if (options.knownKey === observerKey) return { key: observerKey };
       observerState.rendered.clear();
       const renderedInDom = (candidate: HTMLElement): boolean => {
@@ -4406,12 +4583,64 @@ export class ChatGptBrowserWorker {
         streamable: index < segments.length - 1 && !segment.pendingLinks,
         linkTargets: segment.linkTargets,
       }));
-      const rendered = renderedRoots.at(-1);
-      const completionAction = rendered
+      // Observed file-only answers place native resource rows beside the Markdown root.
+      // Keep their evidence separate from answer text: only the collector can supply a URL.
+      const downloadableRows = [...root.querySelectorAll<HTMLElement>('[class~="group/resource-row"]')]
+        .filter(row => {
+          const unit = row.closest('[data-content-search-unit-key]');
+          const assistant = unit?.getAttribute('data-content-search-unit-key')?.endsWith(':assistant')
+            || row.closest('[data-message-author-role="assistant"]');
+          if (!assistant || row.closest('[data-user-message-bubble], [data-message-author-role="user"], [data-streaming-response-status], [data-testid^="cot-v5"], pre, code, blockquote')
+            || !renderedInDom(row)) return false;
+          const filename = row.querySelector('span[title]')?.getAttribute('title')?.trim();
+          const buttons = [...row.querySelectorAll<HTMLElement>('button[aria-label="下载文件"], button[aria-label="Download file"]')];
+          const button = buttons[0];
+          // The real download control appears on hover (opacity:0 beforehand). Require
+          // a rendered card and an enabled semantic button, without relying on hover.
+          return Boolean(filename && buttons.length === 1 && button
+            && !button.matches('[disabled], [aria-disabled="true"], [aria-busy="true"]')
+            && !button.closest('[hidden], [aria-hidden="true"]'));
+        });
+      const downloadableFiles = downloadableRows.map(row => row.querySelector('span[title]')!.getAttribute('title')!);
+      // Preserve assets separately from append-only text, scoped to this assistant answer.
+      const images: ChatGptResponseImage[] = [];
+      const imageElements: HTMLImageElement[] = [];
+      let pendingImages = [...root.querySelectorAll<HTMLElement>('[data-testid="generated-image-gallery"]')]
+        .filter(gallery => !gallery.closest('[data-user-message-bubble], [data-message-author-role="user"]'))
+        .some(gallery => renderedInDom(gallery) && (gallery.getAttribute("aria-busy") === "true"
+          || [...gallery.querySelectorAll<HTMLElement>('canvas, [aria-busy="true"]')].some(renderedInDom)));
+      const seenImages = new Set<string>();
+      for (const image of root.querySelectorAll<HTMLImageElement>("img")) {
+        if (image.closest('[data-user-message-bubble], [data-message-author-role="user"], [data-content-search-unit-key$=":user"], [data-streaming-response-status], [data-testid^="cot-v5"], [class~="group/resource-row"], pre, code, blockquote, nav')) continue;
+        const unit = image.closest('[data-content-search-unit-key]');
+        const owned = renderedRoots.some(answer => answer.contains(image))
+          || image.closest('[data-message-author-role="assistant"]')
+          // Observed generated-image turns have a dedicated gallery outside both Markdown
+          // and assistant search units, but still inside the bound logical turn.
+          || image.closest('[data-testid="generated-image-gallery"]')
+          || unit?.getAttribute('data-content-search-unit-key')?.endsWith(':assistant');
+        if (!owned || !renderedInDom(image)) continue;
+        const src = image.currentSrc || image.getAttribute("src") || "";
+        if (!src || !/^(https?:|blob:|data:image\/)/i.test(src)) continue;
+        const width = Math.max(image.naturalWidth || 0, image.width || 0, Number(image.getAttribute("width")) || 0);
+        const height = Math.max(image.naturalHeight || 0, image.height || 0, Number(image.getAttribute("height")) || 0);
+        if (Math.max(width, height) < 128 && !image.closest('[data-testid="generated-image-gallery"]')) continue;
+        if (!image.complete || !image.naturalWidth || !image.naturalHeight
+          || image.closest('[aria-busy="true"], [data-state="loading"]')) { pendingImages = true; continue; }
+        if (seenImages.has(src)) continue;
+        seenImages.add(src);
+        images.push({ src, alt: image.getAttribute("alt") || "", width: image.naturalWidth, height: image.naturalHeight });
+        imageElements.push(image);
+      }
+      const completionAnchor = [...renderedRoots, ...downloadableRows, ...imageElements]
+        .sort((left, right) => left === right ? 0
+          : left.compareDocumentPosition(right) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1).at(-1);
+      const completionAction = completionAnchor
         ? [...root.querySelectorAll<HTMLElement>(options.completionActionSelector)]
           .filter(renderedInDom)
-          .find(candidate => !rendered.contains(candidate)
-            && Boolean(rendered.compareDocumentPosition(candidate) & Node.DOCUMENT_POSITION_FOLLOWING))
+          .filter(candidate => !candidate.matches('[disabled], [aria-disabled="true"], [aria-busy="true"]'))
+          .find(candidate => !completionAnchor.contains(candidate)
+            && Boolean(completionAnchor.compareDocumentPosition(candidate) & Node.DOCUMENT_POSITION_FOLLOWING))
         : undefined;
       const completionActionSet = new Set(completionAction ? [completionAction] : []);
       const candidates = new Map<HTMLElement, ChatGptVisibleTraceBlock["kind"]>();
@@ -4549,6 +4778,9 @@ export class ChatGptBrowserWorker {
         key: observerKey,
         snapshot: {
           responsePresent: true,
+          downloadableFiles,
+          images,
+          pendingImages,
           visibleText: renderedRoots.map(candidate => candidate.innerText.trim()).filter(Boolean).join("\n\n"),
           fullHtml: renderedRoots.map(candidate => candidate.innerHTML).join(""),
           markdownSegments,
@@ -4561,7 +4793,7 @@ export class ChatGptBrowserWorker {
       completionActionSelector: CHATGPT_COMPLETION_ACTION_SELECTOR,
       stoppedThinkingLabels: [...CHATGPT_STOPPED_THINKING_LABELS],
       knownKey: cache?.key,
-      attributeFilter: [...CHATGPT_DOM_REVISION_ATTRIBUTES],
+      attributeFilter: [...CHATGPT_DOM_REVISION_ATTRIBUTES, "title", "disabled", "aria-disabled", "aria-busy", "src", "srcset", "width", "height", "alt"],
     }, { timeout: 2_000 }).catch(() => undefined);
     if (!observed) {
       if (responseTurn.page().isClosed()) {
@@ -4631,6 +4863,7 @@ export class ChatGptBrowserWorker {
 
   private async runExclusive(turn: BrowserTurn): Promise<string> {
     if (turn.abortSignal?.aborted) throw new DOMException("ChatGPT web turn aborted", "AbortError");
+    const persistent = persistentConversationContext(this.config, turn);
     if (this.config.browserHost !== "launcher") return this.runBrowserTurn(turn);
 
     const lease = await notifyLauncherTurn(this.config.browserHostDescriptorPath!, {
@@ -4651,7 +4884,7 @@ export class ChatGptBrowserWorker {
       throw error;
     });
     const surfaceId = lease.surfaceId;
-    const reused = lease.reused === true;
+    const reused = lease.reused === true || persistent?.saved !== undefined;
     let terminal: "completed" | "failed" | "aborted" = "completed";
     let terminalMessage: string | undefined;
     let originalError: unknown;
@@ -4740,6 +4973,9 @@ export class ChatGptBrowserWorker {
     trackUsage = false,
   ): Promise<string> {
     if (turn.abortSignal?.aborted) throw new DOMException("ChatGPT web turn aborted", "AbortError");
+    const persistent = persistentConversationContext(this.config, turn);
+    let promotedSurface = false;
+    if (persistent?.saved) reuseConversation = true;
     if ((turn.externalProgress !== undefined) !== (turn.completionFence !== undefined)) {
       throw new Error("Tool-capable ChatGPT turns require both progress and terminal-fence transports");
     }
@@ -4974,7 +5210,20 @@ export class ChatGptBrowserWorker {
           + ` maxStageMessageTokens=${maxStageMessageTokens} maxStageChars=${maxStageChars}`,
         );
       }
-      if (!reuseConversation) {
+      if (persistent?.saved) {
+        await restoreSavedChatConversation(page, persistent.saved.url!, {
+          signal: turn.abortSignal, capture: checkpoint => diagnostics.capture(page, checkpoint),
+        });
+      } else if (persistent && reuseConversation) {
+        // Adopt an already owned saved launcher chat when upgrading from memory-only retention.
+        const temporary = new URL(page.url()).searchParams.get("temporary-chat") === "true";
+        if (temporary) persistent.claim = persistent.store.reserve(persistent.key);
+        const url = temporary ? await saveTemporaryChat(page) : canonicalSavedChatUrl(page.url());
+        await restoreSavedChatConversation(page, url, { signal: turn.abortSignal });
+        persistent.claim ??= persistent.store.reserve(persistent.key);
+        persistent.saved = persistent.store.bind(persistent.key, persistent.claim, url, temporary ? turn.project : undefined);
+        promotedSurface = temporary;
+      } else if (!reuseConversation) {
         await this.runStage(
           turn.traceId,
           "temporary_chat_preparation",
@@ -4982,9 +5231,24 @@ export class ChatGptBrowserWorker {
           () => this.prepareChatSurface(
             page,
             checkpoint => diagnostics.capture(page, checkpoint),
-            this.config.useSavedChats,
+            persistent !== undefined || (turn.sessionMode !== "temporary" && this.config.useSavedChats),
+            persistent ? turn.project : undefined,
           ),
         );
+      }
+      if (persistent?.saved?.pendingProject) {
+        const url = await moveSavedChatToProject(page, persistent.saved.pendingProject);
+        persistent.saved = persistent.store.finishProjectMove(persistent.key, url);
+        promotedSurface = true;
+      }
+      if (promotedSurface && persistent?.saved?.url) {
+        // Native Save/Move can leave both old and new copies of the same turn mounted.
+        // Commit the saved identity first, then reload it before taking submission baselines.
+        await page.goto(persistent.saved.url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+        await restoreSavedChatConversation(page, persistent.saved.url, { signal: turn.abortSignal });
+      }
+      if (turn.sessionMode === "temporary" && persistent?.saved) {
+        await turn.onCommentary?.("此会话已持久保存；本次只调整思考强度，不转为临时聊天。\n");
       }
       // A retained lease proves the connector binding, not the current model selection.
       // Reconcile the live control before every submission, including retained continuations.
@@ -5194,6 +5458,7 @@ export class ChatGptBrowserWorker {
                 page,
                 checkpoint => diagnostics.capture(page, checkpoint),
                 this.config.useSavedChats,
+                turn.project,
               );
               mode = await this.selectModelAndEffort(
                 page,
@@ -5211,9 +5476,19 @@ export class ChatGptBrowserWorker {
         }
       }
       await diagnostics.capture(page, "prompt-attachment-complete");
-      await this.runStage(turn.traceId, "file_attachment", browserStageTimeouts.fileAttachment, () => (
-        this.attachFiles(page, prepared)
-      ));
+      try {
+        await this.runStage(turn.traceId, "file_attachment", browserStageTimeouts.fileAttachment, () => (
+          this.attachFiles(page, prepared)
+        ));
+      } catch (error) {
+        // Multipart may already have submitted staging messages. Only single-part
+        // attachment failures are known to precede every Send in this request.
+        if (prepared.multipart) throw error;
+        throw new ChatGptWebAdapterError(
+          `PDF/file attachment failed before Send; no question was submitted: ${error instanceof Error ? error.message : String(error)}`,
+          { status: 422, errorType: "invalid_request_error", code: "prompt_attachments_not_submitted", retryable: false, cause: error },
+        );
+      }
       await diagnostics.capture(page, "file-attachment-complete");
       const completionTracker = new ChatGptCompletionTracker();
       const recordFinalUsage = await usageSubmission();
@@ -5229,13 +5504,47 @@ export class ChatGptBrowserWorker {
           checkpoint => diagnostics.capture(page, checkpoint),
           turn.abortSignal ? AbortSignal.any([stageSignal, turn.abortSignal]) : stageSignal,
           turn.externalProgress,
-          { ...turn, onSubmitted: () => {
+          { ...turn, onSubmitted: async () => {
             recordFinalUsage?.();
-            return turn.onSubmitted?.();
+            await turn.onSubmitted?.();
+            if (persistent && !persistent.saved) {
+              try {
+                await withBrowserTurnAbort(page.waitForURL(url => {
+                  try { return canonicalSavedChatUrl(url.toString()).length > 0; } catch { return false; }
+                }, { timeout: 20_000, waitUntil: "domcontentloaded" }), turn.abortSignal);
+              } catch (error) {
+                if (turn.abortSignal?.aborted) throw error;
+                throw conversationPersistenceError("saved_conversation_unresolved",
+                  "ChatGPT accepted the question but did not expose a saved conversation URL. The pending mapping was preserved; the question must not be resent automatically.", error);
+              }
+              if (!persistent.claim) throw conversationPersistenceError("saved_conversation_unresolved", "ChatGPT accepted a message without its durable conversation reservation.");
+              persistent.saved = persistent.store.bind(persistent.key, persistent.claim, page.url());
+            }
           }, onSendActivated: async () => {
             await this.assertSelectedEffort(page, mode);
-            submissionRejection.begin(page);
-            await turn.onSendActivated?.();
+            throwIfPromptAttachmentAborted(turn.abortSignal);
+            if (persistent && !persistent.saved && turn.project) {
+              await assertNewChatPage(page, true, turn.project.id);
+            }
+            if (persistent?.saved && canonicalSavedChatUrl(page.url()) !== persistent.saved.url) {
+              throw conversationPersistenceError("saved_conversation_unavailable", "ChatGPT left the saved conversation before submission; no new message was sent.");
+            }
+            if (persistent && !persistent.saved && !persistent.claim) {
+              persistent.claim = persistent.store.reserve(persistent.key);
+            }
+            try {
+              submissionRejection.begin(page);
+              await turn.onSendActivated?.();
+              throwIfPromptAttachmentAborted(turn.abortSignal);
+            } catch (error) {
+              // sendAttachedPrompt has not pressed Send while this hook is pending.
+              // A later failure from press/acceptance remains ambiguous and keeps its claim.
+              if (persistent?.claim && !persistent.saved) {
+                persistent.store.cancelBeforeSend(persistent.key, persistent.claim);
+                persistent.claim = undefined;
+              }
+              throw error;
+            }
           } },
           completionTracker,
           launcherObservationRecovery
@@ -5268,6 +5577,11 @@ export class ChatGptBrowserWorker {
 
       let lastHeartbeat = 0;
       let finalText = "";
+      const allowFileOnlyCompletion = !mode.localTools && !turn.nativeConnector && !turn.compaction
+        && Boolean(this.config.downloadDirectory && this.config.downloadBaseUrl);
+      let completedFileOnly = false;
+      const allowImageOnlyCompletion = !turn.compaction;
+      let completedImages: ChatGptResponseImage[] = [];
       let sawRunning = false;
       let loggedCompletionWait = false;
       let capturedResponse = false;
@@ -5395,6 +5709,7 @@ export class ChatGptBrowserWorker {
           completionTracker.observeToolBatch(
             externalProgressSnapshot.lastToolBatchRevision,
             snapshot.visibleText,
+            snapshot.images.map(image => image.src),
           );
           await turn.externalProgress.acknowledgeToolBatch(externalProgressSnapshot.lastToolBatchRevision);
         }
@@ -5436,6 +5751,11 @@ export class ChatGptBrowserWorker {
             running,
             currentText: snapshot.visibleText,
             completionActionVisible: snapshot.completionActionVisible,
+            allowFileOnlyCompletion,
+            downloadableFiles: snapshot.downloadableFiles,
+            allowImageOnlyCompletion,
+            imageSources: snapshot.images.map(image => image.src),
+            pendingImages: snapshot.pendingImages,
             externalProgressLive,
           });
           if (domError) throw new Error(domError);
@@ -5445,6 +5765,11 @@ export class ChatGptBrowserWorker {
             currentText: snapshot.visibleText,
             currentHtml: snapshot.fullHtml,
             completionActionVisible: snapshot.completionActionVisible,
+            allowFileOnlyCompletion,
+            downloadableFiles: snapshot.downloadableFiles,
+            allowImageOnlyCompletion,
+            imageSources: snapshot.images.map(image => image.src),
+            pendingImages: snapshot.pendingImages,
             externalToolCallsInFlight,
           });
           if (!completionReady) completionFenceRevision = undefined;
@@ -5486,6 +5811,9 @@ export class ChatGptBrowserWorker {
             if (!final.markdown && snapshot.visibleText) {
               throw new Error("ChatGPT completed with visible text that could not be serialized as Markdown");
             }
+            completedImages = snapshot.images;
+            completedFileOnly = allowFileOnlyCompletion && snapshot.visibleText.length === 0
+              && snapshot.downloadableFiles.length > 0;
             if (final.delta) emitMarkdownDelta(final.delta);
             if (checkpointStream) {
               const completed = checkpointStream.finishOptional(snapshot.visibleText);
@@ -5544,6 +5872,34 @@ export class ChatGptBrowserWorker {
        }
       }
 
+      if (!turn.compaction && this.config.downloadDirectory && this.config.downloadBaseUrl) {
+        const files = await collectGeneratedChatGptFiles(page, responseTurn.locator);
+        if (completedFileOnly && files.length === 0) {
+          throw new Error("ChatGPT file-only answer did not yield a downloadable file");
+        }
+        if (files.length > 0) {
+          const links = files.map(file => {
+            const url = storeGeneratedFile(this.config.downloadDirectory!, this.config.downloadBaseUrl!, file.filename, file.mime, file.bytes, Date.now(), { sources: file.sources });
+            const label = file.filename.replace(/[\\[\]]/g, "\\$&");
+            return "[" + label + "](<" + url + ">)";
+          });
+          const suffix = (finalText ? "\n\n" : "") + links.join("\n");
+          turn.onTextDelta(suffix);
+          finalText += suffix;
+        }
+      }
+      if (!turn.compaction && completedImages.length > 0) {
+        const images = await preserveChatGptResponseImages(page, completedImages, {
+          directory: this.config.imageOutputDirectory ?? join(dirname(this.config.storageStatePath || join(getConfigDir(), "browser", "storage-state.json")), "generated-images"),
+          traceId: turn.traceId,
+          downloadDirectory: this.config.downloadDirectory,
+          downloadBaseUrl: this.config.downloadBaseUrl,
+          signal: turn.abortSignal,
+        });
+        const suffix = (finalText ? "\n\n" : "") + chatGptSavedImagesMarkdown(images);
+        turn.onTextDelta(suffix);
+        finalText += suffix;
+      }
       const finalRejection = await submissionRejection.failure();
       if (finalRejection) throw finalRejection;
       if (this.context && this.config.browserHost === "managed-chrome") {

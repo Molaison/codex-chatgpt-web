@@ -117,6 +117,10 @@ export interface AppConfig {
   storageStatePath: string;
   /** Stable profile name used to isolate browser state and retained conversations. */
   accountId?: string;
+  /** Portable saved-chat mappings. Relative paths resolve under the account home. */
+  conversationStoreDirectory?: string;
+  /** Public base URL used for generated-file download links. */
+  downloadBaseUrl?: string;
   brokerSocketPath: string;
   headed: boolean;
   solAvailable: boolean;
@@ -280,7 +284,7 @@ export function defaultConfig(mode: RuntimeMode = "browser-only"): AppConfig {
     experimentalBiggerContext: false,
     experimentalSkillAttachments: false,
     experimentalFreshConversationPerTurn: false,
-    useSavedChats: false,
+    useSavedChats: true,
     zeroRiskProEnabled: false,
     standardConcurrencyLimit: 5,
     proConcurrencyLimit: 2,
@@ -472,6 +476,18 @@ function parseConfig(value: unknown, path: string): AppConfig {
     && (typeof parsed.accountId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(parsed.accountId))) {
     throw new Error(`Invalid accountId in ${path}`);
   }
+  if (parsed.conversationStoreDirectory !== undefined
+    && (typeof parsed.conversationStoreDirectory !== "string"
+      || !parsed.conversationStoreDirectory.trim() || parsed.conversationStoreDirectory.includes("\0"))) {
+    throw new Error("Invalid conversationStoreDirectory in " + path);
+  }
+  if (parsed.downloadBaseUrl !== undefined) {
+    let url: URL;
+    try { url = new URL(parsed.downloadBaseUrl); } catch { throw new Error("Invalid downloadBaseUrl"); }
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+      throw new Error("Invalid downloadBaseUrl");
+    }
+  }
   if (typeof parsed.autoApproveToolCalls !== "boolean") {
     throw new Error(`Invalid autoApproveToolCalls in ${path}`);
   }
@@ -597,7 +613,7 @@ function parseConfig(value: unknown, path: string): AppConfig {
   if (parsed.useSavedChats !== undefined && typeof parsed.useSavedChats !== "boolean") {
     throw new Error(`Invalid useSavedChats in ${path}`);
   }
-  const useSavedChats = parsed.useSavedChats === true;
+  const useSavedChats = parsed.useSavedChats ?? browserInteractionMode !== "manual";
   if (browserInteractionMode === "manual" && experimentalSkillAttachments) {
     throw new Error(`Zero Risk does not support Skills as files in ${path}`);
   }
@@ -666,6 +682,11 @@ export function providerConfig(config: AppConfig): CodexProviderConfig {
     noReasoningModels: [],
     chatgptWeb: {
       accountId: config.accountId ?? "default",
+      conversationStoreDirectory: resolve(getConfigDir(), expandUserPath(
+        config.conversationStoreDirectory ?? join("runtime", "conversations"),
+      )),
+      downloadDirectory: join(getConfigDir(), "downloads"),
+      downloadBaseUrl: config.downloadBaseUrl ?? "http://" + config.host + ":" + config.port,
       appName: manual ? config.manualAppName : config.automaticAppName,
       browserInteractionMode: config.browserInteractionMode,
       browserHost: config.browserHost,
@@ -685,7 +706,7 @@ export function providerConfig(config: AppConfig): CodexProviderConfig {
       experimentalBiggerContext: manual ? false : config.experimentalBiggerContext,
       experimentalSkillAttachments: manual ? false : config.experimentalSkillAttachments,
       experimentalFreshConversationPerTurn: !manual && config.experimentalFreshConversationPerTurn === true,
-      useSavedChats: config.useSavedChats === true,
+      useSavedChats: config.useSavedChats ?? !manual,
       standardConcurrencyLimit: config.standardConcurrencyLimit,
       proConcurrencyLimit: config.proConcurrencyLimit,
       ...(config.stallTimeoutSec !== undefined ? { stallTimeoutSec: config.stallTimeoutSec } : {}),

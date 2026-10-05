@@ -1,3 +1,21 @@
+## Molaison QA and Full tools
+
+Plain QA models use ChatGPT for ordinary questions and answers. Public `-tools` models
+use the separate authenticated Full provider; the QA rules below do not disable it.
+QA omits Codex runtime prompts and local tool execution, keeps isolated account profiles, reuses a
+session's ChatGPT conversation, and preserves downloadable generated files. Default
+per-account limits are 2 Pro turns and 5 standard turns, within 5 total active turns.
+Saved-chat mappings have no idle expiration and restore the original chat after restarts.
+Forks seed their supplied pre-fork Q&A once, then retain independent incremental chats.
+The persistent account pool avoids switching accounts when upstream affinity expires.
+
+See [sessions and restart boundaries](docs/question-answer-sessions.md),
+[prompt filtering](docs/question-answer-prompts.md),
+[concurrency configuration](docs/question-answer-concurrency.md), and
+[generated-file downloads](docs/question-answer-downloads.md), and
+[portable deployment and backups](docs/question-answer-deployment.md). Build this fork's
+runtime and launcher to use these changes; the upstream installers linked below contain upstream behavior.
+
 <p align="center">
   <img src="assets/readme/hero.svg" width="960" alt="Switch to web models. Stay in Codex. Your ChatGPT plan. Your workflow. Maximum capabilities.">
 </p>

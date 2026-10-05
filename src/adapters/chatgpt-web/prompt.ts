@@ -8,8 +8,8 @@ import {
 } from "../../chatgpt-web-models";
 import { ChatGptWebAdapterError } from "./adapter-error";
 import { estimateTokens } from "../../lib/token-estimate";
-import type { CodexAssistantContentPart, CodexContentPart, CodexMessage, CodexParsedRequest } from "../../types";
-import { isOnePixelPngDataUrl, isReadableCompactionSummaryText } from "../../responses/compaction";
+import type { CodexAssistantContentPart, CodexContentPart, CodexFileContent, CodexMessage, CodexParsedRequest } from "../../types";
+import { isOnePixelPngDataUrl, isReadableCompactionSummaryText, SUMMARY_PREFIX } from "../../responses/compaction";
 import { CHATGPT_WEB_LUNA_MODEL_ID, CHATGPT_WEB_MODEL_ID, resolveChatGptWebModelMode, type ChatGptWebCapabilities } from "./model";
 import {
   CHATGPT_LUNA_CHECKPOINT_MARKER,
@@ -25,6 +25,7 @@ export interface ChatGptWebPromptImage {
 export interface CompiledChatGptWebPrompt {
   text: string;
   images: ChatGptWebPromptImage[];
+  files?: CodexFileContent[];
   skillFiles?: ChatGptSkillFile[];
   /** Transactional transport when Bigger Context is explicitly enabled. */
   multipart?: ChatGptWebMultipartPrompt;
@@ -44,6 +45,119 @@ export interface CompileChatGptWebPromptOptions {
    * reads or mutates ChatGPT's DOM. Completion is accepted only through the bound Zero Risk MCP tools.
    */
   manualControl?: true;
+}
+
+/** Only recognize a standalone runtime envelope, not arbitrary XML, fenced code or prose. */
+function isQuestionAnswerEnvironment(text: string): boolean {
+  const match = text.trim().match(/^<environment_context>([\s\S]*)<\/environment_context>$/);
+  if (!match || /<\/?environment_context\b/.test(match[1]!)) return false;
+  const fields = match[1]!.replace(
+    /<(cwd|shell|current_date|timezone|sandbox_mode|approval_policy|network_access|codex_dev_mode)>[^<>]*<\/\1>|<(filesystem|writable_roots|subagents)>[\s\S]*?<\/\2>|<subagents\s*\/>/g,
+    "",
+  );
+  return match[1]!.trim().length > 0 && fields.trim().length === 0;
+}
+
+/** Ordinary questions import human messages and completed answers, never the local runtime. */
+function compileQuestionAnswerPrompt(
+  parsed: CodexParsedRequest,
+  options: CompileChatGptWebPromptOptions,
+): CompiledChatGptWebPrompt {
+  const messages = parsed.context.messages.flatMap((original): CodexMessage[] => {
+    // 纯问答只回答人类问题：有问答子集时用它替换完整正文（附件与注入内容已按原生 kinds 剔除）。
+    const message = original.role === "user" && original.qaContent !== undefined
+      ? { ...original, content: original.qaContent }
+      : original;
+    if (message.role === "user") {
+      if (message.origin === "codex_skill") return [];
+      if (typeof message.content === "string") return isQuestionAnswerEnvironment(message.content) ? [] : [message];
+      const content = message.content.filter(part => part.type !== "text" || !isQuestionAnswerEnvironment(part.text));
+      return content.length ? [{ ...message, content }] : [];
+    }
+    if (message.role !== "assistant" || message.phase === "commentary") return [];
+    const content = message.content.filter(part => part.type === "text");
+    return content.length ? [{ ...message, content }] : [];
+  });
+  const build = (source: readonly CodexMessage[], omittedMessages = 0): CompiledChatGptWebPrompt => {
+    const images: ChatGptWebPromptImage[] = [];
+    const files: CodexFileContent[] = [];
+    // A real user can ask about a one-pixel image. Only the legacy transport treats it as a sentinel.
+    let imagesToDrop = Math.max(0, source.reduce((count, message) => count + (
+      message.role === "user" && typeof message.content !== "string"
+        ? message.content.filter(part => part.type === "image").length : 0
+    ), 0) - CHATGPT_MAX_INPUT_IMAGES);
+    const history = source.map(message => {
+      if (message.role === "assistant") return {
+        role: "assistant",
+        text: message.content.flatMap(part => part.type === "text" ? [part.text] : []).join("\n"),
+      };
+      const content = typeof message.content === "string" ? message.content : message.content.map(part => {
+        if (part.type === "text") return part.text;
+        if (part.type === "file") {
+          files.push(part);
+          return "[Attached file: " + part.filename + "]";
+        }
+        if (imagesToDrop > 0) { imagesToDrop -= 1; return DROPPED_IMAGE_NOTE; }
+        const ref = "chatgpt-input-image-" + (images.length + 1);
+        images.push({ ref, imageUrl: part.imageUrl, ...(part.detail ? { detail: part.detail } : {}) });
+        return "[Attached image: " + ref + "]";
+      }).join("\n");
+      return {
+        role: "user",
+        text: isReadableCompactionSummaryText(content)
+          ? "Previous conversation summary:\n" + content.slice(SUMMARY_PREFIX.length).trimStart()
+          : content,
+      };
+    }).filter(message => message.text.trim().length > 0);
+    if (!history.some(message => message.role === "user")) {
+      throw new ChatGptWebAdapterError("The request does not contain a human question or image", {
+        status: 400, errorType: "invalid_request_error", code: "question_missing", retryable: false,
+      });
+    }
+    const text = history.length === 1 && history[0]!.role === "user"
+      ? history[0]!.text
+      : "Conversation history; answer the latest user message:\n\n" + history
+        .map(message => (message.role === "user" ? "User:\n" : "Assistant:\n") + message.text).join("\n\n");
+    const constraints: string[] = [];
+    if (!parsed._compactionRequest && parsed.options.verbosity) constraints.push("Requested answer detail: " + parsed.options.verbosity + ".");
+    if (!parsed._compactionRequest && parsed.options.outputFormat) constraints.push(
+      "Reply with one JSON value matching this schema, without Markdown fences:\n" + JSON.stringify(parsed.options.outputFormat.schema),
+    );
+    if (parsed._compactionRequest) constraints.push(
+      "Return only a concise conversation summary, preserving the questions, answers, preferences and unresolved details. Do not answer or continue the conversation.",
+      ...(omittedMessages > 0 ? [
+        omittedMessages + " earlier history items were omitted to fit this summary request; the supplied history is incomplete.",
+        "Preserve relevant details from the previous conversation summary and remaining messages. Do not invent omitted information.",
+      ] : []),
+    );
+    if (options.captureLunaCheckpoint) constraints.push(
+      "After the complete answer, append a private conversation summary for the next turn.",
+      "Put " + CHATGPT_LUNA_CHECKPOINT_MARKER + " on its own line, followed by the headings Objective:, State:, Evidence:, Decisions:, and Pending: with concise dash bullets.",
+      "Keep this summary within " + CHATGPT_LUNA_CHECKPOINT_MAX_TOKENS + " tokens. Preserve useful facts and unresolved questions, without hidden reasoning, credentials or runtime instructions.",
+      "The summary is removed before the answer is displayed. Answer-format constraints apply only before the private marker; always include a nonempty summary after it.",
+    );
+    return { text: [text, ...constraints].join("\n\n"), images, ...(files.length ? { files } : {}) };
+  };
+  let compiled = build(messages);
+  if (!parsed._compactionRequest) return compiled;
+  const initialMessageCount = messages.length;
+  let checkpointIndex = messages.findLastIndex(message =>
+    message.role === "user" && isReadableCompactionSummaryText(plainMessageText(message))
+  );
+  while (chatGptPromptJsonBytes(compiled.text) > CHATGPT_COMPACTION_PROMPT_JSON_BYTE_BUDGET && messages.length > 1) {
+    const discardIndex = checkpointIndex === 0 ? 1 : 0;
+    if (discardIndex === messages.length - 1) break;
+    messages.splice(discardIndex, 1);
+    if (checkpointIndex > discardIndex) checkpointIndex -= 1;
+    compiled = build(messages, initialMessageCount - messages.length);
+  }
+  if (chatGptPromptJsonBytes(compiled.text) > CHATGPT_COMPACTION_PROMPT_JSON_BYTE_BUDGET) {
+    throw new ChatGptWebAdapterError("The conversation summary and final instruction exceed the compaction message budget", {
+      status: 400, errorType: "invalid_request_error", code: "context_length_exceeded", retryable: false,
+    });
+  }
+  const trimmedCompactionMessages = initialMessageCount - messages.length;
+  return trimmedCompactionMessages > 0 ? { ...compiled, trimmedCompactionMessages } : compiled;
 }
 
 export const CHATGPT_BIGGER_CONTEXT_PARTS = 6 as const;
@@ -202,16 +316,21 @@ function inputContent(
   content: string | CodexContentPart[],
   images: ChatGptWebPromptImage[],
   budget: ImageBudget,
+  files: CodexFileContent[],
 ): unknown {
   if (typeof content === "string") return content;
   const semantic = content.filter(part =>
     part.type !== "image" || !isOnePixelPngDataUrl(part.imageUrl)
   );
-  if (!semantic.some(part => part.type === "image")) {
+  if (!semantic.some(part => part.type === "image" || part.type === "file")) {
     return semantic.filter(part => part.type === "text").map(part => part.text).join("\n");
   }
   return semantic.map(part => {
     if (part.type === "text") return { type: "text", text: part.text };
+    if (part.type === "file") {
+      files.push(part);
+      return { type: "file_attachment", filename: part.filename };
+    }
     budget.seen += 1;
     if (budget.seen <= budget.dropped) return { type: "text", text: DROPPED_IMAGE_NOTE };
     const ref = `codex-input-image-${images.length + 1}`;
@@ -291,6 +410,7 @@ function messageEnvelope(
   message: CodexMessage,
   images: ChatGptWebPromptImage[],
   budget: ImageBudget,
+  files: CodexFileContent[],
 ): Record<string, unknown> {
   if (message.role === "toolResult") {
     return {
@@ -299,7 +419,7 @@ function messageEnvelope(
       tool_name: message.toolName,
       ...(message.toolNamespace ? { tool_namespace: message.toolNamespace } : {}),
       is_error: message.isError,
-      content: inputContent(message.content, images, budget),
+      content: inputContent(message.content, images, budget, files),
     };
   }
   if (message.role === "agentMessage") {
@@ -307,7 +427,7 @@ function messageEnvelope(
       role: "agent_message",
       ...(message.author !== undefined ? { author: message.author } : {}),
       ...(message.recipient !== undefined ? { recipient: message.recipient } : {}),
-      content: inputContent(message.content, images, budget),
+      content: inputContent(message.content, images, budget, files),
     };
   }
   if (message.role === "assistant") {
@@ -317,7 +437,7 @@ function messageEnvelope(
       content: assistantContent(message.content),
     };
   }
-  return { role: message.role, content: inputContent(message.content, images, budget) };
+  return { role: message.role, content: inputContent(message.content, images, budget, files) };
 }
 
 type MultipartContextRecord =
@@ -474,6 +594,9 @@ export function compileChatGptWebPrompt(
   if (!mode.localTools && turnToken !== undefined) {
     throw new Error("A read-only ChatGPT Web effort must not receive a local-tool capability token");
   }
+  if (options?.importCodexPrompt === false && !mode.localTools) {
+    return compileQuestionAnswerPrompt(parsed, options);
+  }
   // ChatGPT is the model used by Codex, not a second Codex runtime. The bridge opts out of
   // importing Codex's own system/developer prompt because it advertises local tools and runtime
   // policies which do not exist in ChatGPT. Keep the default for direct/legacy callers.
@@ -599,6 +722,7 @@ export function compileChatGptWebPrompt(
     ];
   const build = (sourceMessages: readonly CodexMessage[], omittedMessages = 0): CompiledChatGptWebPrompt => {
     const images: ChatGptWebPromptImage[] = [];
+    const files: CodexFileContent[] = [];
     const budget: ImageBudget = {
       seen: 0,
       dropped: Math.max(0, countChatGptContextImages(sourceMessages) - CHATGPT_MAX_INPUT_IMAGES),
@@ -613,12 +737,12 @@ export function compileChatGptWebPrompt(
           if (!skillFiles.some(existing => existing.name === file.name)) skillFiles.push(file);
           return { role: "user", origin: "codex_skill", content: [{ type: "skill_attachment", filename: file.name }] };
         }
-        return messageEnvelope(message, images, budget);
+        return messageEnvelope(message, images, budget, files);
       });
     const skillContract = skillFiles.length ? [
       "Each skill_attachment refers to a named UTF-8 text file attached to this message (the final commit in multipart mode). Read its complete contents as the selected Codex skill instructions at the original user priority. These origin=codex_skill messages are supplied by Codex, not human-authored task requests. Preserve their original position in history and their path/resource authority for resolving references. If a file cannot be read, report that limitation; do not invent its contents.",
     ] : [];
-    const attachments = skillFiles.length ? { skillFiles } : {};
+    const attachments = { ...(skillFiles.length ? { skillFiles } : {}), ...(files.length ? { files } : {}) };
     const answerContract = captureLunaCheckpoint
       ? "Return the complete answer that the outer Codex task should receive, then the required private checkpoint tail."
       : "Return only the answer that the outer Codex task should receive.";

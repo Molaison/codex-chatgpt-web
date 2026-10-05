@@ -25,7 +25,25 @@ type InputBlock =
   | { type: "input_text"; text: string }
   | { type: "text"; text: string }
   | { type: "input_image"; image_url?: string; file_id?: string; detail?: string }
-  | { type: "input_file"; file_id?: string; filename?: string };
+  | { type: "input_file"; file_id?: string; filename?: string; file_data?: string };
+
+/**
+ * 纯问答历史只保留人类问题：按原生 content_item_kinds 剔除 AGENTS、环境上下文与技能注入。
+ * 只有原始 parts 与 kinds 等长时索引才可信，否则退回完整内容。
+ */
+const QUESTION_ANSWER_EXCLUDED_KINDS = new Set([
+  "agents_md.instructions",
+  "environments.environment_context",
+  "skills.selected_skill_instructions",
+]);
+
+function qaUserContent(item: { content?: unknown }, kinds: string[] | undefined): string | CodexContentPart[] {
+  const parts = typeof item.content === "string" ? [{ type: "input_text", text: item.content }] : item.content;
+  if (!Array.isArray(kinds) || !Array.isArray(parts) || kinds.length !== parts.length) {
+    return inputContentParts(item.content as unknown[] | string | undefined);
+  }
+  return inputContentParts(parts.filter((_part, index) => !QUESTION_ANSWER_EXCLUDED_KINDS.has(kinds[index]!)));
+}
 
 function inputContentParts(blocks: unknown[] | string | undefined): string | CodexContentPart[] {
   if (typeof blocks === "string") return blocks;
@@ -45,8 +63,10 @@ function inputContentParts(blocks: unknown[] | string | undefined): string | Cod
         parts.push({ type: "text", text: `[image: ${b.file_id ?? "?"}]` }); // file_id ref → no inline data
       }
     } else if (block.type === "input_file") {
-      const ref = (block as { file_id?: string; filename?: string }).file_id ?? (block as { filename?: string }).filename ?? "?";
-      parts.push({ type: "text", text: `[file: ${ref}]` });
+      if (!block.file_data || !block.filename) {
+        throw new Error("input_file requires filename and inline file_data; file_id references are not supported by ChatGPT Web");
+      }
+      parts.push({ type: "file", filename: block.filename, fileData: block.file_data });
     }
   }
   // Collapse to a plain string only for a single TEXT part; images must stay structured.
@@ -402,7 +422,13 @@ export function parseRequest(body: unknown): CodexParsedRequest {
             const kinds = msg.internal_chat_message_metadata_passthrough?.content_item_kinds;
             const selectedSkill = msg.role === "user" && kinds?.length === 1
               && kinds[0] === "skills.selected_skill_instructions";
-            messages.push({ role: msg.role, content, timestamp: now, ...(selectedSkill ? { origin: "codex_skill" as const } : {}) });
+            messages.push({
+              role: msg.role,
+              content,
+              timestamp: now,
+              ...(selectedSkill ? { origin: "codex_skill" as const } : {}),
+              ...(msg.role === "user" ? { qaContent: qaUserContent(msg, kinds) } : {}),
+            });
             break;
           }
           case "assistant": {

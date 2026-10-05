@@ -1,3 +1,11 @@
+## Molaison QA と Full ツール
+
+通常の QA モデルは会話のみを扱います。公開 `-tools` モデルは独立した認証付き Full provider を使います。
+
+[Sessions](docs/question-answer-sessions.md) · [Prompts](docs/question-answer-prompts.md) ·
+[Concurrency](docs/question-answer-concurrency.md) · [Downloads](docs/question-answer-downloads.md) ·
+[Deployment and backups](docs/question-answer-deployment.md)
+
 <p align="center">
   <img src="assets/readme/hero.svg" width="960" alt="Web モデルに切り替えても、Codex はそのまま。ChatGPT のプラン。いつものワークフロー。モデルの力を最大限に。">
 </p>

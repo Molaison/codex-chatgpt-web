@@ -15,6 +15,11 @@ interface RunMessage {
   type: "run";
   id: string;
   config: {
+    accountId?: string;
+    conversationStoreDirectory?: string;
+    imageOutputDirectory?: string;
+    downloadDirectory?: string;
+    downloadBaseUrl?: string;
     appName: string;
     browserHostDescriptorPath: string;
     browserDiagnosticsPath?: string;
@@ -27,6 +32,8 @@ interface RunMessage {
   turn: {
     traceId: string;
     modelId: string;
+    project?: BrowserTurn["project"];
+    sessionMode?: BrowserTurn["sessionMode"];
     reasoning?: string;
     modelFamily?: "5.6" | "6";
     capabilities: ChatGptWebCapabilities;
@@ -194,6 +201,11 @@ async function run(message: RunMessage): Promise<void> {
     chatgptWeb: {
       appName: message.config.appName,
       browserHost: "launcher",
+      accountId: message.config.accountId,
+      conversationStoreDirectory: message.config.conversationStoreDirectory,
+      imageOutputDirectory: message.config.imageOutputDirectory,
+      downloadDirectory: message.config.downloadDirectory,
+      downloadBaseUrl: message.config.downloadBaseUrl,
       browserHostDescriptorPath: message.config.browserHostDescriptorPath,
       browserDiagnosticsPath: message.config.browserDiagnosticsPath,
       turnTimeoutMs: message.config.turnTimeoutMs,
@@ -223,6 +235,8 @@ async function run(message: RunMessage): Promise<void> {
   const turn: BrowserTurn = {
     traceId: message.turn.traceId,
     modelId: message.turn.modelId,
+    ...(message.turn.project ? { project: message.turn.project } : {}),
+    ...(message.turn.sessionMode ? { sessionMode: message.turn.sessionMode } : {}),
     reasoning: message.turn.reasoning,
     ...(message.turn.modelFamily ? { modelFamily: message.turn.modelFamily } : {}),
     capabilities: message.turn.capabilities,

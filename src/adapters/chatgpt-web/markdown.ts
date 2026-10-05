@@ -13,6 +13,8 @@ const turndown = new TurndownService({
 
 turndown.use(gfm);
 turndown.remove(["button", "script", "style"]);
+// Images are archived separately and appended once as stable, saved-asset links.
+// Transient blob/signed URLs must not rewrite the append-only text stream.
 turndown.addRule("removeImages", {
   filter: node => ["IMG", "PICTURE", "SOURCE"].includes(node.nodeName),
   replacement: () => "",

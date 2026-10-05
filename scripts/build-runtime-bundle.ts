@@ -81,19 +81,21 @@ if (!browserHelperBuild.success) {
 }
 
 copyFileSync(join(root, "package.json"), join(appDir, "package.json"));
-
-const downloadGatewayBuild = await Bun.build({
-  entrypoints: [join(root, "src", "download-gateway.ts")],
-  target: "bun",
-  minify: true,
-  packages: "external",
-  outdir: appDir,
-  naming: "download-gateway.js",
-});
-if (!downloadGatewayBuild.success) {
-  throw new Error(`Download gateway bundle failed: ${downloadGatewayBuild.logs.map(log => log.message).join("; ")}`);
+for (const name of ["qa-pool", "download-gateway"]) {
+  const result = await Bun.build({
+    entrypoints: [join(root, "src", name + ".ts")], target: "bun", minify: true,
+    packages: "external", outdir: appDir, naming: name + ".js",
+  });
+  if (!result.success) throw new Error(`${name} bundle failed: ${result.logs.map(log => log.message).join("; ")}`);
 }
-
+mkdirSync(join(output, "deploy"), { recursive: true });
+for (const name of ["qa-pool.example.json", "download-gateway.example.json", "public-ingress.example.json", "Caddyfile.example"]) {
+  copyFileSync(join(root, "deploy", name), join(output, "deploy", name));
+}
+mkdirSync(join(output, "docs"), { recursive: true });
+for (const name of ["question-answer-deployment.md", "question-answer-sessions.md", "question-answer-downloads.md"]) {
+  copyFileSync(join(root, "docs", name), join(output, "docs", name));
+}
 copyFileSync(join(root, "bun.lock"), join(appDir, "bun.lock"));
 const install = Bun.spawnSync([process.execPath, "install", "--production", "--frozen-lockfile", "--ignore-scripts"], {
   cwd: appDir,

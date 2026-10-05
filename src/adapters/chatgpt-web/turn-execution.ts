@@ -532,8 +532,9 @@ export class ChatGptTurnSessions {
     }
     const active = [...this.entries.values()].filter(session => session.isActive()).length;
     if (active >= MAX_CHATGPT_BROWSER_TABS) {
-      throw new Error(
+      throw new ChatGptWebAdapterError(
         `ChatGPT Web supports at most ${MAX_CHATGPT_BROWSER_TABS} simultaneous browser turns; close or finish a browser tab before starting another`,
+        { status: 429, errorType: "rate_limit_error", code: "concurrency_limit_exceeded", retryable: true },
       );
     }
     if (this.entries.size >= this.maxEntries) throw new Error(`ChatGPT web session registry is full (${this.maxEntries} entries)`);

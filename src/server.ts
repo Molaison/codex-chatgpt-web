@@ -1,3 +1,11 @@
+import {
+  GENERATED_FILE_MAX_BYTES,
+  refreshStoredGeneratedFile,
+  resolveEstuaryGeneratedFile,
+  serveGeneratedFile,
+  type GeneratedFileReplay,
+} from "./generated-files";
+import { fetchLauncherAuthenticatedBytes } from "./launcher-browser-host";
 import { chatGptWebTraceId, createChatGptWebAdapter } from "./adapters/chatgpt-web";
 import { closeChatGptBrowserWorkers } from "./adapters/chatgpt-web/browser-worker";
 import { closeTurnBrokers, TurnBroker } from "./adapters/chatgpt-web/turn-broker";
@@ -45,6 +53,7 @@ import {
 } from "./responses/compaction";
 import { parseRequest } from "./responses/parser";
 import { expandPreviousResponseInput, flushResponseState, rememberResponseState } from "./responses/state";
+import { rememberSavedChatResponseAlias, supportsSavedChatAliases, verifySavedChatResponseAlias } from "./responses/saved-chat-aliases";
 import { namespacedToolName, type AdapterEvent, type CodexParsedRequest } from "./types";
 import type { CodexProviderConfig } from "./types";
 import type { ProviderAdapter } from "./adapters/base";
@@ -536,19 +545,38 @@ export async function responseRequest(
         + "Start a new Compatibility V1 task, or delegate from a Web model whose collaboration call uses the plaintext-delivery marker.",
     );
   }
-  if (typeof requestedPreviousResponseId === "string" && expanded === raw) {
-    return formatErrorResponse(
-      409,
-      "invalid_request_error",
-      "Local continuation state for previous_response_id is unavailable; refusing to run ChatGPT Web with partial Codex context. Compact the Codex task or start a new task before retrying.",
-    );
+  const provider = providerConfig(config);
+  if (typeof requestedPreviousResponseId === "string") {
+    if (options.rememberState !== false && supportsSavedChatAliases(provider, parsed)) {
+      try {
+        // Aliases prove ownership, including on a cache hit; cached text alone cannot
+        // authorize another account/thread. The saved browser owns the history now.
+        verifySavedChatResponseAlias(provider, parsed, requestedPreviousResponseId);
+        parsed = parseRequest(raw);
+        route = routeChatGptWebRequest(parsed, config);
+        parsed._chatgptSavedConversationContinuation = true;
+      } catch (error) {
+        if (!(error instanceof ChatGptWebAdapterError)) throw error;
+        return Response.json({ error: { message: error.message, type: error.errorType,
+          code: error.code, retryable: error.retryable } }, { status: error.status });
+      }
+    } else if (expanded === raw) {
+      return formatErrorResponse(
+        409,
+        "invalid_request_error",
+        "Local continuation state for previous_response_id is unavailable; refusing to run ChatGPT Web with partial Codex context. Compact the Codex task or start a new task before retrying.",
+      );
+    }
   }
 
   const compaction = parsed._compactionRequest === true;
   const compactionItem = compaction && parsed._compactionResponseFormat !== "message";
   const rememberCompletedResponse = (response: Record<string, unknown>): void => {
     if (!compaction) {
-      if (options.rememberState !== false) rememberResponseState(parsed._rawBody, response, { force: true });
+      if (options.rememberState !== false) {
+        rememberSavedChatResponseAlias(provider, parsed, response);
+        rememberResponseState(parsed._rawBody, response, { force: true });
+      }
       return;
     }
     if (response.status !== "completed") return;
@@ -591,7 +619,6 @@ export async function responseRequest(
     parsed.context.messages.push({ role: "user", content: COMPACT_PROMPT, timestamp: Date.now() });
   }
 
-  const provider = providerConfig(config);
   let traceId: string | undefined;
   try {
     traceId = chatGptWebTraceId(provider, parsed);
@@ -639,7 +666,12 @@ export async function responseRequest(
         queue.push(event);
       });
     } catch (error) {
-      const event: AdapterEvent = { type: "error", message: error instanceof Error ? error.message : String(error) };
+      const event: AdapterEvent = {
+        type: "error", message: error instanceof Error ? error.message : String(error),
+        ...(error instanceof ChatGptWebAdapterError ? {
+          status: error.status, errorType: error.errorType, code: error.code, retryable: error.retryable,
+        } : {}),
+      };
       options.onAdapterEvent?.(event);
       queue.push(event);
     } finally {
@@ -687,8 +719,14 @@ export async function responseRequest(
     toolSearchToolNames: maps.toolSearchToolNames,
     ...(compactionItem ? { compaction: true } : {}),
   });
-  rememberCompletedResponse(json);
-  return Response.json(json);
+  try { rememberCompletedResponse(json); }
+  catch (error) {
+    if (!(error instanceof ChatGptWebAdapterError)) throw error;
+    return Response.json({ error: { message: error.message, type: error.errorType,
+      code: error.code, retryable: error.retryable } }, { status: error.status });
+  }
+  const capacityRejected = events.some(event => event.type === "error" && event.code === "concurrency_limit_exceeded");
+  return Response.json(json, { status: capacityRejected ? 429 : 200 });
 }
 
 export async function compactRequest(
@@ -808,6 +846,36 @@ export async function compactRequest(
   return Response.json({ output: buildCompactV1Output(extractCompactUserMessages(input), summary) });
 }
 
+/**
+ * 原生形状链接的缓存已经过期：在已登录的 launcher 浏览器里重放一次原始下载，
+ * 成功后刷新本地缓存并回本地字节；失败时明确返回 410 而不是伪造成功。
+ */
+async function redownloadGeneratedFile(
+  request: Request, replay: GeneratedFileReplay, config: AppConfig, directory: string,
+): Promise<Response> {
+  const expired = () => new Response("File expired and could not be re-downloaded from ChatGPT", {
+    status: 410, headers: { "cache-control": "no-store" },
+  });
+  const chatgptWeb = providerConfig(config).chatgptWeb;
+  if (chatgptWeb?.browserHost !== "launcher" || !chatgptWeb.browserHostDescriptorPath) return expired();
+  for (const source of replay.sources) {
+    try {
+      const downloaded = await fetchLauncherAuthenticatedBytes(chatgptWeb.browserHostDescriptorPath, source, {
+        maxBytes: GENERATED_FILE_MAX_BYTES,
+      });
+      if (refreshStoredGeneratedFile(directory, replay.fileId, downloaded.mime, downloaded.bytes)) {
+        const refreshed = resolveEstuaryGeneratedFile(request, directory);
+        if (refreshed instanceof Response) return refreshed;
+      }
+    } catch (error) {
+      console.warn(
+        `[chatgpt-web] generated file ${replay.fileId} could not be re-downloaded: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  return expired();
+}
+
 export function startServer(
   config: AppConfig,
   dependencies: { fetchUpstream?: NativeFetch; adapterFactory?: ChatGptWebAdapterFactory } = {},
@@ -849,6 +917,15 @@ export function startServer(
     idleTimeout: 0,
     async fetch(req) {
       const url = new URL(req.url);
+      const downloadDirectory = providerConfig(config).chatgptWeb!.downloadDirectory!;
+      const generatedFile = serveGeneratedFile(req, downloadDirectory);
+      if (generatedFile) return generatedFile;
+      const estuaryFile = resolveEstuaryGeneratedFile(req, downloadDirectory);
+      if (estuaryFile) {
+        return estuaryFile instanceof Response
+          ? estuaryFile
+          : await redownloadGeneratedFile(req, estuaryFile, config, downloadDirectory);
+      }
       if (req.method === "GET" && url.pathname === "/healthz") {
         return Response.json({
           status: "ok",

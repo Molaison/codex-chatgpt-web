@@ -47,6 +47,8 @@ import {
 } from "./compaction-handoff";
 import {
   chatGptConversationKey,
+  chatGptQuestionAnswerNamespace,
+  forkedFromThreadId,
   retainedConversationResumeRequest,
 } from "./conversation-key";
 
@@ -204,7 +206,10 @@ export function chatGptWebTraceId(provider: CodexProviderConfig, parsed: CodexPa
   // The logical response key survives compaction so a final answer that won the handoff race
   // can still be replayed. A new physical browser owner must instead belong to the new context
   // epoch; otherwise Zero Risk correctly rejects it against the previous owner's completion.
-  const conversation = parsed._compactionRequest ? undefined : chatGptConversationKey(parsed, namespace);
+  const questionAnswer = provider.chatgptWeb?.localToolsEnabled !== true;
+  const conversation = parsed._compactionRequest ? undefined : chatGptConversationKey(parsed,
+    questionAnswer ? chatGptQuestionAnswerNamespace(provider.chatgptWeb?.accountId) : namespace,
+    { questionAnswer });
   return createHash("sha256")
     .update(`${namespace}:${chatGptTurnExecutionKey(parsed)}`)
     .update(conversation ? `:${conversation}` : "")
@@ -225,6 +230,13 @@ function brokerContent(content: string | CodexContentPart[]): unknown[] {
   if (typeof content === "string") return [{ type: "text", text: content }];
   return content.map(part => {
     if (part.type === "text") return { type: "text", text: part.text };
+    if (part.type === "file") {
+      const file = parseDataUrl(part.fileData);
+      return { type: "resource", resource: {
+        uri: "attachment:///" + encodeURIComponent(part.filename),
+        mimeType: file?.mediaType ?? "application/octet-stream", blob: file?.base64 ?? part.fileData,
+      } };
+    }
     const parsed = parseDataUrl(part.imageUrl);
     if (parsed) return { type: "image", data: parsed.base64, mimeType: parsed.mediaType };
     return { type: "resource_link", uri: part.imageUrl, name: "Codex tool image", mimeType: "image/*" };
@@ -283,6 +295,7 @@ function emitReadOnlyContextWarning(
   capabilities: ChatGptWebCapabilities,
   emit: (event: AdapterEvent) => void,
 ): void {
+  if (!capabilities.localToolsEnabled) return;
   const warning = chatGptReadOnlyContextWarning(parsed, capabilities);
   if (!warning) return;
   emit({ type: "assistant_boundary" });
@@ -375,6 +388,7 @@ export function createChatGptWebAdapter(
     throw new Error("Fresh browser conversations per turn is available only in automatic mode");
   }
   const executionNamespace = chatGptWebExecutionNamespace(provider);
+  const questionAnswerNamespace = chatGptQuestionAnswerNamespace(provider.chatgptWeb?.accountId);
   const retainedLauncherDescriptor = provider.chatgptWeb?.browserHost === "launcher"
     && provider.chatgptWeb.browserHostDescriptorPath
       ? resolve(expandUserPath(provider.chatgptWeb.browserHostDescriptorPath))
@@ -432,10 +446,17 @@ export function createChatGptWebAdapter(
       && !freshConversationPerTurn
       && parsed.modelId !== CHATGPT_WEB_LUNA_MODEL_ID
       && retainedLauncherDescriptor
-      ? chatGptConversationKey(checkpointInput.parsed, executionNamespace)
+      ? chatGptConversationKey(checkpointInput.parsed,
+        mode.localTools ? executionNamespace : questionAnswerNamespace,
+        { questionAnswer: !mode.localTools })
       : undefined;
     const resumeInput = conversationKey
-      ? retainedConversationResumeRequest(checkpointInput.parsed)
+      ? retainedConversationResumeRequest(checkpointInput.parsed, {
+        questionAnswer: !mode.localTools,
+        ...(!mode.localTools ? {
+          previousRequest: chatGptTurnSessions.findConversationHead(conversationKey)?.runtime.usageInput,
+        } : {}),
+      })
       : undefined;
     const retainConversation = conversationKey !== undefined;
     const releaseRetainedConversation = conversationKey && retainedLauncherDescriptor
@@ -449,7 +470,7 @@ export function createChatGptWebAdapter(
         ? resolveBiggerContextMultipartParts(input, turnCapabilities, experimentalSkillAttachments)
         : undefined;
       return {
-        importCodexPrompt: false,
+        importCodexPrompt: mode.localTools,
         captureLunaCheckpoint,
         experimentalSkillAttachments,
         ...(experimentalMultipartParts !== undefined
@@ -687,21 +708,53 @@ export function createChatGptWebAdapter(
       };
     }
     if (!mode.localTools) {
+      const prepareQuestion = async (input: CodexParsedRequest, fresh = false) => {
+        if (fresh && input._chatgptSavedConversationContinuation) {
+          throw new ChatGptWebAdapterError("The verified previous response requires its saved ChatGPT conversation; a fresh chat was not created", {
+            status: 409, errorType: "invalid_request_error", code: "saved_conversation_not_restored", retryable: false,
+          });
+        }
+        const options = compileOptionsFor(input);
+        const compiled = compileChatGptWebPrompt(input, turnCapabilities, undefined, options);
+        if (fresh && !input._compactionRequest && forkedFromThreadId(input)) {
+          // Use the actual QA compiler so runtime envelopes, skills and tool traffic
+          // cannot masquerade as inherited history. A restored child uses prepareResume
+          // and already has its baseline in the saved chat, so it skips this cold-start check.
+          for (let index = input.context.messages.length - 1; index >= 0; index--) {
+            const message = input.context.messages[index]!;
+            if (message.role !== "user") continue;
+            let question: ReturnType<typeof compileChatGptWebPrompt>;
+            try {
+              question = compileChatGptWebPrompt({ ...input,
+                context: { ...input.context, messages: [message] },
+              }, turnCapabilities, undefined, options);
+            } catch (error) {
+              if (error instanceof ChatGptWebAdapterError && error.code === "question_missing") continue;
+              throw error;
+            }
+            if (compiled.text === question.text && JSON.stringify(compiled.images) === JSON.stringify(question.images)) {
+              throw new ChatGptWebAdapterError("A new fork requires its pre-fork conversation history; no question was submitted", {
+                status: 400, errorType: "invalid_request_error", code: "fork_history_missing", retryable: false,
+              });
+            }
+            break;
+          }
+        }
+        return { ...compiled, release: () => {} };
+      };
+      const project = (parsed._rawBody as { client_metadata?: { _chatgpt_project?: { id: string; name: string } } } | undefined)?.client_metadata?._chatgpt_project;
+      const sessionMode = (parsed._rawBody as { client_metadata?: { _chatgpt_session_mode?: "temporary" | "persistent" } } | undefined)?.client_metadata?._chatgpt_session_mode;
       const browserTurn = cancellableBrowserTurn(finalizeCheckpoint(worker.run({
         traceId,
         modelId: parsed.modelId,
+        ...(project && !parsed._compactionRequest ? { project } : {}),
+        ...(sessionMode && !parsed._compactionRequest ? { sessionMode } : {}),
         reasoning: parsed.options.reasoning,
         ...(parsed._chatgptModelFamily ? { modelFamily: parsed._chatgptModelFamily } : {}),
         capabilities: turnCapabilities,
-        prepare: async () => ({
-          ...compileChatGptWebPrompt(
-            checkpointInput.parsed,
-            turnCapabilities,
-            undefined,
-            compileOptionsFor(checkpointInput.parsed),
-          ),
-          release: () => {},
-        }),
+        prepare: () => prepareQuestion(checkpointInput.parsed, true),
+        ...(resumeInput ? { prepareResume: () => prepareQuestion(resumeInput) } : {}),
+        ...(retainConversation ? { retainConversation: true, conversationKey } : {}),
         abortSignal: browserAbort.signal,
         ...(parsed._compactionRequest ? { compaction: true } : {}),
         ...submissionLifecycle,
@@ -721,6 +774,8 @@ export function createChatGptWebAdapter(
         trace,
         text,
         usageInput: checkpointInput.parsed,
+        ...(conversationKey ? { conversationKey } : {}),
+        ...(releaseRetainedConversation ? { releaseRetainedConversation } : {}),
         submission,
         cancel: browserTurn.cancel,
       };
@@ -1145,7 +1200,8 @@ export function createChatGptWebAdapter(
           await chatGptTurnSessions.retireAndWait(responseExecutionKey, incoming.abortSignal);
         }
         const executionKey = `${executionNamespace}:${chatGptTurnExecutionKey(parsed)}`;
-        const ownerKey = `${executionNamespace}:${chatGptThreadOwnershipKey(parsed)}`;
+        const ownerNamespace = mode.localTools ? executionNamespace : questionAnswerNamespace;
+        const ownerKey = `${ownerNamespace}:${chatGptThreadOwnershipKey(parsed)}`;
         const nativeIdentity = extractChatGptTurnIdentity(parsed);
         const nativeTurnId = nativeIdentity.turnId;
         if (!nativeTurnId) throw new Error("ChatGPT web requires native Codex turn_id metadata for browser ownership");
@@ -1162,7 +1218,9 @@ export function createChatGptWebAdapter(
           incoming.abortSignal,
           nativeTurnId,
           nativeIdentity.threadId,
-          chatGptInstructionLineage(parsed),
+          // Ordinary questions queue on their shared chat. Native tool steering
+          // alone may supersede an unfinished instruction and retire its surface.
+          mode.localTools ? chatGptInstructionLineage(parsed) : undefined,
         );
         const roundKey = chatGptTurnRoundKey(parsed);
         const emitRoundEvents = (events: readonly AdapterEvent[]): void => {

@@ -742,3 +742,65 @@ export async function releaseLauncherRetainedConversation(
     clearTimeout(timer);
   }
 }
+
+/**
+ * 在已登录的 launcher 浏览器里重新读取一个会话内下载 URL。生成文件的本地缓存过期后
+ * 用它取回字节；只在已打开本站页面时复用该页，否则临时开一个页面并在结束后关闭。
+ */
+export async function fetchLauncherAuthenticatedBytes(
+  descriptorPath: string,
+  url: string,
+  options: { maxBytes: number; timeoutMs?: number },
+): Promise<{ bytes: Uint8Array; mime: string }> {
+  const endpoint = new URL(url);
+  if (endpoint.protocol !== "https:" || endpoint.hostname !== "chatgpt.com" || endpoint.username || endpoint.password) {
+    throw new Error("Only observed ChatGPT download endpoints can be re-read in the launcher browser");
+  }
+  const timeoutMs = options.timeoutMs ?? 60_000;
+  const connection = await connectLauncherBrowserHost(descriptorPath, Math.min(timeoutMs, 30_000));
+  let temporary: Page | undefined;
+  try {
+    let page = connection.context.pages().find(candidate => candidate.url().startsWith("https://chatgpt.com/"));
+    if (!page) {
+      temporary = await connection.context.newPage();
+      await temporary.goto("https://chatgpt.com/", { waitUntil: "domcontentloaded", timeout: timeoutMs });
+      page = temporary;
+    }
+    const captured = await page.evaluate(async ({ href, limit, budget }) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), budget);
+      try {
+        const response = await fetch(href, { credentials: "include", signal: controller.signal });
+        if (!response.ok) throw new Error("Download HTTP " + response.status);
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("Download was empty");
+        const chunks: Uint8Array[] = [];
+        let size = 0;
+        for (;;) {
+          const part = await reader.read();
+          if (part.done) break;
+          size += part.value.byteLength;
+          if (size > limit) { await reader.cancel(); throw new Error("Download exceeds the size limit"); }
+          chunks.push(part.value);
+        }
+        const bytes = new Uint8Array(size);
+        let offset = 0;
+        for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+        let binary = "";
+        for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+        return { base64: btoa(binary), mime: (response.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase() };
+      } finally { clearTimeout(timer); }
+    }, { href: url, limit: options.maxBytes, budget: timeoutMs });
+    const bytes = Buffer.from(captured.base64, "base64");
+    if (bytes.length === 0 || bytes.length > options.maxBytes) throw new Error("Invalid download size");
+    return { bytes, mime: captured.mime };
+  } finally {
+    await temporary?.close().catch(() => {});
+    await browserDisconnect(connection.browser);
+  }
+}
+
+async function browserDisconnect(browser: Browser): Promise<void> {
+  // CDP 连接关闭只断开 Playwright 的传输，不关闭用户正在使用的浏览器。
+  await browser.close().catch(() => {});
+}

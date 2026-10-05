@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
 import type { Locator } from "playwright-core";
-import { ChatGptBrowserWorker, ChatGptCompletionTracker, ChatGptVisibleTraceTracker, CHATGPT_COMPLETION_SETTLE_MS } from "../src/adapters/chatgpt-web/browser-worker";
+import { ChatGptBrowserWorker, ChatGptCompletionTracker, ChatGptTurnDomHealthTracker, ChatGptVisibleTraceTracker, chatGptTurnIsComplete, CHATGPT_COMPLETION_SETTLE_MS } from "../src/adapters/chatgpt-web/browser-worker";
 import { ChatGptMarkdownBuffer, type ChatGptMarkdownSegment } from "../src/adapters/chatgpt-web/markdown";
 
 const smokeHtml = readFileSync(new URL("./fixtures/chatgpt-dil-smoke.html", import.meta.url), "utf8");
@@ -14,12 +14,14 @@ const powerActivityHtml = readFileSync(new URL("./fixtures/chatgpt-power-activit
 const activitySummariesHtml = readFileSync(new URL("./fixtures/chatgpt-activity-summaries.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 type Snapshot = {
   responsePresent: boolean;
+  downloadableFiles: string[];
   visibleText: string;
   fullHtml: string;
   markdownSegments: ChatGptMarkdownSegment[];
   completionActionVisible: boolean;
   traceBlocks: { kind: "answer" | "commentary" | "status"; text: string }[];
 };
+const fileOnlyHtml = readFileSync(new URL("./fixtures/chatgpt-file-only-complete.html", import.meta.url), "utf8");
 
 // Execute the production page callback, with only missing Domino browser APIs supplied.
 async function snapshot(html: string): Promise<Snapshot> {
@@ -297,4 +299,110 @@ test("DIL response extraction preserves ownership, commentary and completion bou
   const noCopy = await snapshot(smokeHtml.replace('data-testid="copy-turn-action-button"', 'data-testid="other-action"'));
   expect(noCopy.visibleText).toBe("CODEX WEB GPT READY");
   expect(noCopy.completionActionVisible).toBeFalse();
+});
+
+const fileCompletionState = (value: Snapshot) => ({
+  responsePresent: value.responsePresent,
+  running: false,
+  currentText: value.visibleText,
+  currentHtml: value.fullHtml,
+  completionActionVisible: value.completionActionVisible,
+  downloadableFiles: value.downloadableFiles,
+  allowFileOnlyCompletion: true,
+});
+
+test("native file-only answer completes using card evidence without fabricating answer text", async () => {
+  const value = await snapshot(fileOnlyHtml);
+  expect(value.downloadableFiles).toEqual(["report.csv"]);
+  expect(value.visibleText).toBe("");
+  expect(value.completionActionVisible).toBeTrue();
+  const buffer = new ChatGptMarkdownBuffer();
+  expect(buffer.observe(value.markdownSegments)).toBe("");
+  expect(buffer.finish().markdown).toBe("");
+  const state = fileCompletionState(value);
+  expect(chatGptTurnIsComplete(state)).toBeTrue();
+  const completion = new ChatGptCompletionTracker(500);
+  expect(completion.update(state, 0)).toBeFalse();
+  expect(completion.update(state, 499)).toBeFalse();
+  expect(completion.update(state, 500)).toBeTrue();
+  const health = new ChatGptTurnDomHealthTracker(1000, 500);
+  expect(health.update(state, 0)).toBeUndefined();
+  expect(health.update(state, 1500)).toBeUndefined();
+});
+
+test("file-only answers still require enabled QA downloads and real completed-turn evidence", async () => {
+  const state = fileCompletionState(await snapshot(fileOnlyHtml));
+  for (const variant of [
+    { ...state, allowFileOnlyCompletion: false },
+    { ...state, allowFileOnlyCompletion: undefined },
+    { ...state, downloadableFiles: [] },
+    { ...state, responsePresent: false },
+    { ...state, running: true },
+    { ...state, completionActionVisible: false },
+  ]) expect(chatGptTurnIsComplete(variant)).toBeFalse();
+  const health = new ChatGptTurnDomHealthTracker(1000, 500);
+  const disabled = { ...state, allowFileOnlyCompletion: false };
+  expect(health.update(disabled, 0)).toBeUndefined();
+  expect(health.update(disabled, 501)).toContain("completed without a final answer");
+  const empty = { ...state, downloadableFiles: [] };
+  const emptyHealth = new ChatGptTurnDomHealthTracker(1000, 500);
+  expect(emptyHealth.update(empty, 0)).toBeUndefined();
+  expect(emptyHealth.update(empty, 501)).toContain("completed without a final answer");
+});
+
+test("active file generation and external work reset the completion stability window", async () => {
+  const state = fileCompletionState(await snapshot(fileOnlyHtml));
+  for (const active of [{ ...state, running: true }, { ...state, externalToolCallsInFlight: true }]) {
+    const completion = new ChatGptCompletionTracker(500);
+    expect(completion.update(state, 0)).toBeFalse();
+    expect(completion.update(active, 501)).toBeFalse();
+    expect(completion.update(state, 1000)).toBeFalse();
+    expect(completion.update(state, 1499)).toBeFalse();
+    expect(completion.update(state, 1500)).toBeTrue();
+  }
+  const tracker = new ChatGptCompletionTracker(500);
+  expect(tracker.update(state, 0)).toBeFalse();
+  const changed = { ...state, downloadableFiles: ["finished.csv"] };
+  expect(tracker.update(changed, 500)).toBeFalse();
+  expect(tracker.update(changed, 1000)).toBeTrue();
+});
+
+test("file-only completion requires a following action inside the bound response", async () => {
+  const action = '<button type="button" data-testid="copy-turn-action-button"></button>';
+  for (const html of [
+    fileOnlyHtml.replace(action, ""),
+    fileOnlyHtml.replace(action, "").replace('<section id="turn"', action + '<section id="turn"'),
+    fileOnlyHtml.replace(action, "").replace('  <div data-content-search-unit-key=', action + '<div data-content-search-unit-key='),
+  ]) {
+    const value = await snapshot(html);
+    expect(value.downloadableFiles).toEqual(["report.csv"]);
+    expect(value.completionActionVisible).toBeFalse();
+    expect(chatGptTurnIsComplete(fileCompletionState(value))).toBeFalse();
+  }
+  const withoutMarkdown = fileOnlyHtml.replace('<div data-markdown-text-style="assistant-message"><div><button aria-label="查看分析"></button></div></div>', "");
+  const value = await snapshot(withoutMarkdown);
+  expect(value.visibleText).toBe("");
+  expect(value.downloadableFiles).toEqual(["report.csv"]);
+  expect(value.completionActionVisible).toBeTrue();
+});
+
+test("user uploads prior turns and unavailable controls cannot qualify as a file answer", async () => {
+  const outside = fileOnlyHtml.replace('id="turn"', 'id="previous"');
+  const current = '<section id="turn"><div data-message-author-role="assistant"><div class="markdown"></div></div><button data-testid="copy-turn-action-button"></button></section>';
+  expect((await snapshot(outside + current)).downloadableFiles).toEqual([]);
+  for (const html of [
+    fileOnlyHtml.replace('fixture:1:assistant', 'fixture:1:user').replace('data-conversation-role="assistant"', 'data-conversation-role="user"'),
+    fileOnlyHtml.replace('class="resource-card"', 'class="resource-card" data-user-message-bubble'),
+    fileOnlyHtml.replace('class="resource-card"', 'class="resource-card" data-streaming-response-status'),
+    fileOnlyHtml.replace('class="resource-card"', 'class="resource-card" hidden'),
+    fileOnlyHtml.replace('class="resource-card"', 'class="resource-card" style="display:none"'),
+    fileOnlyHtml.replace('title="report.csv"', ''),
+    fileOnlyHtml.replace('aria-label="下载文件"', 'aria-label="Open preview"'),
+    ...['disabled', 'aria-disabled="true"', 'aria-busy="true"', 'hidden', 'aria-hidden="true"'].map(attribute => fileOnlyHtml.replace('aria-label="下载文件"', 'aria-label="下载文件" ' + attribute)),
+    fileOnlyHtml.replace('aria-label="下载文件"></button>', 'aria-label="下载文件"></button><button aria-label="Download file"></button>'),
+  ]) {
+    const value = await snapshot(html);
+    expect(value.downloadableFiles).toEqual([]);
+    expect(chatGptTurnIsComplete(fileCompletionState(value))).toBeFalse();
+  }
 });

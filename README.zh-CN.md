@@ -1,3 +1,17 @@
+## Molaison 纯问答与 Full 工具
+
+普通 QA 模型仅向 ChatGPT 提交问答，不导入 Codex 运行时提示词，也不调用本地工具。
+公网 `-tools` 模型仍走独立鉴权的 Full provider；下列 QA 规则不关闭 Full 工具。
+每个账号使用独立浏览器资料；同一账号和 session 复用 ChatGPT 会话，后续只提交新问题。
+保存的会话映射不设空闲过期时间；重启后重新打开原会话。fork 分支首次带入分叉前的
+问答，此后分别持久化、增量续聊。多账号部署使用持久化账号池，避免上游短期亲和记录过期后换号。
+默认每账号 Pro 并发 2、普通模型并发 5，同时受总并发 5 限制。生成文件返回可下载链接。
+
+详情与边界：[会话与重启](docs/question-answer-sessions.md)、
+[提示词过滤](docs/question-answer-prompts.md)、[并发配置](docs/question-answer-concurrency.md)、
+[文件下载](docs/question-answer-downloads.md)、[跨网络部署与备份](docs/question-answer-deployment.md)。
+这些修改需要构建本分支的运行时和启动器；下面的上游安装包不包含本分支修改。
+
 <p align="center">
   <img src="assets/readme/hero.svg" width="960" alt="切换到网页版模型，继续使用 Codex。你的 ChatGPT 订阅。你的工作流。充分发挥模型能力。">
 </p>

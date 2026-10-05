@@ -106,10 +106,14 @@ async function runStrictAdapterAnswer(answer: string): Promise<AdapterEvent[]> {
   const events: AdapterEvent[] = [];
   (worker as unknown as { run: (turn: BrowserTurn) => Promise<string> }).run = async turn => {
     const prepared = await turn.prepare();
-    expect(prepared.text).toContain('strict JSON-schema final answer named "adapter_payload"');
+    expect(prepared.text).toBe("Return it.\n\nReply with one JSON value matching this schema, without Markdown fences:\n"
+      + JSON.stringify(request.options.outputFormat!.schema));
+    expect(prepared.text).not.toContain("codex_context_json");
+    prepared.release();
     const cut = Math.max(1, Math.floor(answer.length / 2));
     turn.onTextDelta(answer.slice(0, cut));
     turn.onTextDelta(answer.slice(cut));
+    expect(events.filter(event => event.type === "text_delta" && event.phase === "final_answer")).toEqual([]);
     return answer;
   };
   try {
