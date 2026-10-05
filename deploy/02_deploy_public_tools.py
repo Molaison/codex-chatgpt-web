@@ -22,6 +22,15 @@ Retry safety (observed during the first deployment):
   * account_groups.color is taken from an existing valid row (the column is NOT NULL and
     constrained to ^#[0-9A-F]{8}$) and --color is validated before the transaction starts.
 Keys are never printed; read them from the recovery record when handing them to a client.
+
+Public model catalog:
+  * the provider publishes only <slug>-tools aliases taken from the independent Full catalog at
+    <home>/full-N/models.json, and the new account's model_access_json is that same suffixed
+    allowlist, so the client can never ask for an unsuffixed name;
+  * a new Full route needs --models-file (with {account}) when that catalog is missing; the
+    account QA models.json is never symlinked, and an existing symlink is refused instead of
+    silently republishing the QA catalog. Replacing an already running route's catalog is a
+    separate, administrator-controlled migration.
 """
 import argparse
 import json
@@ -46,7 +55,8 @@ parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.R
 parser.add_argument("--home", default=str(Path.home() / ".local" / "share" / "codex-chatgpt-web"), help="runtime home root (default: ~/.local/share/codex-chatgpt-web)")
 parser.add_argument("--accounts", default="1,2", help="comma-separated account numbers (default: 1,2)")
 parser.add_argument("--source-name", default="chatgpt-web-linux-{account}", help="existing provider_accounts.name to clone per account (default: chatgpt-web-linux-{account})")
-parser.add_argument("--source-prefix", default="account", help="existing QA profile directory prefix for models.json, <home>/<prefix>-N (default: account)")
+parser.add_argument("--source-prefix", default="account", help="existing QA profile directory prefix, <home>/<prefix>-N; the QA models.json there is never used as the Full catalog (default: account)")
+parser.add_argument("--models-file", help="independent Full model catalog for a newly created Full route; {account} is replaced with the account number. Required when <home>/full-N/models.json does not exist.")
 parser.add_argument("--namespace", default="molaison/full-public-test", help="UUIDv5 namespace keeping the allocated identifiers stable across retries")
 parser.add_argument("--color", help="account_groups.color to use; default copies a valid color from the existing table")
 parser.add_argument("--units", default=default_units(), help="systemd user unit directory (default: ~/.config/systemd/user)")
@@ -86,6 +96,30 @@ for account in accounts:
     if record.exists() and json.loads(record.read_text())["state"] == "configured":
         results.append({"account": account, "state": "already configured"})
         continue
+    # Full 目录必须是独立 catalog：不再软链 QA 的 models.json。已配置路线在上面提前返回，不做静默迁移。
+    target.mkdir(parents=True, mode=0o700, exist_ok=True)
+    models_path = target / "models.json"
+    qa_models = home / f"{args.source_prefix}-{account}" / "models.json"
+    if models_path.is_symlink():
+        sys.exit(f"{models_path} is a symlink; the Full route needs an independent Full model catalog. "
+                 "An administrator migration replaces it from the preserved original Full catalog, then pass --models-file.")
+    if not models_path.exists():
+        if not args.models_file:
+            sys.exit(f"{models_path} does not exist and --models-file was not given; the Full catalog is never taken from the account QA catalog.")
+        source = Path(args.models_file.format(account=account))
+        if source.is_symlink() or source.resolve() == qa_models.resolve():
+            sys.exit(f"--models-file {source} is the account QA catalog; pass the independent Full model catalog instead.")
+        if not source.is_file():
+            sys.exit(f"--models-file {source} is not a readable file")
+        shutil.copyfile(source, models_path)
+        models_path.chmod(0o600)
+    catalog = json.loads(models_path.read_text()).get("models")
+    if not isinstance(catalog, list) or not catalog or any(
+        not isinstance(model, dict) or not isinstance(model.get("slug"), str) or not model["slug"] for model in catalog
+    ):
+        sys.exit(f"{models_path} must hold a non-empty models[] array with string slugs")
+    # 允许清单与 provider 发布的公开别名一致：客户端只能请求 <slug>-tools。
+    model_access = json.dumps({"mode": "allowlist", "models": [model["slug"] + "-tools" for model in catalog]}, separators=(",", ":")).replace("'", "''")
     source_name = args.source_name.format(account=account)
     if "'" in source_name:
         sys.exit(f"provider account name must not contain a quote: {source_name!r}")
@@ -103,9 +137,6 @@ for account in accounts:
         client_key = json.loads(record.read_text())["key"]
     (target / "cpr").mkdir(parents=True, mode=0o700, exist_ok=True)
     (target / "provider.key").write_text(provider_key)
-    models = home / f"{args.source_prefix}-{account}" / "models.json"
-    if not (target / "models.json").exists():
-        (target / "models.json").symlink_to(models)
     record.write_text(json.dumps({"account": account_id, "group": group_id, "key_id": key_id, "key": client_key, "state": "allocated"}))
     record.chmod(0o600)
     provider_unit = f"chatgpt-web-full-provider-{account}"
@@ -125,7 +156,7 @@ for account in accounts:
     subprocess.check_call(["systemctl", "--user", "daemon-reload"])
     subprocess.check_call(["systemctl", "--user", "enable", "--now", provider_unit, bridge_unit])
     execute(f"""BEGIN;
-INSERT INTO provider_accounts SELECT (jsonb_populate_record(NULL::provider_accounts, to_jsonb(a) || jsonb_build_object('id','{account_id}','name','Full tools isolated test {account}','enabled',true,'created_at',now(),'updated_at',now(),'concurrency_limit',1,'provider_credentials_json',a.provider_credentials_json || jsonb_build_object('base_url','http://127.0.0.1:{port}/v1','api_key','{provider_key}')))).* FROM provider_accounts a WHERE id='{source_id}' ON CONFLICT (id) DO NOTHING;
+INSERT INTO provider_accounts SELECT (jsonb_populate_record(NULL::provider_accounts, to_jsonb(a) || jsonb_build_object('id','{account_id}','name','Full tools isolated test {account}','enabled',true,'created_at',now(),'updated_at',now(),'concurrency_limit',1,'provider_credentials_json',a.provider_credentials_json || jsonb_build_object('base_url','http://127.0.0.1:{port}/v1','api_key','{provider_key}'),'model_access_json','{model_access}'::jsonb))).* FROM provider_accounts a WHERE id='{source_id}' ON CONFLICT (id) DO NOTHING;
 INSERT INTO account_groups(id,name,description,enabled,created_at,updated_at,disable_fast,color) VALUES('{group_id}','Full tools isolated test {account}','Private acceptance only; no existing keys changed',true,now(),now(),false,'{color}') ON CONFLICT (id) DO NOTHING;
 INSERT INTO account_group_accounts(account_group_id,provider_account_id,created_at) VALUES('{group_id}','{account_id}',now()) ON CONFLICT DO NOTHING;
 INSERT INTO client_api_keys(id,name,label,key,enabled,max_concurrency,requests_per_minute,created_at,updated_at,provider_request_profiles_json) VALUES('{key_id}','Full tools isolated test {account}','acceptance','{client_key}',true,1,10,now(),now(),'{{}}') ON CONFLICT (id) DO NOTHING;
@@ -135,5 +166,7 @@ UPDATE runtime_settings SET config_revision=config_revision+1,updated_at=now(); 
     data["state"] = "configured"
     record.write_text(json.dumps(data))
     record.chmod(0o600)
-    results.append({"account": account, "state": "configured", "provider_port": port, "recovery_record": str(record)})
+    results.append({"account": account, "state": "configured", "provider_port": port,
+                    "models_file": str(models_path), "published_models": len(catalog),
+                    "recovery_record": str(record)})
 print(json.dumps({"accounts": results, "color": color, "restarted_services": []}))

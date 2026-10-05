@@ -13,7 +13,7 @@
 | QA runtime ×2 | `127.0.0.1:1785N` | 账号文件下载（`/<pathPrefix>/account-N/files/<64hex>/<name>`） | 既有 `chatgpt-web-runtime-N` |
 | Full runtime ×2 | `127.0.0.1:1795N` | 工具模式浏览器运行时 | 本仓库 `01_deploy_external_mcp.py --stage prepare` |
 | local MCP ×2 | `127.0.0.1:1796N` | `mcp --transport http --contract native --public-origin <origin>` | 同上 |
-| CPR provider ×2 + socat bridge ×2 | `127.0.0.1:1797N` -> Unix socket | 认证后再转到该账号 Full runtime | 本仓库 `02_deploy_public_tools.py` |
+| CPR provider ×2 + socat bridge ×2 | `127.0.0.1:1797N` -> Unix socket | 认证、只发布 `<slug>-tools` 别名，再转到该账号 Full runtime | 本仓库 `02_deploy_public_tools.py` |
 
 请求流向：
 
@@ -29,6 +29,7 @@
 2. MCP 路径自身不需要 bearer key：它靠 Host/Origin 白名单加**活动回合能力**授权，会话 ID 不授权工具（见 `docs/mcp-http-experiment.md`）。
 3. 公网 Full API 走 CPR 的现有鉴权：每账号一份独立 key、独立分组、并发上限 1；原 QA/key/group/project 不变。
 4. 部署脚本不自动重启共享服务。`--stage ingress` 只写配置和 dropin，重启 `chatgpt-web-public-ingress.service` 由管理员在确认无在途公网请求后显式执行。
+5. 同一个 `/v1` 入口上的模型身份是分开的：Full provider 的 `/v1/models` 只列独立 Full 目录里的 `<slug>-tools` 别名，`/v1/responses` 与 `/v1/responses/compact` 只接受这些别名（转发前剥掉后缀，响应里的 `model` 字段再写回别名），原名在该 Full provider 触达上游前就被 400 拒绝；QA 模式（`config.mode!=='full'`）的目录与请求体保持原样。别名只换身份，不放大工具权限，也不存在 QA/tools 自动回退。
 
 ## 前置条件
 
@@ -62,14 +63,28 @@ python3 deploy/01_deploy_external_mcp.py --stage prepare \
 ### 3) 接通认证 CPR Full 路线
 
 ```sh
-python3 deploy/02_deploy_public_tools.py --home ~/.local/share/codex-chatgpt-web
+python3 deploy/02_deploy_public_tools.py --home ~/.local/share/codex-chatgpt-web \
+  --models-file ~/private/full-models-{account}.json
 ```
 
 - 每账号新增 `chatgpt-web-full-provider-N`（认证 provider，`deploy/cpr-provider.mjs`）与 `chatgpt-web-full-bridge-N`（只绑回环的 socat 桥），并写一条 CPR provider account/group/key，指向 `http://127.0.0.1:1797N/v1`。
+- `--models-file` 支持 `{account}`：首次创建 Full 路线时，它必须是**独立的 Full 目录**（例如保留的 `models.json.before-browser-only-20261001`，含全部 9 个 slug）；脚本把它复制成 `<home>/full-N/models.json`（0600 普通文件），不再软链账号的 QA `models.json`。
+- `<home>/full-N/models.json` 已存在且不是软链时按原样使用；若是软链、或 `--models-file` 指向账号 QA 目录，脚本直接退出，不做静默迁移（替换在跑路线的目录是管理员单独执行的迁移动作）。
+- 新 Full 账号的 `model_access_json` 就是同一份目录的 `-tools` 后缀允许清单，与 provider 发布的别名一一对应；原 QA key/group 不因此扩权。
 - 幂等：账号/分组/key 标识确定，重试复用 `<home>/full-N/public-test.json` 里的同一份 key，DB 事务带 `ON CONFLICT DO NOTHING`。重复执行不会产生第二套凭据。
 - `account_groups.color` 有 NOT NULL 与 `^#[0-9A-F]{8}$` 约束：脚本默认复制表内已有的合法色值，或用 `--color '#RRGGBBAA'` 指定；非法值在事务开始前就报错退出（这是首次部署两次事务回滚的修复）。
 - 不重启 CPR、QA、Full、浏览器或 ingress；DB 凭 `runtime_settings.config_revision` 自增被感知。
 - 输出只含账号、状态、端口、恢复记录路径，不含任何 key。把客户端 key 从恢复记录（0600）交给使用者，不要入库、不要提交。
+
+### 已有 QA 账号池的目录元数据
+
+只返回 `data[].id` 的旧 QA 池会让 CPR 为普通模型生成通用编程助手说明。这不是纯聊天的模型说明，不能继续沿用。
+
+对于已经部署了 `src/qa-pool.ts` 的服务器，在它的源码目录应用本仓库的 `deploy/qa-pool-catalog.patch`，重新构建 QA pool。给现有 pool 配置增加 `modelCatalogPath`，指向原有纯聊天 `account-N/models.json`，并在无在途请求时重启 pool。补丁只增加目录元数据，不改请求处理、会话分配或提示词；不要将其他任务的整份 QA 源码覆盖进去。两账号共用一个目录时，先确认元数据一致。
+
+修改已有账号的目录后，在 CPR 管理界面刷新该账号模型目录，或调用已认证的 `POST /api/admin/accounts/models/refresh`，请求体为 `{"accountId":"对应provider账号ID"}`。只改 DB 允许清单不保证旧目录缓存立即失效。
+
+验收 `GET /v1/models?client_version=<客户端版本>`：普通模型的 `base_instructions` 和 `model_messages` 应来自原 QA 目录；`-tools` 模型应来自独立 Full 目录，不得互相复用。对应 key 需已获准两个模型组。
 
 ### 4) 切换公网入口
 
@@ -97,7 +112,7 @@ python3 deploy/01_deploy_external_mcp.py --stage ingress \
 ### 6) 验收（不是只看 HTTP 200）
 
 1. `GET https://<origin>/local-mcp/account-N/mcp` 返回 MCP 层错误（如 400/406）而不是 404，说明该账号路径已接通。
-2. 用客户端 key 调 `GET https://<origin>/v1/models` 应返回账号模型目录。
+2. 用客户端 key 调 `GET https://<origin>/v1/models`，目录由它获准的组决定：QA 组给出原名，Full 组给出 `-tools` 名称；同时获准两组时，两种名称同时出现。Full provider 直接收到原名必须返回 400，QA provider 直接收到 `-tools` 也必须拒绝，不能串线。
 3. 真正的验收是一次真实回合：模型在本机执行命令或调用本机 MCP，并返回实际输出。只看连通性、健康检查或首个字节不算通过。
 
 ## 客户端接入
@@ -107,13 +122,15 @@ python3 deploy/01_deploy_external_mcp.py --stage ingress \
 | 项 | 值 |
 | --- | --- |
 | base_url | `https://<origin>/v1` |
-| 模型 | `chatgpt-web/gpt-5.6-sol` |
+| 模型 | `chatgpt-web/gpt-5.6-sol-tools` |
 | key | 管理员发的工具专用 key（`Bearer`） |
 | 协议 | Responses API（`wire_api = "responses"`） |
 | 是否需要 SSH / cloudflared | 不需要 |
 
+同一个 `base_url` 不等于同一组权限。纯聊天使用 `chatgpt-web/gpt-5.6-sol`，工具模式使用 `chatgpt-web/gpt-5.6-sol-tools`。管理员可以为同一个 key 同时授权 QA 与 Full 组，用户随后只需选择模型；原聊天 key 不会自动获得工具权限。两种模式不互相回退，工具路线失败也不能改用纯聊天返回。切换模式请新建会话；已有工具客户端需将公网模型名改为 `-tools`。同机脚本直接连接 Full runtime，仍使用底层原名，不经过公网别名映射。
+
 ```toml
-model = "chatgpt-web/gpt-5.6-sol"
+model = "chatgpt-web/gpt-5.6-sol-tools"
 model_provider = "web"
 
 [model_providers.web]
@@ -150,6 +167,7 @@ deploy/03_codex_web_tools.sh 1        # 第二个账号：deploy/03_codex_web_to
 | 撤回 CPR Full 路线 | 停 `chatgpt-web-full-provider-N` 与 `chatgpt-web-full-bridge-N`，按 `<home>/full-N/public-test.json` 记录的 account/group/key 标识在 CPR 中撤销或停用 |
 | 回到纯聊天 | 原 QA 入口、key、分组、项目本来就不变；不要停原 Full/MCP/QA/CPR 服务 |
 | 部署失败重试 | 直接重跑同一命令：配置与 key 复用，DB 写入幂等；不要手工再建一套账号或 key |
+| 撤回 `<slug>-tools` 别名 | 按迁移前记录同时还原 provider 版本与 DB 模型允许清单；只更换目录不会撤销后缀。不要把 QA 目录重新当作 Full 目录 |
 
 ## 已知边界
 
@@ -157,3 +175,4 @@ deploy/03_codex_web_tools.sh 1        # 第二个账号：deploy/03_codex_web_to
 2. 两账号共享各自浏览器的标签上限；Pro 限额仍按 runtime 计数，未做跨 QA/Full 统一计数。
 3. 服务器上的反代/隧道配置属于部署主机，仓库只保存示例（`deploy/Caddyfile.example`）。
 4. 公共目录本身不授予执行权限：工具调用需要活动回合能力，会话 ID 不等于授权。
+5. `-tools` 别名只改变公开模型身份、响应回显和 DB 允许清单，不新增工具权限：工具与本地 MCP 仍在客户端执行，客户端的沙箱与审批不变。
