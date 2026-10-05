@@ -76,6 +76,16 @@ python3 deploy/02_deploy_public_tools.py --home ~/.local/share/codex-chatgpt-web
 - 不重启 CPR、QA、Full、浏览器或 ingress；DB 凭 `runtime_settings.config_revision` 自增被感知。
 - 输出只含账号、状态、端口、恢复记录路径，不含任何 key。把客户端 key 从恢复记录（0600）交给使用者，不要入库、不要提交。
 
+### 已有 QA 账号池的目录元数据
+
+只返回 `data[].id` 的旧 QA 池会让 CPR 为普通模型生成通用编程助手说明。这不是纯聊天的模型说明，不能继续沿用。
+
+对于已经部署了 `src/qa-pool.ts` 的服务器，在它的源码目录应用本仓库的 `deploy/qa-pool-catalog.patch`，重新构建 QA pool。给现有 pool 配置增加 `modelCatalogPath`，指向原有纯聊天 `account-N/models.json`，并在无在途请求时重启 pool。补丁只增加目录元数据，不改请求处理、会话分配或提示词；不要将其他任务的整份 QA 源码覆盖进去。两账号共用一个目录时，先确认元数据一致。
+
+修改已有账号的目录后，在 CPR 管理界面刷新该账号模型目录，或调用已认证的 `POST /api/admin/accounts/models/refresh`，请求体为 `{"accountId":"对应provider账号ID"}`。只改 DB 允许清单不保证旧目录缓存立即失效。
+
+验收 `GET /v1/models?client_version=<客户端版本>`：普通模型的 `base_instructions` 和 `model_messages` 应来自原 QA 目录；`-tools` 模型应来自独立 Full 目录，不得互相复用。对应 key 需已获准两个模型组。
+
 ### 4) 切换公网入口
 
 ```sh

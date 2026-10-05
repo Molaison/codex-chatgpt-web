@@ -1,0 +1,28 @@
+--- a/src/qa-pool.ts
++++ b/src/qa-pool.ts
+@@ -10,6 +10,7 @@
+   host: string; port: number; databasePath: string;
+   clients: Array<{ id: string; keyFile: string }>;
+   accounts: QaPoolAccount[];
++  modelCatalogPath?: string;
+   projectRoutes?: Array<{ name: string; accountId: string; projectId: string; displayName?: string; sessionNamespace?: string; modelAliases?: Record<string, string> }>;
+ }
+ const nonempty = (value: unknown): string | undefined => typeof value === "string" && value.trim() ? value.trim() : undefined;
+@@ -135,7 +136,16 @@
+     if (request.method === "GET" && url.pathname === "/healthz") return Response.json({ status: "ok", persistentSessions: true, accounts: config.accounts.filter(a => a.enabled !== false).length });
+     if (request.method === "GET" && pathname === "/v1/models") {
+       const models = route?.modelAliases ? Object.keys(route.modelAliases) : [...new Set(config.accounts.filter(a => a.enabled !== false && (!route || a.id === route.accountId)).flatMap(a => a.models))];
+-      return Response.json({ object: "list", data: models.map(id => ({ id, object: "model", owned_by: "chatgpt-web", created: 0 })) });
++      const catalog = config.modelCatalogPath
++        ? JSON.parse(readFileSync(resolve(config.modelCatalogPath), "utf8")).models as Array<Record<string, unknown>>
++        : undefined;
++      return Response.json({ object: "list", data: models.map(id => ({ id, object: "model", owned_by: "chatgpt-web", created: 0 })),
++        ...(catalog ? { models: models.map(id => {
++          const source = catalog.find(item => item.slug === (route?.modelAliases?.[id] ?? id));
++          if (!source) throw new Error(`QA model metadata missing: ${id}`);
++          return { ...source, slug: id };
++        }) } : {}),
++      });
+     }
+     if (request.method !== "POST" || !["/v1/responses", "/v1/responses/compact"].includes(pathname)) return failure(404, "not_found", "Unknown route");
+     let payload: Record<string, unknown>;
