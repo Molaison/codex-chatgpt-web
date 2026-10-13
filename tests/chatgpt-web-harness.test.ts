@@ -2201,18 +2201,21 @@ describe("ChatGPT outer-native harness v4", () => {
     const broker = TurnBroker.forSocket(socketPath);
     const token = await broker.register(extractChatGptTurnEnvironment(parsed(environmentXml)), 10_000);
     const claimed = await callTurnBroker<{ bindingId: string }>(socketPath, { method: "claim", token });
+    // Attach the rejection handler before revoke: Bun 1.4 on Windows can stall its
+    // asynchronous .rejects matcher when the named-pipe reply rejects in this gap.
     const invocation = callTurnBroker(socketPath, {
       method: "invoke",
       bindingId: claimed.bindingId,
       wireName: "exec_command",
       freeform: false,
       arguments: { cmd: "sleep 30" },
-    }, 10_000);
+    }, 10_000).then(() => undefined, error => error);
     await broker.nextToolBatch(token);
     broker.revoke(token);
-    await expect(invocation).rejects.toThrow("revoked");
-    await expect(callTurnBroker(socketPath, { method: "resolve", bindingId: claimed.bindingId }))
-      .rejects.toThrow("has already finished");
+    expect(await invocation).toMatchObject({ message: expect.stringContaining("revoked") });
+    const resolved = await callTurnBroker(socketPath, { method: "resolve", bindingId: claimed.bindingId })
+      .then(() => undefined, error => error);
+    expect(resolved).toMatchObject({ message: expect.stringContaining("has already finished") });
     await broker.close();
   });
 
@@ -2816,6 +2819,7 @@ describe("ChatGPT outer-native harness v4", () => {
         query: string,
         includeSchema: boolean,
         nestedToolNames: string[],
+        nativeEnvelope = false,
       ) => {
         const pending = call("codex_tool_inventory", {
           turn_token: token,
@@ -2827,7 +2831,12 @@ describe("ChatGPT outer-native harness v4", () => {
         const gatewayCalls: GatewayProgramCall[] = [];
         const content = await executeGatewayProgram(request!.input!, nestedToolNames, gatewayCalls);
         expect(gatewayCalls).toEqual([]);
-        broker.completeTool(token, request!.callId, { content });
+        broker.completeTool(token, request!.callId, {
+          content: nativeEnvelope
+            ? [{ type: "text", text: "Script completed\nWall time 0.1 seconds\nOutput:\n"
+              + content.map(item => item.type === "text" ? item.text : "").join("") }]
+            : content,
+        });
         return await pending;
       };
 
@@ -2958,6 +2967,19 @@ describe("ChatGPT outer-native harness v4", () => {
           parameters: { type: "object", additionalProperties: true },
         }],
       });
+
+      // Codex 0.160 wraps text() output in a completed execution envelope.
+      const nativeInventory = await inventoryThroughGateway("web__run", true, ["exec", "web__run"], true);
+      expect(nativeInventory.structuredContent).toEqual(nestedInventory.structuredContent);
+      for (const invalidText of [
+        "Script completed\nWall time 0.1 seconds\nOutput:\nnot-json",
+        'Script running\nWall time 0.1 seconds\nOutput:\n{"tools":[],"total":0}',
+      ]) {
+        const pending = call("codex_tool_inventory", { turn_token: token, query: "web__run" });
+        const [request] = await broker.nextToolBatch(token);
+        broker.completeTool(token, request!.callId, { content: [{ type: "text", text: invalidText }] });
+        expect((await pending).isError).toBe(true);
+      }
 
       const nestedWeb = call("codex_tool_call", {
         turn_token: token,

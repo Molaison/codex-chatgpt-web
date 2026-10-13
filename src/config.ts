@@ -14,6 +14,7 @@ export type RuntimeMode = "browser-only" | "full";
 export type BrowserHostMode = "managed-chrome" | "launcher";
 export type BrowserInteractionMode = "automatic" | "manual";
 export type SubagentProtocol = "compatibility-v1" | "native";
+export type McpProvider = "openai-tunnel" | "external-http";
 
 /**
  * ChatGPT caches a connector's public MCP contract by connector identity. The direct turn-token
@@ -100,6 +101,8 @@ export interface AppConfig {
   purpose?: "dev-harness";
   releaseVersion: string;
   mode: RuntimeMode;
+  /** Explicit experiment; omission preserves the managed OpenAI tunnel. */
+  mcpProvider?: McpProvider;
   subagentProtocol: SubagentProtocol;
   host: "127.0.0.1";
   port: number;
@@ -112,6 +115,12 @@ export interface AppConfig {
   browserHostDescriptorPath?: string;
   chromeExecutablePath: string;
   storageStatePath: string;
+  /** Stable profile name used to isolate browser state and retained conversations. */
+  accountId?: string;
+  /** Portable saved-chat mappings. Relative paths resolve under the account home. */
+  conversationStoreDirectory?: string;
+  /** Public base URL used for generated-file download links. */
+  downloadBaseUrl?: string;
   brokerSocketPath: string;
   headed: boolean;
   solAvailable: boolean;
@@ -125,6 +134,10 @@ export interface AppConfig {
   zeroRiskProEnabled: boolean;
   /** Optional adapter-silence budget for the Responses watchdog. */
   stallTimeoutSec?: number;
+  /** Per-account concurrency limit for ordinary ChatGPT modes. */
+  standardConcurrencyLimit: number;
+  /** Per-account concurrency limit for ChatGPT Pro. */
+  proConcurrencyLimit: number;
   autoApproveToolCalls: boolean;
   controlToken: string;
   runtimeCommand: string[];
@@ -132,6 +145,24 @@ export interface AppConfig {
   tunnel?: TunnelConfig;
   automaticTunnel?: TunnelConfig;
   manualTunnel?: TunnelConfig;
+}
+
+export function usesManagedMcpTunnel(config: Pick<AppConfig, "mode" | "mcpProvider">): boolean {
+  return config.mode === "full" && config.mcpProvider !== "external-http";
+}
+
+export function validateMcpProvider(config: Pick<Partial<AppConfig>,
+  "mcpProvider" | "mode" | "browserHost" | "browserInteractionMode" | "purpose">): void {
+  if (config.mcpProvider !== undefined && config.mcpProvider !== "openai-tunnel"
+    && config.mcpProvider !== "external-http") {
+    throw new Error("MCP provider must be openai-tunnel or external-http");
+  }
+  if (config.mcpProvider === "external-http"
+    && (config.mode !== "full"
+      || (config.browserInteractionMode !== "automatic" && config.browserInteractionMode !== "manual")
+      || config.browserHost !== "launcher" || config.purpose !== undefined)) {
+    throw new Error("external-http requires production Launcher Full mode with automatic or Zero Risk browser interaction");
+  }
 }
 
 export function tunnelConfigForInteractionMode(
@@ -244,6 +275,7 @@ export function defaultConfig(mode: RuntimeMode = "browser-only"): AppConfig {
     browserInteractionMode: "automatic",
     chromeExecutablePath: defaultChromeExecutable(),
     storageStatePath: join(home, "browser", "storage-state.json"),
+    accountId: "default",
     brokerSocketPath: defaultBrokerEndpoint(home),
     headed: true,
     solAvailable: true,
@@ -252,8 +284,10 @@ export function defaultConfig(mode: RuntimeMode = "browser-only"): AppConfig {
     experimentalBiggerContext: false,
     experimentalSkillAttachments: false,
     experimentalFreshConversationPerTurn: false,
-    useSavedChats: false,
+    useSavedChats: true,
     zeroRiskProEnabled: false,
+    standardConcurrencyLimit: 5,
+    proConcurrencyLimit: 2,
     autoApproveToolCalls: false,
     controlToken: randomBytes(32).toString("base64url"),
     runtimeCommand: currentRuntimeCommand(),
@@ -432,11 +466,28 @@ function parseConfig(value: unknown, path: string): AppConfig {
   if (browserInteractionMode === "manual" && parsed.browserHost !== "launcher") {
     throw new Error(`Zero Risk requires the launcher browser host in ${path}`);
   }
+  validateMcpProvider({ ...parsed, browserInteractionMode });
   if (!Number.isInteger(parsed.port) || parsed.port! < 1 || parsed.port! > 65_535) throw new Error(`Invalid port in ${path}`);
   if (!Number.isSafeInteger(parsed.contextWindow) || parsed.contextWindow! <= 0) {
     throw new Error(`Invalid contextWindow in ${path}`);
   }
   if (typeof parsed.headed !== "boolean") throw new Error(`Invalid headed in ${path}`);
+  if (parsed.accountId !== undefined
+    && (typeof parsed.accountId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(parsed.accountId))) {
+    throw new Error(`Invalid accountId in ${path}`);
+  }
+  if (parsed.conversationStoreDirectory !== undefined
+    && (typeof parsed.conversationStoreDirectory !== "string"
+      || !parsed.conversationStoreDirectory.trim() || parsed.conversationStoreDirectory.includes("\0"))) {
+    throw new Error("Invalid conversationStoreDirectory in " + path);
+  }
+  if (parsed.downloadBaseUrl !== undefined) {
+    let url: URL;
+    try { url = new URL(parsed.downloadBaseUrl); } catch { throw new Error("Invalid downloadBaseUrl"); }
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+      throw new Error("Invalid downloadBaseUrl");
+    }
+  }
   if (typeof parsed.autoApproveToolCalls !== "boolean") {
     throw new Error(`Invalid autoApproveToolCalls in ${path}`);
   }
@@ -500,7 +551,7 @@ function parseConfig(value: unknown, path: string): AppConfig {
       }
     }
   };
-  if (parsed.mode === "full") {
+  if (usesManagedMcpTunnel(parsed as AppConfig)) {
     validateTunnel(parsed.tunnel, "tunnel");
     if (parsed.automaticTunnel !== undefined) validateTunnel(parsed.automaticTunnel, "automaticTunnel");
     if (parsed.manualTunnel !== undefined) validateTunnel(parsed.manualTunnel, "manualTunnel");
@@ -541,6 +592,13 @@ function parseConfig(value: unknown, path: string): AppConfig {
     && (!Number.isFinite(parsed.stallTimeoutSec) || parsed.stallTimeoutSec <= 0)) {
     throw new Error(`Invalid stallTimeoutSec in ${path}`);
   }
+  for (const key of ["standardConcurrencyLimit", "proConcurrencyLimit"] as const) {
+    const limit = parsed[key] ?? (key === "proConcurrencyLimit" ? 2 : 5);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 5) {
+      throw new Error(`Invalid ${key} in ${path}; expected an integer from 1 to 5`);
+    }
+    parsed[key] = limit;
+  }
   const solAvailable = parsed.solAvailable !== false;
   const proAvailable = parsed.proAvailable === true;
   if (parsed.experimentalSkillAttachments !== undefined && typeof parsed.experimentalSkillAttachments !== "boolean") {
@@ -555,7 +613,7 @@ function parseConfig(value: unknown, path: string): AppConfig {
   if (parsed.useSavedChats !== undefined && typeof parsed.useSavedChats !== "boolean") {
     throw new Error(`Invalid useSavedChats in ${path}`);
   }
-  const useSavedChats = parsed.useSavedChats === true;
+  const useSavedChats = parsed.useSavedChats ?? browserInteractionMode !== "manual";
   if (browserInteractionMode === "manual" && experimentalSkillAttachments) {
     throw new Error(`Zero Risk does not support Skills as files in ${path}`);
   }
@@ -623,6 +681,12 @@ export function providerConfig(config: AppConfig): CodexProviderConfig {
     ),
     noReasoningModels: [],
     chatgptWeb: {
+      accountId: config.accountId ?? "default",
+      conversationStoreDirectory: resolve(getConfigDir(), expandUserPath(
+        config.conversationStoreDirectory ?? join("runtime", "conversations"),
+      )),
+      downloadDirectory: join(getConfigDir(), "downloads"),
+      downloadBaseUrl: config.downloadBaseUrl ?? "http://" + config.host + ":" + config.port,
       appName: manual ? config.manualAppName : config.automaticAppName,
       browserInteractionMode: config.browserInteractionMode,
       browserHost: config.browserHost,
@@ -633,14 +697,18 @@ export function providerConfig(config: AppConfig): CodexProviderConfig {
       threadEnvironmentStatePath: join(getConfigDir(), "runtime", "thread-environments.json"),
       lunaCheckpointStatePath: join(getConfigDir(), "runtime", "luna-checkpoints.json"),
       headed: config.headed,
-      localToolsEnabled: config.mode === "full",
+      // Explicit external HTTP Full mode uses the existing automatic native harness. Preserve
+      // this fork's official-provider behavior and Zero Risk's separate manual control channel.
+      localToolsEnabled: config.mode === "full" && (manual || config.mcpProvider === "external-http"),
       solAvailable: manual ? false : config.solAvailable,
       extraHighAvailable: !manual && config.extraHighAvailable === true,
       proAvailable: manual ? false : config.proAvailable,
       experimentalBiggerContext: manual ? false : config.experimentalBiggerContext,
       experimentalSkillAttachments: manual ? false : config.experimentalSkillAttachments,
       experimentalFreshConversationPerTurn: !manual && config.experimentalFreshConversationPerTurn === true,
-      useSavedChats: config.useSavedChats === true,
+      useSavedChats: config.useSavedChats ?? !manual,
+      standardConcurrencyLimit: config.standardConcurrencyLimit,
+      proConcurrencyLimit: config.proConcurrencyLimit,
       ...(config.stallTimeoutSec !== undefined ? { stallTimeoutSec: config.stallTimeoutSec } : {}),
       autoApproveToolCalls: manual ? false : config.autoApproveToolCalls,
     },

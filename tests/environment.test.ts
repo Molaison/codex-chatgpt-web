@@ -80,7 +80,9 @@ function currentWire(
 }
 
 describe("trusted current Codex environment envelope", () => {
-  test("native cross-task messages keep their instruction, environment and compaction source", () => {
+  test.each([
+    ["send_message_to_thread", "codex_app"], ["create_thread", "codex_tui"],
+  ])("native %s/%s keeps its instruction, environment and compaction source", (name, namespace) => {
     const request = currentWire({ threadId: "thread_delegation" });
     const body = request._rawBody as { input: Array<Record<string, unknown>> };
     const context = body.input[0]!;
@@ -89,8 +91,7 @@ describe("trusted current Codex environment envelope", () => {
     context.internal_chat_message_metadata_passthrough = { turn_id: "turn_current" };
     const output = "<codex_delegation>\n  <source_thread_id>01a0bbd4-8de6-78d2-891c-dc329238637a</source_thread_id>\n  <input>Check &lt;sample&gt; &amp; report the result.</input>\n</codex_delegation>";
     const delegation = {
-      type: "function_call_output", id: "fco_delegation", name: "send_message_to_thread",
-      namespace: "codex_app", output,
+      type: "function_call_output", id: "fco_delegation", name, namespace, output,
       internal_chat_message_metadata_passthrough: { turn_id: "turn_current" },
     };
     body.input = [previous, context, delegation];

@@ -72,6 +72,13 @@ test("preserves inline code that is not an unambiguous file path", () => {
   ].join("\n"));
 });
 
+test("preserves downloadable file-link targets", () => {
+  expect(chatGptHtmlToMarkdown('<p><a href="sandbox:/mnt/data/report.pdf">Download report</a></p>'))
+    .toBe("[Download report](<sandbox:/mnt/data/report.pdf>)");
+  expect(chatGptHtmlToMarkdown('<a href="attachment://result.csv">result.csv</a>'))
+    .toBe("[result.csv](<attachment://result.csv>)");
+});
+
 test("does not nest a generated file link inside an existing link", () => {
   expect(chatGptHtmlToMarkdown(
     '<p>Open <a href="https://example.com/source"><code>src/example.ts</code></a>.</p>',

@@ -101,6 +101,28 @@ test("setup validates the port before performing runtime work", async () => {
   }
 });
 
+test("external HTTP CLI selection rejects incompatible modes and credentials without configuration", async () => {
+  const root = mkdtempSync(join(tmpdir(), "codex-web-external-http-cli-"));
+  try {
+    const env = { ...process.env, CODEX_HOME: join(root, "codex"), CODEX_CHATGPT_WEB_HOME: join(root, "app") };
+    for (const [args, expected] of [
+      [["setup", "--browser-only", "--mcp-provider", "unknown"], /--mcp-provider must be/],
+      [["setup", "--full", "--mcp-provider", "external-http"], /external-http requires/],
+      [["setup", "--full", "--zero-risk-browser-interaction", "--browser-host-descriptor", join(root, "launcher.json"),
+        "--mcp-provider", "external-http", "--tunnel-id", `tunnel_${"a".repeat(32)}`], /cannot be combined/],
+      [["dev", "setup", "--full", "--mcp-provider", "external-http"], /Unknown.*arguments/],
+    ] as Array<[string[], RegExp]>) {
+      const result = await runCli([...args, "--acknowledge-unofficial"], env);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toMatch(expected);
+      expect(result.stdout).not.toContain("Full mode needs an OpenAI tunnel");
+    }
+    expect(existsSync(join(root, "app", "config.json"))).toBe(false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("setup browser-interaction flags are explicit and mutually exclusive", async () => {
   const root = mkdtempSync(join(tmpdir(), "codex-chatgpt-web-cli-interaction-"));
   try {

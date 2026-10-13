@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import * as z from "zod/v4";
 import { namespacedToolName, type CodexTool } from "../../types";
 import { VERSION } from "../../version";
@@ -293,7 +294,13 @@ function gatewayToolCatalogPage(response: {
   }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(textBlocks[0]!);
+    // Native Codex exec wraps text() output with completion and timing metadata.
+    // Strip only the successful envelope; incomplete/error output must still fail.
+    const json = textBlocks[0]!.replace(
+      /^Script completed\r?\nWall time \d+(?:\.\d+)? seconds\r?\nOutput:\r?\n/,
+      "",
+    );
+    parsed = JSON.parse(json);
   } catch {
     throw new Error("Native nested tool inventory returned invalid JSON");
   }
@@ -442,10 +449,13 @@ function execCommandGatewayProgram(
   ]);
 }
 
-export async function runChatGptMcpServer(options: {
+export interface ChatGptMcpServerOptions {
   brokerSocketPath: string;
   contract?: ChatGptMcpContract;
-}): Promise<void> {
+}
+
+/** The tool contract and broker authorization are independent of the wire transport. */
+export function createChatGptMcpServer(options: ChatGptMcpServerOptions): McpServer {
   const contract = options.contract ?? "native";
   const server = new McpServer(
     { name: contract === "safe" ? "codex-safe" : "codex-native", version: VERSION },
@@ -974,5 +984,18 @@ export async function runChatGptMcpServer(options: {
     );
   }
 
-  await server.connect(observeMcpToolCalls(new StdioServerTransport(), BRIDGE_TOOL_NAMES));
+  return server;
+}
+
+export async function connectChatGptMcpServer(
+  options: ChatGptMcpServerOptions,
+  transport: Transport,
+): Promise<McpServer> {
+  const server = createChatGptMcpServer(options);
+  await server.connect(observeMcpToolCalls(transport, BRIDGE_TOOL_NAMES));
+  return server;
+}
+
+export async function runChatGptMcpServer(options: ChatGptMcpServerOptions): Promise<void> {
+  await connectChatGptMcpServer(options, new StdioServerTransport());
 }

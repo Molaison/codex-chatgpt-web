@@ -13,6 +13,8 @@ const turndown = new TurndownService({
 
 turndown.use(gfm);
 turndown.remove(["button", "script", "style"]);
+// Images are archived separately and appended once as stable, saved-asset links.
+// Transient blob/signed URLs must not rewrite the append-only text stream.
 turndown.addRule("removeImages", {
   filter: node => ["IMG", "PICTURE", "SOURCE"].includes(node.nodeName),
   replacement: () => "",
@@ -37,6 +39,17 @@ turndown.addRule("linkInlineFilePaths", {
     const target = path.replaceAll("\\", "/");
     // Code text becomes a plain link label, where backslashes and emphasis must be escaped.
     return `[${turndown.escape(path)}](<${target}>)`;
+  },
+});
+
+// File links are deliverables, not navigation chrome. Keep their literal target so Codex can
+// expose/download the generated file instead of receiving label-only text.
+turndown.addRule("preserveFileLinks", {
+  filter: node => node.nodeName === "A"
+    && /^(?:file:|sandbox:|attachment:)/i.test((node as HTMLElement).getAttribute("href") ?? ""),
+  replacement: (content, node) => {
+    const target = (node as HTMLElement).getAttribute("href")!;
+    return `[${content || target}](<${target}>)`;
   },
 });
 turndown.addRule("compactListItem", {

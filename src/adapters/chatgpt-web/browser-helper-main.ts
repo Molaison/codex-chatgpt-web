@@ -15,16 +15,26 @@ interface RunMessage {
   type: "run";
   id: string;
   config: {
+    accountId?: string;
+    conversationStoreDirectory?: string;
+    imageOutputDirectory?: string;
+    downloadDirectory?: string;
+    downloadBaseUrl?: string;
     appName: string;
     browserHostDescriptorPath: string;
     browserDiagnosticsPath?: string;
     turnTimeoutMs: number;
     autoApproveToolCalls: boolean;
     useSavedChats?: boolean;
+    standardConcurrencyLimit?: number;
+    proConcurrencyLimit?: number;
   };
   turn: {
     traceId: string;
     modelId: string;
+    project?: BrowserTurn["project"];
+    sessionMode?: BrowserTurn["sessionMode"];
+    deferTextUntilComplete?: BrowserTurn["deferTextUntilComplete"];
     reasoning?: string;
     modelFamily?: "5.6" | "6";
     capabilities: ChatGptWebCapabilities;
@@ -192,11 +202,18 @@ async function run(message: RunMessage): Promise<void> {
     chatgptWeb: {
       appName: message.config.appName,
       browserHost: "launcher",
+      accountId: message.config.accountId,
+      conversationStoreDirectory: message.config.conversationStoreDirectory,
+      imageOutputDirectory: message.config.imageOutputDirectory,
+      downloadDirectory: message.config.downloadDirectory,
+      downloadBaseUrl: message.config.downloadBaseUrl,
       browserHostDescriptorPath: message.config.browserHostDescriptorPath,
       browserDiagnosticsPath: message.config.browserDiagnosticsPath,
       turnTimeoutMs: message.config.turnTimeoutMs,
       autoApproveToolCalls: message.config.autoApproveToolCalls,
       useSavedChats: message.config.useSavedChats === true,
+      standardConcurrencyLimit: message.config.standardConcurrencyLimit,
+      proConcurrencyLimit: message.config.proConcurrencyLimit,
     },
   };
   const abortController = new AbortController();
@@ -219,6 +236,9 @@ async function run(message: RunMessage): Promise<void> {
   const turn: BrowserTurn = {
     traceId: message.turn.traceId,
     modelId: message.turn.modelId,
+    ...(message.turn.project ? { project: message.turn.project } : {}),
+    ...(message.turn.sessionMode ? { sessionMode: message.turn.sessionMode } : {}),
+    ...(message.turn.deferTextUntilComplete ? { deferTextUntilComplete: true } : {}),
     reasoning: message.turn.reasoning,
     ...(message.turn.modelFamily ? { modelFamily: message.turn.modelFamily } : {}),
     capabilities: message.turn.capabilities,

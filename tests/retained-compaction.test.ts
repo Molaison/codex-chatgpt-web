@@ -27,6 +27,7 @@ import {
   createChatGptWebAdapter,
 } from "../src/adapters/chatgpt-web/index";
 import { SUMMARY_PREFIX } from "../src/responses/compaction";
+import { CHATGPT_COMPACTION_PROMPT_JSON_BYTE_BUDGET, chatGptPromptJsonBytes } from "../src/adapters/chatgpt-web/prompt";
 import {
   ChatGptTextFeed,
   ChatGptTraceFeed,
@@ -1260,7 +1261,12 @@ test("a compact HTTP observer can reconnect without sending a second retained-ch
   }
 });
 
-test.each([false, true])("structured compact rebuilds canonical context when its retained source is absent (Bigger Context=%s)", async experimentalBiggerContext => {
+test.each([
+  { name: "plain QA", experimentalBiggerContext: false, oversized: "none" },
+  { name: "QA with legacy Bigger Context enabled", experimentalBiggerContext: true, oversized: "none" },
+  { name: "QA trims oversized older history", experimentalBiggerContext: true, oversized: "history" },
+  { name: "QA rejects oversized final question", experimentalBiggerContext: true, oversized: "final" },
+])("structured compact rebuilds canonical context when its retained source is absent ($name)", async ({ experimentalBiggerContext, oversized }) => {
   const root = mkdtempSync(join(shortSocketTempRoot(), "cgw-missing-retained-compact-"));
   const provider: CodexProviderConfig = {
     adapter: "chatgpt-web",
@@ -1278,27 +1284,44 @@ test.each([false, true])("structured compact rebuilds canonical context when its
   const worker = ChatGptBrowserWorker.forProvider(provider);
   const originalRun = worker.run.bind(worker);
   let browserStarts = 0;
+  let submittedPrompts = 0;
   (worker as unknown as { run: (turn: BrowserTurn) => Promise<string> }).run = async turn => {
     browserStarts += 1;
     expect(turn.requireRetainedConversation).toBeUndefined();
     expect(turn.conversationKey).toBeUndefined();
     expect(turn.compaction).toBeTrue();
+    expect(turn.capabilities.localToolsEnabled).toBeFalse();
     const prepared = await turn.prepare();
-    const contextText = prepared.multipart?.parts.join("\n") ?? prepared.text;
-    expect(contextText).toContain("Original task");
-    expect(contextText).toContain("Continue with the next step");
-    if (experimentalBiggerContext) {
-      expect(prepared.multipart!.parts).toHaveLength(6);
-      expect(prepared.trimmedCompactionMessages).toBeUndefined();
-      const lastRecord = prepared.multipart!.parts.flatMap(part => JSON.parse(part).records).at(-1);
-      expect(lastRecord.message.content).toBe(compact.context.messages.at(-1)!.content);
+    try {
+      expect(prepared.multipart).toBeUndefined();
+      expect(prepared.text).toContain("Original task");
+      expect(prepared.text).toContain("Continue with the next step");
+      expect(prepared.text).toContain(compact.context.messages.at(-1)!.content as string);
+      expect(prepared.text).not.toMatch(/INTERNAL_RUNTIME_|codex_context_json|codex_multipart|Codex Native|<environment_context>/);
+      expect(chatGptPromptJsonBytes(prepared.text)).toBeLessThanOrEqual(CHATGPT_COMPACTION_PROMPT_JSON_BYTE_BUDGET);
+      if (oversized === "history") {
+        expect(prepared.trimmedCompactionMessages).toBe(1);
+        expect(prepared.text).not.toContain("OLDER_HISTORY_SENTINEL");
+      } else {
+        expect(prepared.trimmedCompactionMessages).toBeUndefined();
+      }
+      submittedPrompts += 1;
+      return "Fallback checkpoint from canonical conversation context";
+    } finally {
+      prepared.release();
     }
-    prepared.release();
-    return "Fallback checkpoint from canonical Codex context";
   };
   const compact = request(true);
+  compact.context.systemPrompt = ["INTERNAL_RUNTIME_SYSTEM"];
+  compact.context.messages.unshift(
+    { role: "developer", content: "INTERNAL_RUNTIME_DEVELOPER", timestamp: 0 },
+    { role: "user", origin: "codex_skill", content: "INTERNAL_RUNTIME_SKILL", timestamp: 0 },
+    { role: "user", content: "<environment_context><cwd>/private</cwd><codex_dev_mode>All outer tool effects are explicitly simulated.</codex_dev_mode></environment_context>", timestamp: 0 },
+  );
+  if (oversized === "history") compact.context.messages.unshift({ role: "user", content: "OLDER_HISTORY_SENTINEL" + "x".repeat(160_000), timestamp: 0 });
+  if (oversized === "final") compact.context.messages.at(-1)!.content += "x".repeat(160_000);
+  const originalContext = structuredClone(compact.context);
   const events: AdapterEvent[] = [];
-  if (experimentalBiggerContext) compact.context.messages.at(-1)!.content += "x".repeat(160_000);
   try {
     await createChatGptWebAdapter(provider).runTurn!(
       compact,
@@ -1306,8 +1329,16 @@ test.each([false, true])("structured compact rebuilds canonical context when its
       event => events.push(event),
     );
     expect(browserStarts).toBe(1);
+    expect(compact.context).toEqual(originalContext);
+    if (oversized === "final") {
+      expect(submittedPrompts).toBe(0);
+      expect(events.filter(event => event.type === "text_delta" || event.type === "done")).toEqual([]);
+      expect(events.at(-1)).toMatchObject({ type: "error", status: 400, errorType: "invalid_request_error", code: "context_length_exceeded", retryable: false });
+      return;
+    }
+    expect(submittedPrompts).toBe(1);
     expect(events.some(event => event.type === "text_delta"
-      && event.text.includes("Fallback checkpoint from canonical Codex context"))).toBeTrue();
+      && event.text.includes("Fallback checkpoint from canonical conversation context"))).toBeTrue();
     expect(events.some(event => event.type === "text_delta"
       && event.text.includes("CODEX_LATEST_USER_PROMPT_JSON"))).toBeTrue();
     expect(events.at(-1)).toMatchObject({ type: "done", stopReason: "stop", endTurn: true });
