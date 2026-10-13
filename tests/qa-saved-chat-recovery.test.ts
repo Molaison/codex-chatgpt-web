@@ -111,7 +111,7 @@ function workerHarness(f: Fixture, page: Page, key: string, options: {
 } = {}) {
   const turnCapabilities = { ...capabilities, localToolsEnabled: options.localTools === true };
   const saved = options.saved !== false && (options.sessionMode !== "temporary" || f.store.lookup(key) !== undefined);
-  const state = { fresh: 0, full: 0, incremental: 0, sends: 0, attached: "", reuseConnector: false, localTools: false };
+  const state = { fresh: 0, full: 0, incremental: 0, sends: 0, attached: "", localTools: false };
   const worker: any = ChatGptBrowserWorker.forProvider({ adapter: "chatgpt-web", baseUrl: "browser://fixture-" + randomUUID(),
     chatgptWeb: { accountId: "account-1", useSavedChats: options.saved !== false, conversationStoreDirectory: f.root,
       browserDiagnosticsPath: join(f.root, "diagnostics"), storageStatePath: join(f.root, "browser-state.json") } });
@@ -128,7 +128,6 @@ function workerHarness(f: Fixture, page: Page, key: string, options: {
       _baseline: unknown, _capture: unknown, _signal: unknown, _refresh: unknown, _budget: unknown, reuseConnector: boolean) => {
       state.attached = text;
       state.localTools = localTools;
-      state.reuseConnector = reuseConnector;
       if (options.wrongChatBeforeSend) await page.goto(childUrl);
     },
     sendAttachedPrompt: async (_page: Page, _baseline: unknown, _capture: unknown, _signal: unknown,
@@ -232,24 +231,24 @@ browserTest("Full temporary sessions promote by native Save once and never downg
     await expect(first.run()).rejects.toBe(first.finished);
     expect(page.url()).toBe(temporaryUrl);
     expect(f.store.lookup("full")).toBeUndefined();
-    expect(first.state).toMatchObject({ full: 1, localTools: true, reuseConnector: false });
+    expect(first.state).toMatchObject({ full: 1, localTools: true });
     const next = workerHarness(f, page, "full", { localTools: true, sessionMode: "temporary", reused: true });
     await expect(next.run()).rejects.toBe(next.finished);
-    expect(next.state).toMatchObject({ incremental: 1, localTools: true, reuseConnector: true });
+    expect(next.state).toMatchObject({ incremental: 1, localTools: true });
     expect(page.url()).toBe(temporaryUrl);
     const promote = workerHarness(f, page, "full", { localTools: true, reused: true });
     await expect(promote.run()).rejects.toBe(promote.finished);
-    expect(promote.state).toMatchObject({ incremental: 1, localTools: true, reuseConnector: false, fresh: 0 });
+    expect(promote.state).toMatchObject({ incremental: 1, localTools: true, fresh: 0 });
     expect(f.store.lookup("full")?.url).toBe(parentUrl);
     expect(await page.locator("[data-user-message-bubble]").innerText()).toBe("Earlier question");
     const noDowngrade = workerHarness(f, page, "full", { localTools: true, sessionMode: "temporary", reused: true });
     await expect(noDowngrade.run()).rejects.toBe(noDowngrade.finished);
-    expect(noDowngrade.state).toMatchObject({ incremental: 1, localTools: true, reuseConnector: true });
+    expect(noDowngrade.state).toMatchObject({ incremental: 1, localTools: true });
     expect(page.url()).toBe(parentUrl);
     await page.close();
     const restored = workerHarness(f, await f.context.newPage(), "full", { localTools: true, sessionMode: "temporary" });
     await expect(restored.run()).rejects.toBe(restored.finished);
-    expect(restored.state).toMatchObject({ incremental: 1, fresh: 0, localTools: true, reuseConnector: false });
+    expect(restored.state).toMatchObject({ incremental: 1, fresh: 0, localTools: true });
     expect(f.store.lookup("full")?.url).toBe(parentUrl);
   });
 }, 60_000);
@@ -258,7 +257,7 @@ browserTest("Full ordinary effort first submission is saved with tools enabled",
   await fixture(async f => {
     const run = workerHarness(f, await f.context.newPage(), "full-default", { localTools: true });
     await expect(run.run()).rejects.toBe(run.finished);
-    expect(run.state).toMatchObject({ fresh: 1, full: 1, localTools: true, reuseConnector: false });
+    expect(run.state).toMatchObject({ fresh: 1, full: 1, localTools: true });
     expect(f.store.lookup("full-default")?.url).toBe(parentUrl);
   });
 }, 15_000);

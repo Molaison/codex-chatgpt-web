@@ -57,11 +57,13 @@ export interface SetupOptions {
   forceLogin?: boolean;
   autoApproveToolCalls?: boolean;
   experimentalBiggerContext?: boolean;
+  composerPredictionsEnabled?: boolean;
   experimentalSkillAttachments?: boolean;
   experimentalFreshConversationPerTurn?: boolean;
   useSavedChats?: boolean;
   zeroRiskProEnabled?: boolean;
   replaceCodexRoute?: boolean;
+  preserveDisconnectedRoute?: boolean;
   restartService?: boolean;
   acknowledgedUnofficial?: boolean;
   tunnelId?: string;
@@ -152,6 +154,7 @@ function meaningfulRuntimeChange(before: AppConfig, after: AppConfig): boolean {
     extraHighAvailable: before.extraHighAvailable,
     proAvailable: before.proAvailable,
     experimentalBiggerContext: before.experimentalBiggerContext,
+    composerPredictionsEnabled: before.composerPredictionsEnabled,
     experimentalSkillAttachments: before.experimentalSkillAttachments,
     experimentalFreshConversationPerTurn: before.experimentalFreshConversationPerTurn,
     useSavedChats: before.useSavedChats,
@@ -184,6 +187,7 @@ function meaningfulRuntimeChange(before: AppConfig, after: AppConfig): boolean {
     extraHighAvailable: after.extraHighAvailable,
     proAvailable: after.proAvailable,
     experimentalBiggerContext: after.experimentalBiggerContext,
+    composerPredictionsEnabled: after.composerPredictionsEnabled,
     experimentalSkillAttachments: after.experimentalSkillAttachments,
     experimentalFreshConversationPerTurn: after.experimentalFreshConversationPerTurn,
     useSavedChats: after.useSavedChats,
@@ -206,11 +210,27 @@ export function tunnelWorkerRuntimeChanged(before: AppConfig | undefined, after:
     || JSON.stringify(before.tunnel) !== JSON.stringify(after.tunnel);
 }
 
+/**
+ * On Windows, EACCES can indicate a reserved port, an exclusive binding, or a security policy.
+ * The error alone does not identify which one prevented the listener from starting.
+ */
+export function portBindFailureMessage(
+  host: string,
+  port: number,
+  error: NodeJS.ErrnoException,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  const message = `Cannot bind ${host}:${port}: ${error.message}`;
+  if (platform !== "win32" || error.code !== "EACCES") return message;
+  return `${message}. Windows may have reserved this port, another service may hold it exclusively, or security software may be blocking it. `
+    + "See \"Windows: Cannot bind the local port (EACCES)\" in TROUBLESHOOTING.md";
+}
+
 async function assertPortAvailable(host: string, port: number): Promise<void> {
   await new Promise<void>((resolveAvailable, rejectAvailable) => {
     const server = createServer();
     server.unref();
-    server.once("error", error => rejectAvailable(new Error(`Cannot bind ${host}:${port}: ${error.message}`)));
+    server.once("error", error => rejectAvailable(new Error(portBindFailureMessage(host, port, error))));
     server.listen(port, host, () => server.close(error => error ? rejectAvailable(error) : resolveAvailable()));
   });
 }
@@ -285,6 +305,9 @@ function baseConfig(
     delete config.browserHostDescriptorPath;
   }
   if (options.autoApproveToolCalls !== undefined) config.autoApproveToolCalls = options.autoApproveToolCalls;
+  if (options.composerPredictionsEnabled !== undefined) {
+    config.composerPredictionsEnabled = options.composerPredictionsEnabled;
+  }
   if (options.experimentalSkillAttachments !== undefined) {
     config.experimentalSkillAttachments = options.experimentalSkillAttachments;
   }
@@ -353,14 +376,23 @@ async function inspectLauncherCapabilities(
     refreshAccountCapabilities,
     config.browserInteractionMode,
   );
+  if (!detectCapabilities) {
+    // Updating the local runtime or its settings does not require a live web session.
+    // Only initial setup and an explicit model refresh inspect the account.
+    return {
+      solAvailable: existing!.solAvailable,
+      extraHighAvailable: existing!.extraHighAvailable === true,
+      proAvailable: existing!.proAvailable,
+    };
+  }
   const inspected = await inspectLauncherBrowserHost(config.browserHostDescriptorPath!, {
-    detectCapabilities,
+    detectCapabilities: true,
     expectedProfile,
   });
   return {
-    solAvailable: detectCapabilities ? inspected.solAvailable === true : existing!.solAvailable,
-    extraHighAvailable: detectCapabilities ? inspected.extraHighAvailable === true : existing!.extraHighAvailable === true,
-    proAvailable: detectCapabilities ? inspected.proAvailable === true : existing!.proAvailable,
+    solAvailable: inspected.solAvailable === true,
+    extraHighAvailable: inspected.extraHighAvailable === true,
+    proAvailable: inspected.proAvailable === true,
   };
 }
 
@@ -670,6 +702,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
   if (!migratingTerminalRuntime) removeLegacyRuntimeArtifacts(config);
   installCodexIntegration(config, {
     replaceExistingRoute: options.replaceCodexRoute,
+    preserveDisconnectedRoute: options.preserveDisconnectedRoute,
   });
 
   return {
@@ -712,6 +745,7 @@ export async function setupDevProfile(options: SetupOptions): Promise<DevProfile
     config.extraHighAvailable = capabilities.solAvailable && capabilities.extraHighAvailable;
     config.proAvailable = capabilities.solAvailable && capabilities.proAvailable;
   }
+
 
   await configureTunnel(config, existing, options);
   // DEV uses the same supervisor-owned startup after this configuration is committed.

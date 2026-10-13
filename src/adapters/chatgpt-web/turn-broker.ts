@@ -8,6 +8,23 @@ import {
   type CompactionTransactionHandle,
 } from "./compaction-transaction";
 import type { ChatGptTurnEnvironment } from "./environment";
+import { chatGptToolTimeoutError } from "./adapter-error";
+import { subagentModelObservation } from "./mcp-observation";
+
+interface BrokerRetirementFailure {
+  code: "codex_tool_timeout";
+  tool: string;
+  timeoutMs: number;
+}
+
+function assertRetirementFailure(value: unknown): asserts value is BrokerRetirementFailure {
+  const failure = value as Partial<BrokerRetirementFailure> | null;
+  if (!failure || failure.code !== "codex_tool_timeout"
+    || typeof failure.tool !== "string" || !/^[A-Za-z0-9_.-]{1,256}$/.test(failure.tool)
+    || !Number.isSafeInteger(failure.timeoutMs) || failure.timeoutMs! <= 0) {
+    throw new Error("Invalid Codex tool retirement failure");
+  }
+}
 
 interface PendingTurn extends ChatGptTurnEnvironment {
   expiresAt?: number;
@@ -73,6 +90,7 @@ interface TurnChannel {
   compactionRequested: boolean;
   compactionResult?: BrokerToolResult;
   compactionDeliveryCount: number;
+  onCompactionProgress?: () => void;
   safe?: SafeTurnControl;
   /** Every MCP request owns a lease from token claim until its handler has settled. */
   activities: Set<string>;
@@ -82,7 +100,7 @@ interface TurnChannel {
   activityRevision: number;
   completionCommitted: boolean;
   completionRevision?: number;
-  retirementWaiters: Set<SafeWaiter<void>>;
+  retirementWaiters: Set<SafeWaiter<BrokerRetirementFailure | undefined>>;
   batchTimer?: ReturnType<typeof setTimeout>;
 }
 
@@ -130,6 +148,7 @@ interface BrokerRequest {
   surfaceNonce?: string;
   finalAnswer?: string;
   contract?: "native" | "safe";
+  failure?: BrokerRetirementFailure;
 }
 
 interface BrokerResponse {
@@ -227,7 +246,7 @@ export interface TurnBrokerOwner {
   compactionDeliveryCount(token: string): number | Promise<number>;
   beginCompletionFence(token: string): number | undefined | Promise<number | undefined>;
   commitCompletionFence(token: string, revision: number): boolean | Promise<boolean>;
-  waitForRetirement(token: string, signal?: AbortSignal): Promise<void>;
+  waitForRetirement(token: string, signal?: AbortSignal): Promise<BrokerRetirementFailure | undefined>;
   revoke(token: string, reason?: Error): void | Promise<void>;
 }
 
@@ -436,7 +455,7 @@ export class TurnBroker implements TurnBrokerOwner {
       throw new Error(`tool call was completed before it was delivered: ${callId}`);
     }
     channel.invocations.delete(callId);
-    console.info(`[chatgpt-web] broker trace=${channel.traceId} completed call=${callId.slice(0, 17)} pending=${channel.invocations.size}`);
+    console.info(`[chatgpt-web] broker trace=${channel.traceId} completed call=${callId.slice(0, 17)} pending=${channel.invocations.size} isError=${result.isError === true}`);
     invocation.resolve(result);
   }
 
@@ -468,14 +487,14 @@ export class TurnBroker implements TurnBrokerOwner {
     return true;
   }
 
-  waitForRetirement(token: string, signal?: AbortSignal): Promise<void> {
+  waitForRetirement(token: string, signal?: AbortSignal): Promise<BrokerRetirementFailure | undefined> {
     this.prune();
     const channel = this.channels.get(token);
-    if (!channel) return Promise.resolve();
+    if (!channel) return Promise.resolve(undefined);
     return this.waitForSafeState(channel.retirementWaiters, signal, "turn retirement wait aborted");
   }
 
-  requestCompaction(token: string, queuedResult: BrokerToolResult): number {
+  requestCompaction(token: string, queuedResult: BrokerToolResult, onProgress?: () => void): number {
     this.prune();
     const channel = this.channels.get(token);
     if (!channel) throw new Error("turn token is invalid or expired");
@@ -485,6 +504,7 @@ export class TurnBroker implements TurnBrokerOwner {
     }
     channel.compactionRequested = true;
     channel.compactionResult = structuredClone(queuedResult);
+    channel.onCompactionProgress = onProgress;
     if (channel.batchTimer) {
       clearTimeout(channel.batchTimer);
       channel.batchTimer = undefined;
@@ -495,6 +515,7 @@ export class TurnBroker implements TurnBrokerOwner {
       if (!invocation) continue;
       channel.invocations.delete(callId);
       channel.compactionDeliveryCount += 1;
+      channel.onCompactionProgress?.();
       invocation.resolve(structuredClone(queuedResult));
     }
     if (queued.length > 0) {
@@ -610,7 +631,7 @@ export class TurnBroker implements TurnBrokerOwner {
     return this.waitForSafeState(safe.completionWaiters, signal, "Zero Risk turn completion wait aborted");
   }
 
-  revoke(token: string, reason = new Error("Codex turn binding was revoked")): void {
+  revoke(token: string, reason = new Error("Codex turn binding was revoked"), failure?: BrokerRetirementFailure): void {
     const channel = this.channels.get(token);
     if (!channel) return;
     console.info(`[chatgpt-web] broker_retired ${JSON.stringify({
@@ -620,6 +641,7 @@ export class TurnBroker implements TurnBrokerOwner {
       deliveredTools: channel.deliveredCallIds.size,
       activeMcpRequests: channel.activities.size,
       completionCommitted: channel.completionCommitted,
+      ...(failure ? { failure } : {}),
     })}`);
     this.channels.delete(token);
     this.pending.delete(token);
@@ -634,7 +656,7 @@ export class TurnBroker implements TurnBrokerOwner {
       this.rejectSafeWaiters(channel.safe.completionWaiters, reason);
     }
     this.retire(this.retiredTokens, token, channel.traceId);
-    this.resolveSafeWaiters(channel.retirementWaiters, undefined);
+    this.resolveSafeWaiters(channel.retirementWaiters, failure);
     this.rejectChannel(channel, reason);
   }
 
@@ -759,7 +781,7 @@ export class TurnBroker implements TurnBrokerOwner {
 
   private start(): Promise<void> {
     if (this.startPromise) return this.startPromise;
-    this.startPromise = new Promise<void>((resolveStart, rejectStart) => {
+    const attempt = new Promise<void>((resolveStart, rejectStart) => {
       const windowsPipe = isWindowsPipeEndpoint(this.socketPath);
       if (!windowsPipe) {
         // sun_path is a fixed-size field in the kernel, so an over-long path fails inside listen()
@@ -851,7 +873,16 @@ export class TurnBroker implements TurnBrokerOwner {
         });
       });
     });
-    return this.startPromise;
+    this.startPromise = attempt;
+    // The daemon keeps serving after a failed startup bind, and the previous owner can release the
+    // endpoint moments later. Forget the failed attempt so the next turn probes again instead of
+    // inheriting a startup error for the rest of the process lifetime.
+    attempt.catch(() => {
+      if (this.startPromise !== attempt) return;
+      this.startPromise = undefined;
+      if (this.server && !this.server.listening) this.server = undefined;
+    });
+    return attempt;
   }
 
   private handleSocket(socket: Socket): void {
@@ -997,7 +1028,9 @@ export class TurnBroker implements TurnBrokerOwner {
     }
     if (request.method === "owner_wait_retirement") {
       if (!request.token) throw new Error("turn owner token is required");
-      return this.waitForRetirement(request.token, socketSignal).then(() => ({ retired: true }));
+      return this.waitForRetirement(request.token, socketSignal).then(failure => ({
+        retired: true, ...(failure ? { failure } : {}),
+      }));
     }
     if (request.method === "owner_revoke") {
       if (!request.token) throw new Error("turn owner token is required");
@@ -1122,7 +1155,12 @@ export class TurnBroker implements TurnBrokerOwner {
         : "internal Codex turn binding is invalid or expired");
     }
     if (request.method === "release") {
-      this.revoke(binding.token);
+      if (request.failure !== undefined) {
+        assertRetirementFailure(request.failure);
+        this.revoke(binding.token, chatGptToolTimeoutError(request.failure.tool, request.failure.timeoutMs), request.failure);
+      } else {
+        this.revoke(binding.token);
+      }
       return { released: true };
     }
     if (request.method === "resolve") return { environment: binding.channel.environment };
@@ -1131,6 +1169,7 @@ export class TurnBroker implements TurnBrokerOwner {
       const result = binding.channel.compactionResult;
       if (!result) throw new Error("Codex context compaction control result is unavailable");
       binding.channel.compactionDeliveryCount += 1;
+      binding.channel.onCompactionProgress?.();
       console.info(
         `[chatgpt-web] broker trace=${binding.channel.traceId} intercepted a post-compaction MCP call`,
       );
@@ -1152,6 +1191,10 @@ export class TurnBroker implements TurnBrokerOwner {
       console.info(
         `[chatgpt-web] broker trace=${binding.channel.traceId} queued call=${callId.slice(0, 17)} tool=${wireName} waiters=${binding.channel.waiters.size}`,
       );
+      const modelObservation = !toolRequest.freeform && subagentModelObservation(wireName, toolRequest.arguments);
+      if (modelObservation) console.info(`[chatgpt-web] subagent_model_requested ${JSON.stringify({
+        traceId: binding.channel.traceId, callId: callId.slice(0, 17), tool: wireName, ...modelObservation,
+      })}`);
       this.scheduleToolWaiters(binding.channel);
     });
   }
@@ -1501,14 +1544,16 @@ export class RemoteTurnBroker implements TurnBrokerOwner {
     return response.committed;
   }
 
-  async waitForRetirement(token: string, signal?: AbortSignal): Promise<void> {
-    const response = await callTurnBroker<{ retired?: unknown }>(
+  async waitForRetirement(token: string, signal?: AbortSignal): Promise<BrokerRetirementFailure | undefined> {
+    const response = await callTurnBroker<{ retired?: unknown; failure?: unknown }>(
       this.socketPath,
       { method: "owner_wait_retirement", token },
       null,
       signal,
     );
     if (response.retired !== true) throw new Error("DEV turn owner received an invalid retirement result");
+    if (response.failure !== undefined) assertRetirementFailure(response.failure);
+    return response.failure;
   }
 
   async revoke(token: string, _reason?: Error): Promise<void> {

@@ -74,7 +74,11 @@ test("QA chat identity survives model, effort, family and context compaction cha
   ];
   for (const variant of variants) {
     expect(chatGptConversationKey(variant, "account-one", qa)).toBe(original);
-    expect(chatGptConversationKey(variant, "account-one")).not.toBe(chatGptConversationKey(first, "account-one"));
+    if (variant.options.reasoning === first.options.reasoning) {
+      expect(chatGptConversationKey(variant, "account-one")).not.toBe(chatGptConversationKey(first, "account-one"));
+    } else {
+      expect(chatGptConversationKey(variant, "account-one")).toBe(chatGptConversationKey(first, "account-one"));
+    }
   }
   expect(chatGptConversationKey(first, "account-two", qa)).not.toBe(original);
   expect(chatGptConversationKey(request("different-thread", "turn-1", [message("user", "Hello")]), "account-one", qa)).not.toBe(original);
