@@ -37,6 +37,9 @@ const builderArgs = [
   "never",
 ];
 if (target === "--mac" && !env.CSC_LINK && !env.CSC_NAME) {
+  // PR builds must still apply the explicit ad-hoc identity. Auto-discovery is
+  // disabled above, so this does not opt a configured signing certificate in.
+  env.CSC_FOR_PULL_REQUEST = "true";
   builderArgs.push("--config.mac.identity=-");
 }
 if (target === "--linux") {
