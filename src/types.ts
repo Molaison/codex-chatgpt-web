@@ -7,8 +7,12 @@ export interface CodexParsedRequest {
   _rawBody?: unknown;
   /** Set only by the trusted Web route, never parsed from caller-supplied model metadata. */
   _chatgptModelFamily?: "5.6" | "6";
+  /** Full session mode resolved from the public effort at the request boundary. */
+  _chatgptSessionMode?: "temporary" | "persistent";
   /** Number of leading raw input items restored from local previous_response_id state. */
   _replayPrefixLen?: number;
+  /** Server-verified durable alias; a fresh browser prompt must not replace the saved chat. */
+  _chatgptSavedConversationContinuation?: boolean;
   /**
    * Dedicated native compaction, identified by compaction_trigger or canonical responses/memento
    * metadata. Both run without local tools; their output contracts differ.
@@ -42,6 +46,8 @@ export interface CodexUserMessage {
   /** Native Responses metadata, never inferred from message text. */
   origin?: "codex_skill";
   content: string | CodexContentPart[];
+  /** 纯问答历史用的同一消息问答子集；由原生 content_item_kinds 决定，不从正文推断。 */
+  qaContent?: string | CodexContentPart[];
   timestamp: number;
 }
 
@@ -71,6 +77,8 @@ export interface CodexDeveloperMessage {
 
 export interface CodexToolResultMessage {
   role: "toolResult";
+  /** Validated native delegation text; never inferred from ordinary tool output. */
+  nativeDelegation?: string;
   toolCallId: string;
   toolName: string;
   /** MCP namespace from the originating tool call, if any. */
@@ -94,8 +102,15 @@ export interface CodexImageContent {
   detail?: string;
 }
 
-/** A user/developer message content part: text or an image (vision). */
-export type CodexContentPart = CodexTextContent | CodexImageContent;
+export interface CodexFileContent {
+  type: "file";
+  filename: string;
+  /** Inline base64 or data URL; never embed binary content into prompt text. */
+  fileData: string;
+}
+
+/** A user/developer message content part, preserving native attachments. */
+export type CodexContentPart = CodexTextContent | CodexImageContent | CodexFileContent;
 
 export interface CodexThinkingContent {
   type: "thinking";
@@ -264,6 +279,13 @@ export interface CodexProviderConfig {
   modelDefaultReasoningEfforts?: Record<string, string>;
   noReasoningModels?: string[];
   chatgptWeb?: {
+    /** Stable, non-secret account profile name. Different profiles never share browser workers or conversations. */
+    accountId?: string;
+    /** Durable QA mappings; relative to the account home, default runtime/conversations. */
+    conversationStoreDirectory?: string;
+    imageOutputDirectory?: string;
+    downloadDirectory?: string;
+    downloadBaseUrl?: string;
     /** ChatGPT custom connector attached to tool-capable temporary chats. */
     appName?: string;
     /** Whether ChatGPT DOM interaction is automatic or explicitly driven by the user. */
@@ -288,6 +310,10 @@ export interface CodexProviderConfig {
     lunaCheckpointStatePath?: string;
     /** Optional explicit safety ceiling. Browser turns have no absolute deadline by default. */
     turnTimeoutMs?: number;
+    /** Maximum concurrent non-Pro browser turns. Defaults to five. */
+    standardConcurrencyLimit?: number;
+    /** Maximum concurrent Pro browser turns. Defaults to two. */
+    proConcurrencyLimit?: number;
     /**
      * Seconds of adapter silence before the Responses bridge cancels a turn as a hung upstream.
      * The adapter heartbeats every CHATGPT_WEB_ADAPTER_HEARTBEAT_MS for the whole of a turn, so a
@@ -311,7 +337,7 @@ export interface CodexProviderConfig {
     experimentalSkillAttachments?: boolean;
     /** Explicitly rebuild each automatic turn in a fresh browser conversation. */
     experimentalFreshConversationPerTurn?: boolean;
-    /** Use ordinary ChatGPT history for task conversations. Default: Temporary Chat. */
+    /** Save automatic QA chats by default. Explicit false selects Temporary Chat and disables durable mappings. */
     useSavedChats?: boolean;
   };
 }

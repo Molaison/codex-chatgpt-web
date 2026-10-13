@@ -969,6 +969,37 @@ test("a restart recovery turn without a new user instruction fails terminally in
   expect(adapterConstructions).toBe(0);
 });
 
+test.each([true, false])("a native turn with no instruction fails before browser construction, stream=%s", async stream => {
+  const config = defaultConfig("browser-only");
+  let adapterConstructions = 0;
+  const response = await responseRequest(new Request("http://127.0.0.1:17841/v1/responses", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      model: "chatgpt-web/high",
+      stream,
+      client_metadata: {
+        "x-codex-turn-metadata": JSON.stringify({ thread_id: "thread_context_only", turn_id: "turn_context_only" }),
+      },
+      input: [{
+        type: "message", role: "developer", id: "msg_context_only",
+        content: [{ type: "input_text", text: "Refreshed client context" }],
+        internal_chat_message_metadata_passthrough: { turn_id: "turn_context_only" },
+      }],
+    }),
+  }), config, () => {
+    adapterConstructions += 1;
+    throw new Error("missing instruction must not construct a browser adapter");
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ error: {
+    code: "invalid_request_error",
+    type: "invalid_request_error",
+    message: "ChatGPT web requires a current-turn user message for browser-session replay",
+  } });
+  expect(adapterConstructions).toBe(0);
+});
+
 test.each(["alpha/search", "images/generations"])("authenticated lifecycle control aborts active %s before acknowledging cancellation", async path => {
   const config = { ...defaultConfig("browser-only"), port: 0 };
   let upstreamAbortObserved = false;

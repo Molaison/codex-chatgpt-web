@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve, toNamespacedPath } from "node:path";
-import { chatGptTurnUserRevisionHistory, extractChatGptCompactionSourceRevision, extractChatGptTurnEnvironment, extractChatGptTurnIdentity, extractChatGptTurnUserRevision } from "../src/adapters/chatgpt-web/environment";
+import { chatGptEnvironmentDiagnostic, chatGptTurnUserRevisionHistory, extractChatGptCompactionSourceRevision, extractChatGptTurnEnvironment, extractChatGptTurnIdentity, extractChatGptTurnUserRevision } from "../src/adapters/chatgpt-web/environment";
 import { chatGptTurnExecutionKey } from "../src/adapters/chatgpt-web/turn-execution";
 import { rememberCompactionContinuation } from "../src/adapters/chatgpt-web/compaction-continuation";
 import { encodeCompactionSummary, SUMMARY_PREFIX } from "../src/responses/compaction";
@@ -80,7 +80,31 @@ function currentWire(
 }
 
 describe("trusted current Codex environment envelope", () => {
-  test("native cross-task messages keep their instruction, environment and compaction source", () => {
+  test("failed environment diagnostics retain structure but no private content or identifiers", () => {
+    const request = currentWire({ threadId: "PRIVATE_THREAD" });
+    const body = request._rawBody as { input: Array<Record<string, unknown>> };
+    body.input[0]!.internal_chat_message_metadata_passthrough = { turn_id: "turn_current" };
+    body.input[1] = { type: "function_call_output", name: "create_thread", namespace: "codex_tui", id: "PRIVATE_ITEM",
+      output: "<codex_delegation><source_thread_id>PRIVATE_PARENT</source_thread_id><input>PRIVATE_TASK</input></codex_delegation>",
+      internal_chat_message_metadata_passthrough: { turn_id: "turn_current" } };
+    const diagnostic = chatGptEnvironmentDiagnostic(request);
+    expect(diagnostic.instructionIndex).toBe(1);
+    expect(diagnostic.instructionTurn).toBe("current");
+    expect(diagnostic.environmentItems).toEqual([
+      { index: 0, role: "user", nativeFragment: true, turn: "current", itemIdPresent: true, cwdElementPresent: true, workspaceRootsPresent: true },
+    ]);
+    expect(diagnostic.delegationItems).toEqual([
+      { index: 1, route: "codex_tui.create_thread", turn: "current", recognized: true },
+    ]);
+    expect(JSON.stringify(diagnostic)).not.toContain("PRIVATE_");
+    expect(JSON.stringify(diagnostic)).not.toContain(root);
+    const empty = { ...request, _rawBody: { ...body, input: [] } };
+    try { new ChatGptThreadEnvironmentStore().resolve(empty); throw new Error("expected rejection"); }
+    catch (error) { expect(error).toMatchObject({ resolutionBranch: "no_cache_or_lineage" }); }
+  });
+  test.each([
+    ["send_message_to_thread", "codex_app"], ["create_thread", "codex_tui"],
+  ])("native %s/%s keeps its instruction, environment and compaction source", (name, namespace) => {
     const request = currentWire({ threadId: "thread_delegation" });
     const body = request._rawBody as { input: Array<Record<string, unknown>> };
     const context = body.input[0]!;
@@ -89,8 +113,7 @@ describe("trusted current Codex environment envelope", () => {
     context.internal_chat_message_metadata_passthrough = { turn_id: "turn_current" };
     const output = "<codex_delegation>\n  <source_thread_id>01a0bbd4-8de6-78d2-891c-dc329238637a</source_thread_id>\n  <input>Check &lt;sample&gt; &amp; report the result.</input>\n</codex_delegation>";
     const delegation = {
-      type: "function_call_output", id: "fco_delegation", name: "send_message_to_thread",
-      namespace: "codex_app", output,
+      type: "function_call_output", id: "fco_delegation", name, namespace, output,
       internal_chat_message_metadata_passthrough: { turn_id: "turn_current" },
     };
     body.input = [previous, context, delegation];
@@ -1813,4 +1836,164 @@ describe("trusted Codex task environment continuity", () => {
     expect(() => new ChatGptThreadEnvironmentStore(undefined, Date.now, codexHome).resolve(malformed))
       .toThrow("missing cwd");
   });
+});
+
+
+test("same-thread accepted raw history proves untagged continuation without granting new authority", () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), "codex-accepted-history-"));
+  temporaryRoots.push(stateRoot);
+  const path = join(stateRoot, "thread-environments.json");
+  const codexHome = join(stateRoot, "absent-rollouts");
+  const first = currentWire();
+  const initialBody = first._rawBody as { client_metadata: Record<string, string>; input: Array<Record<string, unknown>> };
+  const metadata = JSON.parse(initialBody.client_metadata["x-codex-turn-metadata"]!);
+  const tools: CodexTool[] = [{ name: "current_tool", description: "current", parameters: {} }];
+  const next = parseRequest({ model: "chatgpt-web/gpt-5.6-sol", client_metadata: {
+    "x-codex-turn-metadata": JSON.stringify({ ...metadata, turn_id: "turn_next" }),
+  }, input: [...structuredClone(initialBody.input),
+    { type: "message", role: "assistant", id: "msg_answer", content: [{ type: "output_text", text: "Earlier answer" }] },
+    { type: "message", role: "user", id: "msg_next", content: [{ type: "input_text", text: "Continue" }] },
+  ] });
+  next.context.tools = tools;
+  expect(() => new ChatGptThreadEnvironmentStore(path, Date.now, codexHome).resolve(next)).toThrow("missing cwd");
+  const original = new ChatGptThreadEnvironmentStore(path, Date.now, codexHome).resolve(first);
+  const restarted = new ChatGptThreadEnvironmentStore(path, Date.now, codexHome);
+  expect(restarted.resolve(next)).toEqual({ ...original, tools });
+  expect(readFileSync(path, "utf8")).not.toContain("Inspect the workspace");
+
+  for (const mutation of ["environment", "instruction", "thread", "update", "current-owner", "sandbox"] as const) {
+    const changed = structuredClone(next);
+    const body = changed._rawBody as typeof initialBody;
+    if (mutation === "thread") body.client_metadata["x-codex-turn-metadata"] = JSON.stringify({ ...metadata, thread_id: "other_thread", turn_id: "turn_next" });
+    else if (mutation === "sandbox") body.client_metadata["x-codex-turn-metadata"] = JSON.stringify({ ...metadata, sandbox: "read-only", turn_id: "turn_next" });
+    else if (mutation === "update") body.input.push({ type: "message", role: "user", content: [{ type: "input_text", text: "<environment_context><cwd>/unverified</cwd></environment_context>" }] });
+    else if (mutation === "current-owner") body.input[0]!.internal_chat_message_metadata_passthrough = { turn_id: "turn_next" };
+    else body.input[mutation === "environment" ? 0 : 1]!.content = [{ type: "input_text", text: mutation === "environment" ? environmentXml.replace(root, root + "/different") : "Changed old instruction" }];
+    expect(() => restarted.resolve(changed)).toThrow();
+  }
+  const record = JSON.parse(readFileSync(path, "utf8"));
+  delete record.threads.thread_current.acceptedHistory;
+  writeFileSync(path, JSON.stringify(record));
+  expect(new ChatGptThreadEnvironmentStore(path, Date.now, codexHome).resolve(next)).toEqual({ ...original, tools });
+  expect(JSON.parse(readFileSync(path, "utf8")).threads.thread_current.acceptedHistory).toBeUndefined();
+});
+
+
+test("accepted history survives CPR per-request synthetic user message IDs", async () => {
+  const { normalizeCprRequest } = await import(new URL("../deploy/cpr-session.mjs", import.meta.url).href);
+  const first = currentWire({ includeIds: false });
+  const initial = first._rawBody as { client_metadata: Record<string, string>; input: Array<Record<string, unknown>> };
+  const metadata = JSON.parse(initial.client_metadata["x-codex-turn-metadata"]!);
+  const model = "chatgpt-web/gpt-5.6-sol";
+  const firstWire = normalizeCprRequest({ model, ...structuredClone(initial) }, {}, "first-request");
+  const nextWire = normalizeCprRequest({ model,
+    client_metadata: { "x-codex-turn-metadata": JSON.stringify({ ...metadata, turn_id: "turn_next" }) },
+    input: [...structuredClone(initial.input),
+      { type: "message", role: "assistant", id: "native-answer", content: [{ type: "output_text", text: "Earlier answer" }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Continue" }] },
+    ],
+    tools: [{ type: "function", name: "current_tool", description: "current", parameters: { type: "object" } }],
+  }, {}, "next-request");
+  expect(firstWire.input[0].id).not.toBe(nextWire.input[0].id);
+  const stateRoot = mkdtempSync(join(tmpdir(), "codex-cpr-history-"));
+  temporaryRoots.push(stateRoot);
+  const path = join(stateRoot, "thread-environments.json");
+  const codexHome = join(stateRoot, "absent-rollouts");
+  const before = JSON.stringify([firstWire, nextWire]);
+  const original = new ChatGptThreadEnvironmentStore(path, Date.now, codexHome).resolve(parseRequest(firstWire));
+  const next = parseRequest(nextWire);
+  const restarted = new ChatGptThreadEnvironmentStore(path, Date.now, codexHome);
+  expect(restarted.resolve(next)).toEqual({ ...original, tools: next.context.tools ?? [] });
+  expect(next.context.tools?.map(tool => tool.name)).toEqual(["current_tool"]);
+  expect(JSON.stringify([firstWire, nextWire])).toBe(before);
+  for (const mutation of ["thread", "sandbox", "content", "role", "order", "metadata", "native-id", "wrong-index", "malformed-id", "trailing-newline"]) {
+    const changed = structuredClone(nextWire);
+    if (mutation === "thread") changed.client_metadata["x-codex-turn-metadata"] = JSON.stringify({ ...metadata, thread_id: "other_thread", turn_id: "turn_next" });
+    else if (mutation === "sandbox") changed.client_metadata["x-codex-turn-metadata"] = JSON.stringify({ ...metadata, sandbox: "read-only", turn_id: "turn_next" });
+    else if (mutation === "content") changed.input[1].content = [{ type: "input_text", text: "Changed accepted instruction" }];
+    else if (mutation === "role") changed.input[1].role = "developer";
+    else if (mutation === "order") [changed.input[0], changed.input[1]] = [changed.input[1], changed.input[0]];
+    else if (mutation === "metadata") changed.input[1].internal_chat_message_metadata_passthrough = { proof: "changed" };
+    else changed.input[0].id = mutation === "native-id" ? "native-context"
+      : mutation === "wrong-index" ? "cpr-message-next-request-7"
+        : mutation === "trailing-newline" ? "cpr-message-next-request-0\n" : "cpr-message--0";
+    expect(() => restarted.resolve(parseRequest(changed))).toThrow();
+  }
+});
+
+
+test("legacy cache reuses only complete matching native history without creating proof", () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), "codex-legacy-cache-"));
+  temporaryRoots.push(stateRoot);
+  const path = join(stateRoot, "thread-environments.json");
+  const codexHome = join(stateRoot, "absent-rollouts");
+  const now = Date.now();
+  const first = currentWire({ sandbox: "workspace-write", environmentXml: filesystemEnvironmentXml(workspaceWriteProfileXml) });
+  const original = new ChatGptThreadEnvironmentStore(path, () => now, codexHome).resolve(first);
+  const persisted = JSON.parse(readFileSync(path, "utf8"));
+  delete persisted.threads.thread_current.acceptedHistory;
+  const legacy = JSON.stringify(persisted);
+  writeFileSync(path, legacy);
+  const initial = first._rawBody as { client_metadata: Record<string, string>; input: Array<Record<string, unknown>> };
+  const metadata = { ...JSON.parse(initial.client_metadata["x-codex-turn-metadata"]!), turn_id: "turn_next",
+    sandbox: "seccomp", sandbox_mode: "workspace-write" };
+  const wire = { model: "chatgpt-web/gpt-5.6-sol",
+    client_metadata: { "x-codex-turn-metadata": JSON.stringify(metadata) },
+    input: [...structuredClone(initial.input),
+      { type: "message", role: "assistant", content: "Earlier answer" },
+      { type: "message", role: "user", content: "Continue" }],
+    tools: [{ type: "function", name: "current_tool", parameters: { type: "object" } }],
+  };
+  const next = parseRequest(wire);
+  expect(new ChatGptThreadEnvironmentStore(path, () => now + 1, codexHome).resolve(next))
+    .toEqual({ ...original, tools: next.context.tools ?? [] });
+  expect(readFileSync(path, "utf8")).toBe(legacy);
+
+  for (const mutation of ["write", "incomplete-entry", "mixed-conflict", "mixed-incomplete", "cwd", "roots",
+    "network", "sandbox", "platform", "conflicting-metadata", "metadata-roots", "metadata-cwd",
+    "thread", "current-update", "unknown", "expired", "proof-mismatch"] as const) {
+    const changed = structuredClone(wire);
+    let xml = filesystemEnvironmentXml(workspaceWriteProfileXml);
+    if (mutation === "write" || mutation === "mixed-conflict") {
+      xml = xml.replace('<entry access="write"><path>' + root, '<entry access="write"><path>' + root + "/different");
+    } else if (mutation === "incomplete-entry" || mutation === "mixed-incomplete") xml = xml.replace("</entry>", "");
+    else if (mutation === "cwd") xml = xml.replace("<cwd>" + root, "<cwd>" + root + "/nested");
+    else if (mutation === "roots") xml = xml.replace("</workspace_roots>", "<root>/other</root></workspace_roots>");
+    else if (mutation === "network") xml = xml.replace("</environment_context>", "<network_access>enabled</network_access></environment_context>");
+    else if (mutation === "unknown") xml = xml.replace("</filesystem>", "<unknown /></filesystem>");
+    const update = { type: "message", role: "user", content: [{ type: "input_text", text: xml }] };
+    if (mutation === "mixed-conflict" || mutation === "mixed-incomplete") changed.input.splice(1, 0, update);
+    else if (mutation === "current-update") changed.input.push(update);
+    else changed.input[0]!.content = update.content;
+    const changedMetadata: Record<string, unknown> = { ...metadata };
+    if (mutation === "sandbox") changedMetadata.sandbox_mode = "read-only";
+    if (mutation === "platform") delete changedMetadata.sandbox_mode;
+    if (mutation === "conflicting-metadata") changedMetadata.sandbox = "read-only";
+    if (mutation === "metadata-roots") changedMetadata.workspaces = { "/": {} };
+    if (mutation === "metadata-cwd") changedMetadata.cwd = root + "/different";
+    if (mutation === "thread") changedMetadata.thread_id = "other_thread";
+    changed.client_metadata["x-codex-turn-metadata"] = JSON.stringify(changedMetadata);
+    const state = structuredClone(persisted);
+    if (mutation === "expired") state.threads.thread_current.updatedAt = now - 31 * 24 * 60 * 60_000;
+    if (mutation === "proof-mismatch") state.threads.thread_current.acceptedHistory = { inputLength: 2, sha256: "0".repeat(64) };
+    writeFileSync(path, JSON.stringify(state));
+    expect(() => new ChatGptThreadEnvironmentStore(path, () => now + 1, codexHome).resolve(parseRequest(changed)),
+      mutation).toThrow("missing cwd");
+  }
+});
+
+test("legacy read-only cache accepts the known complete restricted profile", () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), "codex-legacy-readonly-"));
+  temporaryRoots.push(stateRoot);
+  const path = join(stateRoot, "thread-environments.json");
+  const codexHome = join(stateRoot, "absent-rollouts");
+  const first = currentWire({ sandbox: "read-only", environmentXml: filesystemEnvironmentXml(readOnlyProfileXml) });
+  const original = new ChatGptThreadEnvironmentStore(path, Date.now, codexHome).resolve(first);
+  const persisted = JSON.parse(readFileSync(path, "utf8"));
+  delete persisted.threads.thread_current.acceptedHistory;
+  writeFileSync(path, JSON.stringify(persisted));
+  const body = first._rawBody as { input: Array<Record<string, unknown>> };
+  body.input.push({ type: "message", role: "assistant", content: "Earlier answer" },
+    { type: "message", role: "user", content: "Continue" });
+  expect(new ChatGptThreadEnvironmentStore(path, Date.now, codexHome).resolve(first)).toEqual(original);
 });

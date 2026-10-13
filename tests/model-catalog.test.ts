@@ -91,10 +91,10 @@ describe("native /models augmentation", () => {
       });
       expect(model).not.toHaveProperty("comp_hash");
       expect((model.supported_reasoning_levels as Array<{ effort: string }>).map(level => level.effort))
-        .toEqual([...chatGptWebRouteEfforts(route, config)]);
+        .toEqual([...chatGptWebRouteEfforts(route, config), ...chatGptWebRouteEfforts(route, config).map(effort => `${effort}-temporary`)]);
     }
     expect((web[1]!.supported_reasoning_levels as Array<{ effort: string }>).map(level => level.effort))
-      .toEqual(["medium", "high", "xhigh"]);
+      .toEqual(["medium", "high", "xhigh", "medium-temporary", "high-temporary", "xhigh-temporary"]);
     expect(() => buildChatGptWebModel(originalModels[1], {
       ...CHATGPT_WEB_MODEL_ROUTES[1]!, supportedCodexEfforts: ["low", "medium"],
     }, { ...config, proAvailable: false })).toThrow("Cannot group different context budgets");

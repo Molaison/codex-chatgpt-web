@@ -113,6 +113,9 @@ export function buildChatGptWebModel(
       throw new Error(`Cannot group different context budgets under ${route.slug}`);
     }
   }
+  const sessionEfforts = config.mode === "full" && route.interactionMode === "automatic"
+    && route.backendModel !== "gpt-5.6-luna"
+    ? [...efforts, ...efforts.map(effort => `${effort}-temporary`)] : efforts;
   const multiAgentVersion = routedSubagentVersion(template, config);
   const priority = routedModelPriority(template, route, config);
   const model: JsonObject = {
@@ -140,8 +143,9 @@ export function buildChatGptWebModel(
     tool_mode: null,
     upgrade: null,
     default_reasoning_level: route.codexEffort,
-    supported_reasoning_levels: efforts.map(effort => reasoningLevel(template, effort,
-      efforts.length === 1 ? route.displayName
+    supported_reasoning_levels: sessionEfforts.map(effort => reasoningLevel(template, effort,
+      effort.endsWith("-temporary") ? `${route.displayName} — ${effort.slice(0, -10)} (Temporary chat)`
+        : efforts.length === 1 ? route.displayName
         : route.backendModel === "gpt-5.6-luna" ? effort === "low" ? "Ordinary Luna" : "Think"
           : `${route.displayName} — ${effort === "xhigh" ? "Extra High" : effort}`)),
     context_window: limits.contextWindow,

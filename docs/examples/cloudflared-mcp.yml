@@ -1,0 +1,13 @@
+# Generic example only. Copy outside the checkout and replace all placeholders.
+# The official cloudflared client creates the credential file; never commit its contents.
+tunnel: REPLACE_WITH_TUNNEL_UUID
+credentials-file: /absolute/path/to/REPLACE_WITH_TUNNEL_UUID.json
+metrics: 127.0.0.1:18790
+ingress:
+  - hostname: mcp.example.com
+    path: ^/mcp$
+    service: http://127.0.0.1:8788
+    originRequest:
+      httpHostHeader: mcp.example.com
+      disableChunkedEncoding: false
+  - service: http_status:404

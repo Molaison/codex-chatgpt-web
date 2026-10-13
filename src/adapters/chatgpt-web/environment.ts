@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { isReadableCompactionSummaryText, OPAQUE_COMPACTION_NOTE } from "../../responses/compaction";
+import { parseCodexDelegation } from "../../responses/delegation";
 import type { CodexContentPart, CodexParsedRequest, CodexTool } from "../../types";
 import { isAcceptedCompactionContinuation, recoverCompactionInstruction } from "./compaction-continuation";
 
@@ -50,6 +51,8 @@ export const CHATGPT_TURN_REVISION_CONFLICT_MESSAGE =
   "ChatGPT web current user message conflicts with native Codex turn_id metadata";
 
 export class MissingTrustedCodexEnvironmentError extends Error {
+  resolutionBranch: "unresolved" | "identity_missing" | "current_context_unverified"
+    | "history_not_authenticated" | "no_cache_or_lineage" | "parent_cache_missing" = "unresolved";
   constructor(field: string) {
     super(`ChatGPT web turn is missing ${field} in trusted Codex environment context`);
     this.name = "MissingTrustedCodexEnvironmentError";
@@ -122,6 +125,47 @@ export function hasRawChatGptEnvironmentContext(parsed: CodexParsedRequest): boo
   return input.some(value => hasEnvironmentContextFragment(record(value)));
 }
 
+/** Failure-only structural evidence. Never include message text, paths or raw identifiers. */
+export function chatGptEnvironmentDiagnostic(parsed: CodexParsedRequest) {
+  const body = record(parsed._rawBody);
+  const input = Array.isArray(body?.input) ? body.input : [];
+  const metadata = clientTurnMetadata(parsed);
+  const turnId = extractChatGptTurnIdentity(parsed).turnId;
+  const owner = (item: Record<string, unknown> | undefined) => {
+    const itemTurn = itemTurnId(item);
+    return itemTurn === undefined ? "missing" : itemTurn === turnId ? "current" : "other";
+  };
+  const instructionIndex = input.findLastIndex(value => isNativeInstruction(record(value), metadata));
+  return {
+    inputCount: input.length,
+    replayPrefixItems: parsed._replayPrefixLen ?? 0,
+    previousResponsePresent: Boolean(parsed.previousResponseId),
+    nativeTurnPresent: Boolean(turnId),
+    instructionIndex,
+    instructionTurn: owner(record(input[instructionIndex])),
+    environmentItems: input.flatMap((value, index) => {
+      const item = record(value);
+      if (!item) return [];
+      const text = rawMessageText(item);
+      const nativeFragment = hasEnvironmentContextFragment(item);
+      if (!nativeFragment && !/<\/?environment_context\b/i.test(text)) return [];
+      const role = item.role === "user" || item.role === "developer" || item.role === "assistant" || item.role === "system"
+        ? item.role : "other";
+      return [{ index, role, nativeFragment, turn: owner(item), itemIdPresent: typeof item.id === "string" && Boolean(item.id),
+        cwdElementPresent: /<cwd\b/i.test(text),
+        workspaceRootsPresent: /<workspace_roots\b/i.test(text) }];
+    }),
+    delegationItems: input.flatMap((value, index) => {
+      const item = record(value);
+      if (item?.type !== "function_call_output" || item.call_id !== undefined) return [];
+      const route = item.name === "create_thread" && item.namespace === "codex_tui" ? "codex_tui.create_thread"
+        : item.name === "send_message_to_thread" && item.namespace === "codex_app" ? "codex_app.send_message_to_thread"
+          : "other";
+      return [{ index, route, turn: owner(item), recognized: isDelegatedInstruction(item) }];
+    }),
+  };
+}
+
 /** Historical XML is not a current environment update, including in old untagged rollouts. */
 export function hasCurrentChatGptEnvironmentContext(parsed: CodexParsedRequest): boolean {
   const turnId = extractChatGptTurnIdentity(parsed).turnId;
@@ -184,16 +228,9 @@ function compactionSummaryMessage(value: Record<string, unknown>): boolean {
   return isReadableCompactionSummaryText(text) || text === OPAQUE_COMPACTION_NOTE;
 }
 
-/** The desktop injects cross-task messages as synthetic tool outputs without a call_id. */
+/** Native clients inject cross-task messages as synthetic outputs without a call_id. */
 function isDelegatedInstruction(item: Record<string, unknown> | undefined): boolean {
-  if (item?.type !== "function_call_output" || item.name !== "send_message_to_thread"
-    || item.namespace !== "codex_app" || item.call_id !== undefined
-    || typeof item.id !== "string" || !item.id || !itemTurnId(item)?.trim()
-    || typeof item.output !== "string") return false;
-  // The native producer escapes &, < and > in both fields. Reject extra/nested tags and
-  // malformed entities; keep the original text as task content, never environment authority.
-  const fields = /^<codex_delegation>\s*<source_thread_id>([^<>]+)<\/source_thread_id>\s*<input>([^<>]+)<\/input>\s*<\/codex_delegation>$/.exec(item.output.trim());
-  return fields !== null && fields.slice(1).every(text => text.trim() && !/&(?!amp;|lt;|gt;)/.test(text));
+  return parseCodexDelegation(item) !== undefined;
 }
 
 /** V2 agent_message instructions must still come from this child's direct parent. */
@@ -832,6 +869,129 @@ function matchesPath(root: string, path: string): boolean {
 
 export function extractChatGptTurnEnvironment(parsed: CodexParsedRequest): ChatGptTurnEnvironment {
   return parseChatGptEnvironmentText(parsed, trustedEnvironmentText(parsed));
+}
+
+
+/** Limited native XML decoder for legacy-cache conflict checks, never an authority source. */
+function legacyEnvironmentClaim(text: string, tools: CodexTool[]): ChatGptTurnEnvironment | undefined {
+  const envelope = /^<environment_context>([\s\S]*)<\/environment_context>$/.exec(text.trim());
+  if (!envelope) return undefined;
+  const fields = new Map<string, string>();
+  let remaining = envelope[1]!.trim();
+  while (remaining) {
+    const field = /^<(cwd|shell|current_date|timezone|sandbox_mode|network_access|filesystem)>([\s\S]*?)<\/\1>/.exec(remaining);
+    if (!field || fields.has(field[1]!)) return undefined;
+    fields.set(field[1]!, field[2]!.trim());
+    remaining = remaining.slice(field[0].length).trim();
+  }
+  for (const [name, value] of fields) {
+    if (name !== "filesystem" && (!value || /[<>]/.test(value))) return undefined;
+  }
+  const cwdText = fields.get("cwd");
+  const filesystem = /^<workspace_roots>([\s\S]*?)<\/workspace_roots>\s*<permission_profile type="(disabled|managed)">([\s\S]*)<\/permission_profile>$/.exec(fields.get("filesystem") ?? "");
+  if (!cwdText || !filesystem) return undefined;
+  const rootValues: string[] = [];
+  remaining = filesystem[1]!.trim();
+  while (remaining) {
+    const entry = /^<root>([^<]+)<\/root>/.exec(remaining);
+    if (!entry) return undefined;
+    rootValues.push(entry[1]!);
+    remaining = remaining.slice(entry[0].length).trim();
+  }
+  const cwd = uniqueAbsolutePaths([cwdText], "cwd")[0]!;
+  const roots = uniqueAbsolutePaths(rootValues, "workspace_roots");
+  if (!roots.some(root => matchesPath(root, cwd))) return undefined;
+  const network = fields.get("network_access");
+  if (network !== undefined && network !== "enabled" && network !== "disabled") return undefined;
+  const networkAccess = network === "enabled";
+  let sandboxPolicy: ChatGptSandboxPolicy;
+  let writableRoots: string[];
+  if (filesystem[2] === "disabled") {
+    if (!/^<file_system type="unrestricted"\s*\/>$/.test(filesystem[3]!.trim()) || network === "disabled") return undefined;
+    writableRoots = roots;
+    sandboxPolicy = { type: "dangerFullAccess" };
+  } else {
+    const restricted = /^<file_system type="restricted">([\s\S]*)<\/file_system>$/.exec(filesystem[3]!.trim());
+    if (!restricted) return undefined;
+    const writes: string[] = [];
+    const specials = new Set<string>();
+    remaining = restricted[1]!.trim();
+    while (remaining) {
+      const entry = /^<entry access="(read|write)">\s*<(path|special)>([^<]+)<\/\2>\s*<\/entry>/.exec(remaining);
+      if (!entry) return undefined;
+      const [, access, kind, value] = entry;
+      if (kind === "path") {
+        uniqueAbsolutePaths([value!], "permission entry");
+        if (access === "write") writes.push(value!);
+      } else {
+        const special = value!.trim();
+        if (specials.has(special) || (special === ":root" ? access !== "read"
+          : (special !== ":slash_tmp" && special !== ":tmpdir") || access !== "write")) return undefined;
+        specials.add(special);
+      }
+      remaining = remaining.slice(entry[0].length).trim();
+    }
+    if (!specials.has(":root")) return undefined;
+    writableRoots = writes.length ? uniqueAbsolutePaths(writes, "writable_roots") : [];
+    if (writes.length) {
+      if (!specials.has(":slash_tmp") || !specials.has(":tmpdir")) return undefined;
+      sandboxPolicy = { type: "workspaceWrite", writableRoots, networkAccess };
+    } else {
+      if (specials.size !== 1) return undefined;
+      sandboxPolicy = { type: "readOnly", networkAccess };
+    }
+  }
+  const explicitMode = fields.get("sandbox_mode");
+  if (explicitMode !== undefined && sandboxTypeFromMetadata(explicitMode) !== sandboxPolicy.type) return undefined;
+  return { cwd, roots, writableRoots, sandboxPolicy, tools };
+}
+
+/** Historical declarations can veto old cache reuse; they cannot establish new authority. */
+export function legacyChatGptEnvironmentClaims(parsed: CodexParsedRequest): ChatGptTurnEnvironment[] | undefined {
+  const metadata = clientTurnMetadata(parsed);
+  if (!metadata) return undefined;
+  const sandbox = sandboxTypeFromMetadata(canonicalSandboxMetadata(metadata));
+  if (!sandbox || sandbox === "platform") return undefined;
+  for (const value of [metadata.sandbox_mode, metadata.sandbox]) {
+    if (value === undefined) continue;
+    const type = sandboxTypeFromMetadata(value);
+    if (!type || (type !== "platform" && type !== sandbox)) return undefined;
+  }
+  const input = record(parsed._rawBody)?.input;
+  if (!Array.isArray(input)) return undefined;
+  const claims: ChatGptTurnEnvironment[] = [];
+  try {
+    for (const value of input) {
+      const item = record(value);
+      if (!hasEnvironmentContextFragment(item)) continue;
+      const texts = typeof item.content === "string" ? [item.content]
+        : Array.isArray(item.content) ? item.content.map(part => record(part)?.text) : [];
+      let found = false;
+      for (const text of texts) {
+        if (typeof text !== "string" || !/<\/?environment_context\b/i.test(text)) continue;
+        const claim = legacyEnvironmentClaim(text, parsed.context.tools ?? []);
+        if (!claim || claim.sandboxPolicy.type !== sandbox
+          || !environmentMatchesCanonicalMetadata(text, metadata, false)) return undefined;
+        const workspaces = record(metadata.workspaces);
+        if (metadata.workspaces !== undefined && !workspaces) return undefined;
+        if (workspaces) {
+          const roots = uniqueAbsolutePaths(Object.keys(workspaces), "metadata workspaces");
+          if (roots.length !== claim.roots.length
+            || roots.some(root => !claim.roots.some(path => pathIdentity(path) === pathIdentity(root)))) return undefined;
+        }
+        if (metadata.cwd !== undefined && (typeof metadata.cwd !== "string" || !isAbsolute(metadata.cwd)
+          || pathIdentity(metadata.cwd) !== pathIdentity(claim.cwd))) return undefined;
+        // No native fixture defines a separate network metadata encoding for this migration.
+        if (metadata.network_access !== undefined) return undefined;
+        claims.push(claim);
+        found = true;
+      }
+      if (!found) return undefined;
+    }
+  } catch {
+    return undefined;
+  }
+  return claims.length ? claims : undefined;
 }
 
 function parseChatGptEnvironmentText(parsed: CodexParsedRequest, text: string): ChatGptTurnEnvironment {

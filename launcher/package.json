@@ -6,6 +6,9 @@
   "author": "miuuyy",
   "type": "module",
   "main": "electron/main.cjs",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "bun run scripts/dev.cjs",
     "audit": "bun audit",
@@ -27,18 +30,20 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@codex-chatgpt-web/build-downloader": "file:build-tools/downloader",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "41.10.7",
-    "electron-builder": "^26.8.1",
+    "electron-builder": "26.15.3",
     "typescript": "^5.9.3",
     "vite": "^6.0.0"
   },
   "overrides": {
+    "@electron/get": "5.1.0",
     "@xmldom/xmldom": "0.8.15",
-    "fast-uri": "3.1.6"
+    "fast-uri": "3.1.8"
   },
   "build": {
     "appId": "dev.codexwebgpt.launcher",
@@ -93,5 +98,8 @@
       "createStartMenuShortcut": true,
       "runAfterFinish": true
     }
+  },
+  "patchedDependencies": {
+    "app-builder-lib@26.15.3": "patches/app-builder-lib@26.15.3.patch"
   }
 }

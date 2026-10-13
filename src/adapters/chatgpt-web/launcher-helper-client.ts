@@ -278,10 +278,19 @@ export class LauncherBrowserHelperClient {
             turnTimeoutMs: this.config.turnTimeoutMs,
             autoApproveToolCalls: this.config.autoApproveToolCalls,
             useSavedChats: this.config.useSavedChats,
+            standardConcurrencyLimit: this.config.standardConcurrencyLimit,
+            proConcurrencyLimit: this.config.proConcurrencyLimit,
+            accountId: this.config.accountId,
+            conversationStoreDirectory: this.config.conversationStoreDirectory,
+            imageOutputDirectory: this.config.imageOutputDirectory,
+            downloadDirectory: this.config.downloadDirectory,
+            downloadBaseUrl: this.config.downloadBaseUrl,
           },
           turn: {
             traceId: turn.traceId,
             modelId: turn.modelId,
+            ...(turn.project ? { project: turn.project } : {}),
+            ...(turn.sessionMode ? { sessionMode: turn.sessionMode } : {}),
             reasoning: turn.reasoning,
             ...(turn.modelFamily ? { modelFamily: turn.modelFamily } : {}),
             capabilities: turn.capabilities,
@@ -531,6 +540,7 @@ export class LauncherBrowserHelperClient {
               prepared: {
                 text: prepared.text,
                 images: prepared.images,
+                ...(prepared.files ? { files: prepared.files } : {}),
                 ...(prepared.skillFiles ? { skillFiles: prepared.skillFiles } : {}),
                 ...(prepared.multipart ? { multipart: prepared.multipart } : {}),
                 ...(prepared.trimmedCompactionMessages !== undefined

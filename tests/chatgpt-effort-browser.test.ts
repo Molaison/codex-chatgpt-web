@@ -2,9 +2,35 @@ import { expect, test } from "bun:test";
 import { chromium } from "playwright-core";
 import { ChatGptBrowserWorker } from "../src/adapters/chatgpt-web/browser-worker";
 import { detectChatGptAccountCapabilities } from "../src/chatgpt-session";
+import { activateChatGptEffortMenu } from "../src/chatgpt-session";
 
-for (const modern of [false, true])
-test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)(`model selection reuses the ${modern ? "power" : "classic"} picker without racing Escape cleanup`, async () => {
+test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("offscreen effort control uses its verified pointerdown menu without submitting a prompt", async () => {
+  const browser = await chromium.launch({ executablePath: process.env.CHATGPT_DOM_TEST_BROWSER, headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`<form><div id="prompt-textarea" contenteditable="true">Unsubmitted draft</div>
+      <button id="effort" type="button" style="position:fixed;left:-1000px;top:0" aria-controls="picker" aria-expanded="false">Pro</button>
+      <button type="submit">Send</button></form>
+      <div id="picker" role="menu" hidden style="width:200px;height:30px"><div data-model-picker-power-slider><span role="slider" aria-valuemin="0" aria-valuemax="4" aria-valuenow="4"></span></div></div>
+      <script>
+        window.submissions=0;
+        document.querySelector('form').onsubmit=e=>{e.preventDefault();window.submissions++;};
+        document.querySelector('#effort').onpointerdown=()=>{
+          document.querySelector('#picker').hidden=false;
+          document.querySelector('#effort').setAttribute('aria-expanded','true');
+        };
+      </script>`);
+    const activation = await activateChatGptEffortMenu(page, page.locator('#effort'), { settleMs: 20 });
+    expect(activation.method).toBe('pointerdown');
+    expect(await activation.menu.getAttribute('id')).toBe('picker');
+    expect(await activation.menu.isVisible()).toBe(true);
+    expect(await page.locator('#prompt-textarea').innerText()).toBe('Unsubmitted draft');
+    expect(await page.evaluate(() => Reflect.get(window, 'submissions'))).toBe(0);
+  } finally { await browser.close(); }
+}, 10_000);
+
+for (const [modern, ariaHidden] of [[false, "false"], [true, "false"], [true, undefined]] as const)
+test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)(`model selection reuses the ${modern ? "power" : "classic"} picker without racing Escape cleanup${ariaHidden === undefined ? " with missing aria-hidden" : ""}`, async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHATGPT_DOM_TEST_BROWSER, headless: true });
   try {
     const page = await browser.newPage();
@@ -12,7 +38,7 @@ test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)(`model selection reuses the $
     await page.setContent(`<form><div id="prompt-textarea" contenteditable="true">Draft</div>
       <button type="button" data-tone="neutral" aria-haspopup="menu" aria-controls="picker" aria-expanded="false">Extra High</button></form>
       <div id="picker" role="menu" hidden><div ${modern ? 'data-model-picker-view="simple"' : ''}>
-        <div id="toggle" role="menuitem" aria-hidden="false" aria-expanded="false" data-model-picker-view-toggle="true">Select model</div>
+        <div id="toggle" role="menuitem" ${ariaHidden === undefined ? "" : `aria-hidden="${ariaHidden}"`} aria-expanded="false" data-model-picker-view-toggle="true">Select model</div>
         <div id="models" hidden><div role="menuitemradio" aria-checked="true">Latest</div>
           <div role="menuitemradio" aria-checked="false">GPT-5.6 Sol</div></div>
         <span id="announcement">5.6 Extra High, 4 of 4.</span>

@@ -12,6 +12,7 @@ export const CHATGPT_COMPOSER_SELECTOR = [
   "#prompt-textarea",
   '[contenteditable="true"][data-lexical-editor="true"]',
   'form[data-chatgpt-composer] [data-composer-markdown][contenteditable="true"][role="textbox"]',
+  'form[data-chatgpt-composer] [contenteditable="true"][role="textbox"]',
 ].join(", ");
 export const CHATGPT_EFFORT_CONTROL_SELECTOR = [
   'button[aria-haspopup="menu"][data-tone="neutral"]',
@@ -136,9 +137,15 @@ export async function activateChatGptEffortMenu(
 
   const settleMs = options.settleMs ?? 3_000;
   await clearGhostEffortState(page, control);
-  await control.click({ force: true, timeout: Math.max(1, settleMs) });
-  const clickedSurface = await waitForEffortSurface(page, control, settleMs);
-  if (clickedSurface) return { method: "click", ...clickedSurface };
+  try {
+    await control.click({ force: true, timeout: Math.max(1, settleMs) });
+    const clickedSurface = await waitForEffortSurface(page, control, settleMs);
+    if (clickedSurface) return { method: "click", ...clickedSurface };
+  } catch (error) {
+    // A force-click still fails outside the viewport. Use the existing owned-menu
+    // activation below, but never hide detached targets, timeouts or closed pages.
+    if (!(error instanceof Error) || !error.message.includes("Element is outside of the viewport")) throw error;
+  }
 
   await clearGhostEffortState(page, control);
   await control.dispatchEvent("pointerdown", {
@@ -229,9 +236,12 @@ export async function assertTemporaryChatPage(page: Page): Promise<void> {
   await assertNewChatPage(page);
 }
 
-export async function assertNewChatPage(page: Page, useSavedChats = false): Promise<void> {
+export async function assertNewChatPage(page: Page, useSavedChats = false, projectId?: string): Promise<void> {
   const url = new URL(page.url());
-  const expected = new URL(chatGptNewChatUrl(useSavedChats));
+  if (projectId && (!useSavedChats || !/^g-p-[a-f0-9]{32}$/.test(projectId))) {
+    throw new Error("A ChatGPT project requires saved chats and a valid project id");
+  }
+  const expected = new URL(projectId ? `https://chatgpt.com/g/${projectId}/project` : chatGptNewChatUrl(useSavedChats));
   if (url.origin !== expected.origin || url.pathname !== expected.pathname
     || (url.searchParams.get("temporary-chat") === "true") === useSavedChats) {
     throw new Error(`ChatGPT left the requested new ${useSavedChats ? "saved" : "Temporary"} Chat surface (${page.url()})`);

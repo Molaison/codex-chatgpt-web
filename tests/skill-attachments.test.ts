@@ -108,3 +108,32 @@ test("usage accounts for skills accumulated over many turns without applying a p
   expect(usage.inputTokens).toBeGreaterThan(0);
   expect(usage.estimated).toBe(true);
 });
+
+
+test("inline ZIP bytes survive parser, QA and agent compilation into native uploads", () => {
+  const bytes = Buffer.from([80, 75, 3, 4, 0, 255, 128, 1]);
+  for (const file_data of [bytes.toString("base64"), "data:application/zip;base64," + bytes.toString("base64")]) {
+    const parsed = parse([{ role: "user", content: [
+      { type: "input_text", text: "Read the archive" },
+      { type: "input_file", filename: "archive.zip", file_data },
+      { type: "input_image", image_url: "data:image/png;base64,AQIDBA==" },
+    ] }]);
+    for (const importCodexPrompt of [false, true]) {
+      const compiled = compileChatGptWebPrompt(parsed, capabilities, token, { importCodexPrompt });
+      expect(compiled.files).toHaveLength(1);
+      expect(compiled.text).not.toContain(bytes.toString("base64"));
+      expect(compiled.text).not.toContain("[file:");
+      const payloads = chatGptPromptFilePayloads(compiled);
+      expect(payloads).toHaveLength(2);
+      expect(payloads[0]!.mimeType).toBe("image/png");
+      expect(payloads[1]).toEqual({ name: "archive.zip", mimeType: "application/zip", buffer: bytes });
+    }
+  }
+});
+
+test("unresolved file references and malformed file content cannot silently degrade to text", () => {
+  expect(() => parse([{ role: "user", content: [{ type: "input_file", file_id: "file-missing" }] }])).toThrow("inline file_data");
+  expect(() => chatGptPromptFilePayloads({ text: "read", images: [], files: [
+    { type: "file", filename: "archive.zip", fileData: "not base64!" },
+  ] })).toThrow("invalid base64");
+});

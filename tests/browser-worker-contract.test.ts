@@ -323,6 +323,40 @@ test("browser turns run concurrently up to the five-tab limit", async () => {
   await Promise.all([...active.slice(1), sixth]);
 });
 
+test("Pro and standard browser turns honor independent configurable concurrency limits", async () => {
+  const releases = new Map<string, () => void>();
+  const worker = Object.assign(Object.create(ChatGptBrowserWorker.prototype), {
+    config: { browserHost: "managed-chrome", proConcurrencyLimit: 2, standardConcurrencyLimit: 3 },
+    activeRuns: new Map(),
+    activeProRuns: new Set(),
+    runExclusive: (turn: { traceId: string }) => new Promise<string>(resolve => {
+      releases.set(turn.traceId, () => resolve(turn.traceId));
+    }),
+  }) as ChatGptBrowserWorker;
+  const browserTurn = (traceId: string, reasoning: "high" | "max") => ({
+    traceId,
+    modelId: "chatgpt-web/high",
+    reasoning,
+    capabilities: { localToolsEnabled: false, solAvailable: true, extraHighAvailable: true, proAvailable: true },
+    prepare: async () => ({ text: traceId, images: [], release() {} }),
+    onTextDelta() {},
+  });
+
+  const active = [
+    worker.run(browserTurn("pro_1", "max")),
+    worker.run(browserTurn("pro_2", "max")),
+    worker.run(browserTurn("standard_1", "high")),
+    worker.run(browserTurn("standard_2", "high")),
+  ];
+  await Promise.resolve();
+  await expect(worker.run(browserTurn("pro_3", "max"))).rejects.toThrow("Pro supports at most 2");
+  const thirdStandard = worker.run(browserTurn("standard_3", "high"));
+  await Promise.resolve();
+  expect(releases.has("standard_3")).toBeTrue();
+  for (const release of releases.values()) release();
+  await Promise.all([...active, thirdStandard]);
+});
+
 test("browser turns have no absolute deadline unless one is explicitly configured", () => {
   const provider = { adapter: "chatgpt-web" as const, baseUrl: "browser://chatgpt" };
   expect(resolveBrowserConfig(provider).turnTimeoutMs).toBeUndefined();
@@ -4420,3 +4454,264 @@ test("a stage that spans a system sleep is not charged for the slept time", asyn
   await stage;
   expect(outcome).toEqual(["ChatGPT browser stage timed out: probe"]);
 }, 10_000);
+
+
+test("responsive accepted-turn observation loss gets only one same-page recovery within the turn deadline", async () => {
+  type Baseline = { initialTurnIdentities: string[]; domCache: Record<string, unknown>; acceptedUserIdentity?: string };
+  type State = { turnIdentities: string[]; userIdentities: string[]; responseIdentities: string[]; visibleStopButtonCount: number };
+  type Recovery = (attempt: number, cause: Error, baseline: Baseline, signal?: AbortSignal) => Promise<{ page: Page; baseline: Baseline }>;
+  const realDateNow = Date.now;
+  try {
+    for (const scenario of ["assistant", "broker-progress", "missing", "user-present", "not-accepted",
+      "deadline-before", "deadline-after", "deadline-stalled-rebind", "aborted-at-expiry"] as const) {
+      let now = 1_000;
+      Date.now = () => now;
+      const hiddenLocator = {
+        filter() { return this; },
+        last() { return this; },
+        isVisible: async () => false,
+      };
+      const assistantLocator = { id: "late-assistant" };
+      let sends = 0;
+      let reloads = 0;
+      const page = {
+        isClosed: () => false,
+        locator: (selector: string) => selector.startsWith("[data-turn-id=") ? assistantLocator : hiddenLocator,
+        reload: async () => { reloads += 1; throw new Error("must not reload"); },
+        goto: async () => { throw new Error("must not navigate"); },
+      } as unknown as Page;
+      const worker = ChatGptBrowserWorker.forProvider({
+        adapter: "chatgpt-web",
+        baseUrl: "browser://responsive-loss-" + scenario + "-" + Math.random(),
+        chatgptWeb: { localToolsEnabled: true, solAvailable: true, extraHighAvailable: true, proAvailable: true },
+      }) as unknown as {
+        waitForNewAssistantTurn(page: Page, baseline: Baseline, deadline: number | undefined,
+          signal?: AbortSignal, progress?: ChatGptExternalTurnProgress, graceMs?: number,
+          tracker?: ChatGptCompletionTracker, recover?: Recovery): Promise<{ identity: string; locator: unknown; acceptedTurnIdentities: string[] }>;
+        submissionDomState(page: Page, cache: Record<string, unknown>): Promise<State>;
+        waitForTurnDomOrExternalProgress(): Promise<void>;
+        responseDomSnapshot(): Promise<{ visibleText: string }>;
+        sendAttachedPrompt(): Promise<void>;
+      };
+      const baseline: Baseline = { initialTurnIdentities: [], domCache: {},
+        ...(scenario === "not-accepted" ? {} : { acceptedUserIdentity: "accepted-user" }) };
+      const rebound: Baseline = { ...baseline, domCache: {} };
+      const progress = new ChatGptExternalTurnProgress();
+      const tracker = new ChatGptCompletionTracker();
+      const turnAbort = new AbortController();
+      let recoveries = 0;
+      let waits = 0;
+      let batch = 0;
+      let recoverySignalAborted = false;
+      worker.sendAttachedPrompt = async () => { sends += 1; throw new Error("must not replay Send"); };
+      worker.responseDomSnapshot = async () => ({ visibleText: "late tool answer" });
+      worker.submissionDomState = async (observedPage, cache) => {
+        expect(observedPage).toBe(page);
+        expect(cache).toBe(recoveries ? rebound.domCache : baseline.domCache);
+        if (scenario === "aborted-at-expiry" && waits === 1) turnAbort.abort();
+        const assistant = recoveries > 0 && waits === 2 && (scenario === "assistant" || scenario === "broker-progress");
+        if (assistant && scenario === "broker-progress") progress.recordToolResult(now);
+        return {
+          turnIdentities: assistant ? ["accepted-user", "late-assistant"] : [],
+          userIdentities: scenario === "user-present" ? ["accepted-user"] : [],
+          responseIdentities: assistant ? ["late-assistant"] : [],
+          visibleStopButtonCount: 0,
+        };
+      };
+      worker.waitForTurnDomOrExternalProgress = async () => {
+        if (++waits > 2) throw new Error("unbounded observation recovery");
+        // Both pre- and post-rebind probes remain responsive, including the empty probes.
+        now += CHATGPT_RESPONSE_DOM_GRACE_MS + 1;
+      };
+      const deadline = scenario === "deadline-before" ? now + CHATGPT_RESPONSE_DOM_GRACE_MS
+        : scenario === "deadline-after" || scenario === "deadline-stalled-rebind"
+          ? now + CHATGPT_RESPONSE_DOM_GRACE_MS + 25 : undefined;
+      const result = worker.waitForNewAssistantTurn(page, baseline, deadline, turnAbort.signal, progress,
+        CHATGPT_RESPONSE_DOM_GRACE_MS, tracker, async (attempt, cause, accepted, signal) => {
+          expect(++recoveries).toBe(1);
+          expect(attempt).toBe(1);
+          expect(cause.message).toBe("ChatGPT accepted the message but did not expose its assistant turn in the DOM");
+          expect(accepted).toBe(baseline);
+          expect(accepted.acceptedUserIdentity).toBe("accepted-user");
+          if (scenario === "broker-progress") batch = progress.recordToolBatch(1, now);
+          if (scenario === "deadline-after") now = deadline!;
+          if (scenario === "deadline-stalled-rebind") {
+            await new Promise<void>((_resolve, reject) => {
+              signal!.addEventListener("abort", () => {
+                recoverySignalAborted = true;
+                reject(new DOMException("rebind aborted", "AbortError"));
+              }, { once: true });
+            });
+          }
+          return { page, baseline: rebound };
+        });
+      if (scenario === "assistant" || scenario === "broker-progress") {
+        await expect(result).resolves.toEqual({ identity: "late-assistant", locator: assistantLocator,
+          acceptedTurnIdentities: ["accepted-user", "late-assistant"] });
+        if (scenario === "broker-progress") {
+          const abort = new AbortController();
+          const timer = setTimeout(() => abort.abort(), 100);
+          try {
+            await expect(progress.waitForToolBatchObservation(batch, abort.signal)).resolves.toBeUndefined();
+            expect(progress.snapshot().activeToolCalls).toBe(0);
+          } finally { clearTimeout(timer); }
+        }
+      } else {
+        await expect(result).rejects.toThrow(scenario.startsWith("deadline-")
+          ? "ChatGPT web turn timed out"
+          : scenario === "aborted-at-expiry" ? "ChatGPT web turn aborted"
+          : "ChatGPT accepted the message but did not expose its assistant turn in the DOM");
+        progress.retire(new Error("turn retired after terminal failure"));
+        expect(() => progress.recordToolBatch(1, now)).toThrow("turn retired after terminal failure");
+      }
+      expect(recoveries).toBe(["user-present", "not-accepted", "deadline-before", "aborted-at-expiry"].includes(scenario) ? 0 : 1);
+      expect(recoverySignalAborted).toBe(scenario === "deadline-stalled-rebind");
+      expect(sends).toBe(0);
+      expect(reloads).toBe(0);
+    }
+  } finally {
+    Date.now = realDateNow;
+  }
+});
+
+
+test("broker acceptance precedes a lost DOM boundary without replay or clearing the old-final guard", async () => {
+  type Baseline = { initialTurnIdentities: string[]; domCache: Record<string, unknown> };
+  type Recover = (attempt: number, cause: Error, baseline: Baseline, signal?: AbortSignal) => Promise<{ page: Page; baseline: Baseline }>;
+  for (const timing of ["before-boundary", "during-probe", "during-rebind"] as const) {
+    const progress = new ChatGptExternalTurnProgress();
+    const tracker = new ChatGptCompletionTracker(10, 100);
+    const baseline: Baseline = { initialTurnIdentities: ["old-user", "old-final"], domCache: {} };
+    const hidden = { filter() { return this; }, last() { return this; }, isVisible: async () => false };
+    const page = { isClosed: () => false, locator: () => hidden } as unknown as Page;
+    const worker = ChatGptBrowserWorker.forProvider({
+      adapter: "chatgpt-web", baseUrl: "browser://broker-acceptance-" + timing + "-" + Math.random(),
+      chatgptWeb: { localToolsEnabled: true, solAvailable: true, extraHighAvailable: true, proAvailable: true,
+        storageStatePath: "/tmp/broker-acceptance-" + Math.random() + ".json" },
+    }) as unknown as {
+      activeComposer(): Promise<unknown>;
+      currentSubmissionAnswerText(): Promise<string>;
+      currentSubmissionEvidence(): Promise<undefined>;
+      responseDomSnapshot(): Promise<{ visibleText: string }>;
+      submissionDomState(): Promise<{ turnIdentities: string[]; userIdentities: string[]; responseIdentities: string[]; visibleStopButtonCount: number }>;
+      sendAttachedPrompt(page: Page, baseline: Baseline, capture: undefined, signal: undefined,
+        progress: ChatGptExternalTurnProgress, lifecycle: { onSendActivated(): void; onSubmitted(): void },
+        tracker: ChatGptCompletionTracker, recover: Recover): Promise<string>;
+      waitForNewAssistantTurn(page: Page, baseline: Baseline, deadline: undefined, signal: undefined,
+        progress: ChatGptExternalTurnProgress, grace: number, tracker: ChatGptCompletionTracker): Promise<{ identity: string }>;
+    };
+    let sends = 0;
+    let boundaryReads = 0;
+    let recoveries = 0;
+    let recoveryCancelled = false;
+    let recoveryExpired = false;
+    let lifecycle = "prepared";
+    let batch = 0;
+    worker.activeComposer = async () => ({
+      locator: () => ({ locator: () => ({
+        waitFor: async () => {}, isEnabled: async () => true,
+        press: async () => {
+          sends += 1;
+          if (timing === "before-boundary") batch = progress.recordToolBatch(1);
+        },
+      }) }),
+    });
+    worker.currentSubmissionAnswerText = async () => {
+      boundaryReads += 1;
+      throw new ChatGptBrowserObservationTimeoutError(5_000);
+    };
+    worker.currentSubmissionEvidence = async () => {
+      if (timing === "during-probe") batch = progress.recordToolBatch(1);
+      throw new ChatGptBrowserObservationTimeoutError(5_000);
+    };
+    await expect(worker.sendAttachedPrompt(page, baseline, undefined, undefined, progress, {
+      onSendActivated: () => { lifecycle = "send_activated"; },
+      onSubmitted: () => { lifecycle = "accepted"; },
+    }, tracker, async (_attempt, _cause, _baseline, signal) => {
+      recoveries += 1;
+      if (timing !== "during-rebind") throw new Error("a failed rebind must not downgrade broker acceptance");
+      return new Promise((_resolve, reject) => {
+        const timer = setTimeout(() => {
+          recoveryExpired = true;
+          reject(new Error("full rebind timeout"));
+        }, 100);
+        signal!.addEventListener("abort", () => {
+          clearTimeout(timer);
+          recoveryCancelled = true;
+          reject(new DOMException("observation cancelled", "AbortError"));
+        }, { once: true });
+        queueMicrotask(() => { batch = progress.recordToolBatch(1); });
+      });
+    })).resolves.toBe("mcp_tool_call");
+    expect(lifecycle).toBe("accepted");
+    expect(sends).toBe(1);
+    expect(boundaryReads).toBe(0);
+    expect(recoveries).toBe(timing === "during-rebind" ? 1 : 0);
+    expect(recoveryCancelled).toBe(timing === "during-rebind");
+    expect(recoveryExpired).toBeFalse();
+    expect(tracker.needsToolBatchObservation(batch)).toBeTrue();
+    expect(progress.snapshot().activeToolCalls).toBe(1);
+
+    // Existing response observation still captures the pre-tool projection before acknowledging.
+    worker.submissionDomState = async () => ({
+      turnIdentities: ["old-user", "old-final", "new-user", "new-answer"],
+      userIdentities: ["old-user", "new-user"], responseIdentities: ["old-final", "new-answer"],
+      visibleStopButtonCount: 0,
+    });
+    worker.responseDomSnapshot = async () => ({ visibleText: "partial answer before tool" });
+    await expect(worker.waitForNewAssistantTurn(page, baseline, undefined, undefined, progress,
+      CHATGPT_RESPONSE_DOM_GRACE_MS, tracker)).resolves.toMatchObject({ identity: "new-answer" });
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 100);
+    try {
+      await expect(progress.waitForToolBatchObservation(batch, abort.signal)).resolves.toBeUndefined();
+    } finally { clearTimeout(timer); }
+    progress.recordToolResult();
+    const stale = { responsePresent: true, running: false, currentText: "partial answer before tool", completionActionVisible: true };
+    expect(tracker.update(stale, 1_000)).toBeFalse();
+    expect(() => tracker.update(stale, 1_100)).toThrow("without producing a final answer");
+    const final = { ...stale, currentText: "new answer after tool result" };
+    expect(tracker.update(final, 1_101)).toBeFalse();
+    expect(tracker.update(final, 1_111)).toBeTrue();
+  }
+});
+
+test("broker acceptance never overrides cancellation or an expired send stage", async () => {
+  const hidden = { filter() { return this; }, last() { return this; }, isVisible: async () => false };
+  const page = { locator: () => hidden } as unknown as Page;
+  const worker = ChatGptBrowserWorker.forProvider({
+    adapter: "chatgpt-web", baseUrl: "browser://broker-acceptance-abort-" + Math.random(),
+    chatgptWeb: { localToolsEnabled: true, solAvailable: true, extraHighAvailable: true, proAvailable: true,
+        storageStatePath: "/tmp/broker-acceptance-" + Math.random() + ".json" },
+  }) as unknown as {
+    currentSubmissionEvidence(page: Page, baseline: unknown, signal?: AbortSignal): Promise<undefined>;
+    waitForSubmissionAcceptedWithRecovery(page: Page, baseline: unknown, signal: AbortSignal,
+      progress: ChatGptExternalTurnProgress, initial: number, tracker: ChatGptCompletionTracker,
+      recover: () => Promise<never>): Promise<string>;
+    runStage<T>(trace: string, stage: string, ms: number, action: (signal: AbortSignal) => Promise<T>): Promise<T>;
+  };
+  const progress = new ChatGptExternalTurnProgress();
+  const tracker = new ChatGptCompletionTracker();
+  let recoveries = 0;
+  const recover = async (): Promise<never> => { recoveries += 1; throw new Error("must not rebind"); };
+  const cancelled = new AbortController();
+  cancelled.abort();
+  progress.recordToolBatch(1);
+  await expect(worker.waitForSubmissionAcceptedWithRecovery(page, {}, cancelled.signal, progress, 0,
+    tracker, recover)).rejects.toMatchObject({ name: "AbortError" });
+
+  const initial = progress.snapshot().lastToolBatchRevision;
+  // Old batches cannot accept a new Send. The new batch arrives with the deadline's abort.
+  tracker.observeToolBatch(initial, "old answer");
+  worker.currentSubmissionEvidence = async (_page, _baseline, signal) => new Promise((_resolve, reject) => {
+    signal!.addEventListener("abort", () => {
+      progress.recordToolBatch(1);
+      reject(new ChatGptBrowserObservationTimeoutError(5_000));
+    }, { once: true });
+  });
+  await expect(worker.runStage("broker-acceptance-deadline", "send", 20, signal =>
+    worker.waitForSubmissionAcceptedWithRecovery(page, {}, signal, progress, initial, tracker, recover),
+  )).rejects.toThrow("ChatGPT browser stage timed out: send");
+  expect(recoveries).toBe(0);
+  expect(progress.snapshot().activeToolCalls).toBe(2);
+});

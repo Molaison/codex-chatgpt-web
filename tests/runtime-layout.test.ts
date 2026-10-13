@@ -205,6 +205,48 @@ test("Zero Risk fails closed without the Launcher browser host", () => {
   expect(() => loadConfig()).toThrow("requires the launcher browser host");
 });
 
+test.each(["automatic", "manual"] as const)("external HTTP Full %s is an explicit production Launcher opt-in without tunnel credentials", interaction => {
+  const root = join(tmpdir(), `codex-web-external-config-${process.pid}-${Date.now()}`);
+  roots.push(root);
+  process.env.CODEX_CHATGPT_WEB_HOME = root;
+  mkdirSync(root, { recursive: true });
+  const config = {
+    ...defaultConfig("full"),
+    mcpProvider: "external-http" as const,
+    browserHost: "launcher" as const,
+    browserHostDescriptorPath: join(root, "launcher-browser.json"),
+    browserInteractionMode: interaction,
+    appName: interaction === "manual" ? ZERO_RISK_CHATGPT_CONNECTOR_NAME : CHATGPT_CONNECTOR_NAME,
+    autoApproveToolCalls: true,
+  };
+  const persist = (overrides: Record<string, unknown> = {}) => {
+    writeFileSync(join(root, "config.json"), JSON.stringify({ ...config, ...overrides }));
+  };
+  persist();
+  expect(loadConfig().mcpProvider).toBe("external-http");
+  expect(loadConfig().tunnel).toBeUndefined();
+  expect(providerConfig(loadConfig()).chatgptWeb).toMatchObject({
+    localToolsEnabled: true, browserInteractionMode: interaction, autoApproveToolCalls: interaction === "automatic",
+    appName: config.appName,
+    brokerSocketPath: config.brokerSocketPath,
+  });
+  for (const overrides of [
+    { browserInteractionMode: "invalid" }, { purpose: "dev-harness" },
+    { mcpProvider: "unknown" }, { mode: "browser-only" }, { browserHost: "managed-chrome" },
+  ]) {
+    persist(overrides);
+    expect(() => loadConfig()).toThrow();
+  }
+  for (const mcpProvider of [undefined, "openai-tunnel"]) {
+    persist({ mcpProvider });
+    expect(() => loadConfig()).toThrow("tunnel is missing");
+  }
+  expect(providerConfig({ ...config, browserInteractionMode: "automatic", mcpProvider: undefined })
+    .chatgptWeb?.localToolsEnabled).toBe(false);
+  expect(providerConfig({ ...config, mode: "browser-only" }).chatgptWeb?.localToolsEnabled).toBe(false);
+  expect(providerConfig({ ...config, autoApproveToolCalls: false }).chatgptWeb?.autoApproveToolCalls).toBe(false);
+});
+
 test("legacy temp-path wrapper and vendor are removed only after runtime ownership changes", () => {
   const root = join(tmpdir(), `codex-chatgpt-web-legacy-runtime-${process.pid}-${Date.now()}`);
   roots.push(root);
@@ -290,12 +332,16 @@ test("conversation preferences survive reload; saved chats also apply to Zero Ri
   const config: Record<string, unknown> = { ...defaultConfig("browser-only") };
   const persist = () => writeFileSync(join(root, "config.json"), JSON.stringify(config));
   expect(config.experimentalFreshConversationPerTurn).toBe(false);
-  expect(config.useSavedChats).toBe(false);
+  expect(config.useSavedChats).toBe(true);
   delete config.useSavedChats;
   delete config.experimentalFreshConversationPerTurn;
   persist();
   expect(loadConfig()!.experimentalFreshConversationPerTurn).toBe(false);
+  expect(loadConfig()!.useSavedChats).toBe(true);
+  config.useSavedChats = false;
+  persist();
   expect(loadConfig()!.useSavedChats).toBe(false);
+  expect(providerConfig(loadConfig()!).chatgptWeb!.useSavedChats).toBe(false);
   config.useSavedChats = true;
   config.experimentalFreshConversationPerTurn = true;
   persist();
@@ -313,6 +359,23 @@ test("conversation preferences survive reload; saved chats also apply to Zero Ri
   config.useSavedChats = "true";
   persist();
   expect(() => loadConfig()).toThrow("useSavedChats");
+});
+
+test("account profile identity reaches the provider namespace", () => {
+  const config = defaultConfig();
+  config.accountId = "work-account";
+  expect(providerConfig(config).chatgptWeb?.accountId).toBe("work-account");
+});
+
+test("model concurrency defaults and overrides reach the browser provider", () => {
+  const config = defaultConfig();
+  expect([config.standardConcurrencyLimit, config.proConcurrencyLimit]).toEqual([5, 2]);
+  config.standardConcurrencyLimit = 4;
+  config.proConcurrencyLimit = 1;
+  expect(providerConfig(config).chatgptWeb).toMatchObject({
+    standardConcurrencyLimit: 4,
+    proConcurrencyLimit: 1,
+  });
 });
 
 test("skill attachments config defaults off, reaches the adapter, and rejects invalid/manual settings", () => {

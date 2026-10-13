@@ -1,3 +1,4 @@
+import { parseRequest } from "../src/responses/parser";
 import { describe, expect, test } from "bun:test";
 import { chatGptConversationKey } from "../src/adapters/chatgpt-web/conversation-key";
 import {
@@ -351,4 +352,27 @@ describe("fixed ChatGPT Web model routes", () => {
     }
     expect(new Set(keys).size).toBe(3);
   });
+});
+
+
+test("Full public efforts resolve session mode before validation without trusting client metadata", () => {
+  const config = { ...defaultConfig("full"), extraHighAvailable: true };
+  for (const [effort, base, mode] of [
+    [undefined, "high", "persistent"], ["high", "high", "persistent"],
+    ["high-temporary", "high", "temporary"], ["xhigh-temporary", "xhigh", "temporary"],
+    ["high-persistent", "high", "persistent"],
+  ] as const) {
+    const request = parseRequest({ model: "chatgpt-web/gpt-5.6-sol", input: "hello", reasoning: { effort },
+      client_metadata: { _chatgpt_session_mode: mode === "temporary" ? "persistent" : "temporary" } });
+    routeChatGptWebRequest(request, config);
+    expect(request.options.reasoning).toBe(base);
+    expect(request._chatgptSessionMode).toBe(mode);
+  }
+  expect(() => routeChatGptWebRequest(parsed("chatgpt-web/gpt-5.6-sol", "xhigh-temporary"), defaultConfig("full")))
+    .toThrow("does not support effort");
+  const qa = parsed("chatgpt-web/gpt-5.6-sol", "high");
+  qa._rawBody = { client_metadata: { _chatgpt_session_mode: "temporary" } };
+  routeChatGptWebRequest(qa, defaultConfig("browser-only"));
+  expect(qa._chatgptSessionMode).toBeUndefined();
+  expect(qa._rawBody).toEqual({ client_metadata: { _chatgpt_session_mode: "temporary" } });
 });

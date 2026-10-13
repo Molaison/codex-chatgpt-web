@@ -387,6 +387,8 @@ describe("ChatGPT outer-native harness v4", () => {
     const originalRun = worker.run.bind(worker);
     const preparedPrompts: string[] = [];
     const conversationKeys: (string | undefined)[] = [];
+    const sessionModes: BrowserTurn["sessionMode"][] = [];
+    const efforts: (string | undefined)[] = [];
     const tokens: string[] = [];
     let browserMessages = 0;
     (worker as unknown as { run: (turn: BrowserTurn) => Promise<string> }).run = async turn => {
@@ -397,6 +399,11 @@ describe("ChatGPT outer-native harness v4", () => {
       const prepared = browserMessages === 0 || freshConversation ? await turn.prepare() : await turn.prepareResume!();
       preparedPrompts.push(prepared.text);
       conversationKeys.push(turn.conversationKey!);
+      sessionModes.push(turn.sessionMode);
+      efforts.push(turn.reasoning);
+      expect(turn.capabilities.localToolsEnabled).toBeTrue();
+      expect(turn.externalProgress).toBeDefined();
+      expect(turn.completionFence).toBeDefined();
       const token = prepared.text.match(/turn_token (turn_[A-Za-z0-9_-]+)/)?.[1];
       if (!token) throw new Error("retained message prompt has no current turn token");
       tokens.push(token);
@@ -408,7 +415,10 @@ describe("ChatGPT outer-native harness v4", () => {
     };
 
     const first = rawWireRequest(environmentXml);
+    first._chatgptSessionMode = "temporary";
     const second = parsed();
+    second.options.reasoning = "xhigh";
+    second._chatgptSessionMode = "persistent";
     second.context.messages = [
       { role: "user", content: "Inspect the project", timestamp: 2 },
       { role: "assistant", content: [{ type: "text", text: "First retained answer" }], timestamp: 3 },
@@ -449,6 +459,8 @@ describe("ChatGPT outer-native harness v4", () => {
         ? undefined : chatGptConversationKey(first, chatGptWebExecutionNamespace(provider))!);
       expect(conversationKeys[1]).toBe(conversationKeys[0]);
       expect(tokens[1]).not.toBe(tokens[0]);
+      expect(sessionModes).toEqual(["temporary", "persistent"]);
+      expect(efforts[1]).toBe("xhigh");
       expect(preparedPrompts[0]).toContain("Inspect the project");
       expect(preparedPrompts[1]).toContain("Continue in the same repository");
       if (freshConversation) {
@@ -2201,18 +2213,21 @@ describe("ChatGPT outer-native harness v4", () => {
     const broker = TurnBroker.forSocket(socketPath);
     const token = await broker.register(extractChatGptTurnEnvironment(parsed(environmentXml)), 10_000);
     const claimed = await callTurnBroker<{ bindingId: string }>(socketPath, { method: "claim", token });
+    // Attach the rejection handler before revoke: Bun 1.4 on Windows can stall its
+    // asynchronous .rejects matcher when the named-pipe reply rejects in this gap.
     const invocation = callTurnBroker(socketPath, {
       method: "invoke",
       bindingId: claimed.bindingId,
       wireName: "exec_command",
       freeform: false,
       arguments: { cmd: "sleep 30" },
-    }, 10_000);
+    }, 10_000).then(() => undefined, error => error);
     await broker.nextToolBatch(token);
     broker.revoke(token);
-    await expect(invocation).rejects.toThrow("revoked");
-    await expect(callTurnBroker(socketPath, { method: "resolve", bindingId: claimed.bindingId }))
-      .rejects.toThrow("has already finished");
+    expect(await invocation).toMatchObject({ message: expect.stringContaining("revoked") });
+    const resolved = await callTurnBroker(socketPath, { method: "resolve", bindingId: claimed.bindingId })
+      .then(() => undefined, error => error);
+    expect(resolved).toMatchObject({ message: expect.stringContaining("has already finished") });
     await broker.close();
   });
 
@@ -2816,6 +2831,7 @@ describe("ChatGPT outer-native harness v4", () => {
         query: string,
         includeSchema: boolean,
         nestedToolNames: string[],
+        nativeEnvelope = false,
       ) => {
         const pending = call("codex_tool_inventory", {
           turn_token: token,
@@ -2827,7 +2843,12 @@ describe("ChatGPT outer-native harness v4", () => {
         const gatewayCalls: GatewayProgramCall[] = [];
         const content = await executeGatewayProgram(request!.input!, nestedToolNames, gatewayCalls);
         expect(gatewayCalls).toEqual([]);
-        broker.completeTool(token, request!.callId, { content });
+        broker.completeTool(token, request!.callId, {
+          content: nativeEnvelope
+            ? [{ type: "text", text: "Script completed\nWall time 0.1 seconds\nOutput:\n"
+              + content.map(item => item.type === "text" ? item.text : "").join("") }]
+            : content,
+        });
         return await pending;
       };
 
@@ -2958,6 +2979,19 @@ describe("ChatGPT outer-native harness v4", () => {
           parameters: { type: "object", additionalProperties: true },
         }],
       });
+
+      // Codex 0.160 wraps text() output in a completed execution envelope.
+      const nativeInventory = await inventoryThroughGateway("web__run", true, ["exec", "web__run"], true);
+      expect(nativeInventory.structuredContent).toEqual(nestedInventory.structuredContent);
+      for (const invalidText of [
+        "Script completed\nWall time 0.1 seconds\nOutput:\nnot-json",
+        'Script running\nWall time 0.1 seconds\nOutput:\n{"tools":[],"total":0}',
+      ]) {
+        const pending = call("codex_tool_inventory", { turn_token: token, query: "web__run" });
+        const [request] = await broker.nextToolBatch(token);
+        broker.completeTool(token, request!.callId, { content: [{ type: "text", text: invalidText }] });
+        expect((await pending).isError).toBe(true);
+      }
 
       const nestedWeb = call("codex_tool_call", {
         turn_token: token,

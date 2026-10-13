@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { atomicWriteFile } from "../../config";
@@ -14,6 +15,7 @@ import {
   hasCurrentChatGptEnvironmentContext,
   hasChatGptCalendarEnvironmentDelta,
   hasRawChatGptEnvironmentContext,
+  legacyChatGptEnvironmentClaims,
   unattributedChatGptEnvironmentMessages,
   isChatGptCompactionContinuation,
   MissingTrustedCodexEnvironmentError,
@@ -28,6 +30,7 @@ interface StoredThreadEnvironment {
   writableRoots: string[];
   sandboxPolicy: ChatGptSandboxPolicy;
   updatedAt: number;
+  acceptedHistory?: { inputLength: number; sha256: string };
 }
 
 interface StoredThreadEnvironmentFile {
@@ -94,10 +97,55 @@ function sandboxPolicy(value: unknown, roots: string[], writableRoots: string[])
   throw new Error("Invalid persisted ChatGPT sandbox policy");
 }
 
+function historyDigest(input: unknown[]): string {
+  const comparison = input.map((value, index) => {
+    const item = record(value);
+    if (item?.type !== "message" || item.role !== "user" || typeof item.id !== "string") return value;
+    const generated = /^cpr-message-(.+)-(0|[1-9][0-9]*)$/.exec(item.id);
+    if (!generated || generated[0] !== item.id || generated[2] !== String(index)) return value;
+    // CPR regenerates only these user-message IDs for each HTTP request.
+    // Keep every other field, including native ownership metadata, unchanged.
+    const { id: _id, ...stable } = item;
+    return stable;
+  });
+  return createHash("sha256").update(JSON.stringify(comparison)).digest("hex");
+}
+
+function acceptedHistory(parsed: CodexParsedRequest): StoredThreadEnvironment["acceptedHistory"] {
+  const input = record(parsed._rawBody)?.input;
+  if (!Array.isArray(input) || input.length === 0 || !hasRawChatGptEnvironmentContext(parsed)) return undefined;
+  // Persist a digest of the accepted prefix, never conversation/tool-result text.
+  return { inputLength: input.length, sha256: historyDigest(input) };
+}
+
+function matchesAcceptedHistory(parsed: CodexParsedRequest, stored: StoredThreadEnvironment): boolean {
+  const proof = stored.acceptedHistory;
+  const body = record(parsed._rawBody);
+  const input = body?.input;
+  if (!proof || !Array.isArray(input) || input.length <= proof.inputLength) return false;
+  if (historyDigest(input.slice(0, proof.inputLength)) !== proof.sha256) return false;
+  if (hasRawChatGptEnvironmentContext({ ...parsed, _rawBody: { ...body, input: input.slice(proof.inputLength) } })) return false;
+  // Current sandbox/workspace metadata must still validate the proven envelope.
+  // Reuse its exact accepted prefix; never search arbitrary earlier XML for a match.
+  try {
+    const environment = extractChatGptTurnEnvironment({ ...parsed, _rawBody: { ...body, input: input.slice(0, proof.inputLength) } });
+    return sameAuthority(environment, { ...stored, tools: parsed.context.tools ?? [] });
+  } catch (error) {
+    if (error instanceof MissingTrustedCodexEnvironmentError) return false;
+    throw error;
+  }
+}
+
 function validateStoredEnvironment(value: unknown): StoredThreadEnvironment {
   const parsed = record(value);
   if (!parsed || typeof parsed.cwd !== "string" || !isAbsolute(parsed.cwd) || typeof parsed.updatedAt !== "number") {
     throw new Error("Invalid persisted ChatGPT thread environment");
+  }
+  const proof = record(parsed.acceptedHistory);
+  if (parsed.acceptedHistory !== undefined && (!proof || !Number.isSafeInteger(proof.inputLength)
+    || typeof proof.inputLength !== "number" || proof.inputLength < 1
+    || typeof proof.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(proof.sha256))) {
+    throw new Error("Invalid persisted ChatGPT accepted history proof");
   }
   const cwd = resolve(parsed.cwd);
   const roots = absolutePaths(parsed.roots, "roots");
@@ -111,16 +159,18 @@ function validateStoredEnvironment(value: unknown): StoredThreadEnvironment {
     writableRoots,
     sandboxPolicy: sandboxPolicy(parsed.sandboxPolicy, roots, writableRoots),
     updatedAt: parsed.updatedAt,
+    ...(proof ? { acceptedHistory: { inputLength: proof.inputLength as number, sha256: proof.sha256 as string } } : {}),
   };
 }
 
-function authority(environment: ChatGptTurnEnvironment, updatedAt: number): StoredThreadEnvironment {
+function authority(environment: ChatGptTurnEnvironment, updatedAt: number, parsed?: CodexParsedRequest): StoredThreadEnvironment {
   return {
     cwd: environment.cwd,
     roots: environment.roots,
     writableRoots: environment.writableRoots,
     sandboxPolicy: environment.sandboxPolicy,
     updatedAt,
+    ...(parsed ? { acceptedHistory: acceptedHistory(parsed) } : {}),
   };
 }
 
@@ -157,10 +207,11 @@ export class ChatGptThreadEnvironmentStore {
     const identity = extractChatGptTurnIdentity(parsed);
     try {
       const environment = extractChatGptTurnEnvironment(parsed);
-      if (identity.threadId) this.set(identity.threadId, environment);
+      if (identity.threadId) this.set(identity.threadId, environment, parsed);
       return environment;
     } catch (error) {
-      if (!(error instanceof MissingTrustedCodexEnvironmentError) || !identity.threadId) throw error;
+      if (!(error instanceof MissingTrustedCodexEnvironmentError)) throw error;
+      if (!identity.threadId) { error.resolutionBranch = "identity_missing"; throw error; }
       const hasCurrentContext = hasCurrentChatGptEnvironmentContext(parsed);
       const lineage = extractChatGptThreadSpawnLineage(parsed);
       const currentCompaction = hasCurrentContext && isChatGptCompactionContinuation(parsed);
@@ -169,7 +220,10 @@ export class ChatGptThreadEnvironmentStore {
       const steeringClaim = hasCurrentContext && !currentCompaction
         ? extractChatGptSteeringEnvironmentClaim(parsed) : undefined;
       const calendarDelta = hasCurrentContext && !currentCompaction && hasChatGptCalendarEnvironmentDelta(parsed);
-      if (hasCurrentContext && !currentCompaction && !historicalMessages && !steeringClaim && !calendarDelta) throw error;
+      if (hasCurrentContext && !currentCompaction && !historicalMessages && !steeringClaim && !calendarDelta) {
+        error.resolutionBranch = "current_context_unverified";
+        throw error;
+      }
       const currentClaim = currentCompaction ? extractChatGptContinuationEnvironmentClaim(parsed) : steeringClaim;
       const rolloutIdentity = lineage ?? extractChatGptRootThreadMetadata(parsed);
       // Automatic compaction has a current turn_context; standalone compaction has only its
@@ -193,14 +247,21 @@ export class ChatGptThreadEnvironmentStore {
           if (currentClaim && !sameAuthority(currentClaim, rolloutEnvironment)) {
             throw new Error(`${currentCompaction ? "Compaction continuation" : "Steering"} environment conflicts with its current Codex rollout`);
           }
-          this.set(rolloutIdentity.threadId, rolloutEnvironment);
+          this.set(rolloutIdentity.threadId, rolloutEnvironment, parsed);
           return rolloutEnvironment;
         }
       }
-      // Only a current native rollout can supersede an unrecognized historical envelope. Without
-      // that proof, do not turn arbitrary history or an invalid update into cached authority.
-      if (hasRawChatGptEnvironmentContext(parsed)) throw error;
       const sameThread = this.get(identity.threadId);
+      // Proof-bearing caches require that exact prefix. Legacy caches only permit
+      // nonconflicting, fully decoded history; neither path accepts current updates.
+      // Returning cached authority here never creates a proof or refreshes its age.
+      if (hasRawChatGptEnvironmentContext(parsed)
+        && (hasCurrentContext || !sameThread || !(sameThread.acceptedHistory
+          ? matchesAcceptedHistory(parsed, sameThread)
+          : legacyChatGptEnvironmentClaims(parsed)?.every(claim => sameAuthority(claim, { ...sameThread, tools: [] }))))) {
+        error.resolutionBranch = "history_not_authenticated";
+        throw error;
+      }
       if (sameThread) return {
         cwd: sameThread.cwd,
         roots: sameThread.roots,
@@ -209,9 +270,9 @@ export class ChatGptThreadEnvironmentStore {
         tools: parsed.context.tools ?? [],
       };
 
-      if (!lineage) throw error;
+      if (!lineage) { error.resolutionBranch = "no_cache_or_lineage"; throw error; }
       const parent = this.get(lineage.parentThreadId);
-      if (!parent) throw error;
+      if (!parent) { error.resolutionBranch = "parent_cache_missing"; throw error; }
       if (lineage.sandboxType !== parent.sandboxPolicy.type) {
         throw new Error("ChatGPT Web subagent sandbox metadata conflicts with its trusted parent thread");
       }
@@ -247,10 +308,10 @@ export class ChatGptThreadEnvironmentStore {
     return stored;
   }
 
-  private set(threadId: string, environment: ChatGptTurnEnvironment): void {
+  private set(threadId: string, environment: ChatGptTurnEnvironment, parsed?: CodexParsedRequest): void {
     this.load();
     this.threads.delete(threadId);
-    this.threads.set(threadId, authority(environment, this.now()));
+    this.threads.set(threadId, authority(environment, this.now(), parsed));
     while (this.threads.size > MAX_THREAD_ENVIRONMENTS) {
       const oldest = this.threads.keys().next().value as string | undefined;
       if (!oldest) break;

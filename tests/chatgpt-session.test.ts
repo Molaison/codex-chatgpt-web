@@ -55,6 +55,16 @@ test("composer and effort selectors exclude unrelated editable fields and menu b
   expect(matches(CHATGPT_EFFORT_CONTROL_SELECTOR)).toEqual(["effort", "model", "power-effort"]);
 });
 
+test.each(["Target page, context or browser has been closed", "Timeout 3000ms exceeded", "Element is not attached to the DOM"])("effort activation preserves unrelated click failure: %s", async message => {
+  const error = new Error(message);
+  const control = {
+    getAttribute: async () => "false",
+    click: async () => { throw error; },
+    dispatchEvent: async () => { throw new Error("must not try pointerdown"); },
+  };
+  await expect(activateChatGptEffortMenu({} as never, control as never, { settleMs: 0 })).rejects.toBe(error);
+});
+
 test("effort activation binds the owned menu after the control opens", async () => {
   let opened = false;
   const ownedMenu = { isVisible: async () => opened };

@@ -793,6 +793,11 @@ class BrowserHost {
 
   bindTurnContents(tab) {
     const contents = tab.view.webContents;
+    // CDP/window closure can destroy WebContents without render-process-gone.
+    // Electron may then remove view.webContents entirely; retire its lease now.
+    contents.once("destroyed", () => {
+      if (!this.destroyed && this.turnTabs.get(tab.id) === tab) this.removeTurnTab(tab, true);
+    });
     contents.setWindowOpenHandler(({ url }) => {
       if (allowedAuthUrl(url)) {
         this.markTurnAuthenticationRequired(tab);
@@ -1717,7 +1722,8 @@ class BrowserHost {
       tab.status = "aborted";
     }
     try { this.window.contentView.removeChildView(tab.view); } catch {}
-    if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close();
+    const contents = tab.view?.webContents;
+    if (contents && !contents.isDestroyed()) contents.close();
     if (this.selectedTabId === tab.id) {
       this.selectedTabId = [...this.turnTabs.keys()].at(-1) || "home";
       const homeContents = this.view?.webContents;
@@ -2414,6 +2420,13 @@ class BrowserHost {
     }
     if (this.userCancelledTurnOwners.has(traceId)) {
       throw new BrowserTurnCancelledError(traceId);
+    }
+    // Also cover destruction between listener delivery and a new lease request,
+    // including retained tabs left behind by older launcher lifecycle code.
+    for (const tab of [...this.turnTabs.values()]) {
+      if (tab.view && (!tab.view.webContents || tab.view.webContents.isDestroyed())) {
+        this.removeTurnTab(tab, true);
+      }
     }
     const sameTrace = [...this.turnTabs.values()].find((tab) => tab.traceId === traceId);
     if (sameTrace && sameTrace.interactionMode !== "automatic") {
