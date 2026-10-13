@@ -29,9 +29,69 @@ export const CHATGPT_EFFORT_ITEM_SELECTOR = '[role="menuitemradio"]';
 export const CHATGPT_EFFORT_SLIDER_CONTAINER_SELECTOR = '[data-model-reasoning-effort-slider], [data-model-picker-power-slider]';
 export const CHATGPT_EFFORT_SLIDER_SELECTOR = '[data-model-reasoning-effort-slider] [role="slider"], [data-model-picker-power-slider] [role="slider"]';
 export const CHATGPT_EFFORT_SLIDER_MAX_OPTIONS = 5;
+
+/** Model identity precedes the localized slider position; punctuation is not language-specific. */
+export function parseChatGptModelAnnouncement(text: string): {
+  version: string; name?: string; mode: string;
+} | undefined {
+  const normalized = text.normalize("NFKC").replace(/\p{Cf}/gu, "").replace(/\s+/g, " ").trim();
+  const match = /^(?:GPT[-\s]?)?(\d+(?:\.\d+)?)(?:\s+(Sol|Astra))?\s+([^\p{P}]+)(?:\p{P}|$)/iu.exec(normalized);
+  if (!match) return undefined;
+  return { version: match[1]!, ...(match[2] ? { name: match[2].toLowerCase() } : {}), mode: match[3]!.trim() };
+}
+
+/** Read model evidence only from the slider's own active picker. */
+export async function readChatGptModelAnnouncements(slider: Locator): Promise<string[]> {
+  return slider.evaluate(element => {
+    const doc = element.ownerDocument;
+    const descriptions = (element.closest('[role="menuitem"]')?.getAttribute("aria-describedby") ?? "")
+      .split(/\s+/).filter(Boolean).map(id => doc.getElementById(id)?.textContent ?? "");
+    // Some accounts now announce only the effort ("Pro, 5 of 5"); the model
+    // version is shown in the picker header as adjacent text nodes ("6" + "Pro").
+    const menu = element.closest('[role="menu"]');
+    const rendered = (node: Element): boolean => {
+      for (let parent: Element | null = node; parent; parent = parent.parentElement) {
+        if (parent.matches('[hidden], [inert], [aria-hidden="true"]')) return false;
+        const style = getComputedStyle(parent);
+        if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return false;
+      }
+      return true;
+    };
+    const headers = [...(menu?.querySelectorAll('[data-model-picker-view-toggle="true"]') ?? [])]
+      .filter(header => header.closest('[role="menu"]') === menu && rendered(header));
+    if (headers.length > 1) throw new Error("ChatGPT model picker exposes multiple active model headers");
+    if (headers.length === 1) {
+      const content = headers[0]!.querySelector("[data-menu-row-content]") ?? headers[0]!;
+      const words: string[] = [];
+      const walker = doc.createTreeWalker(content, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (node.parentElement && rendered(node.parentElement)) {
+          const word = node.textContent?.trim();
+          if (word) words.push(word);
+        }
+      }
+      descriptions.push(words.join(" "));
+    }
+    return descriptions;
+  });
+}
 /** Resolve only inside the verified composer's form; multiple submitters are an error. */
 export const CHATGPT_SEND_BUTTON_SELECTOR = '[data-testid="send-button"], button[type="submit"]';
-export const CHATGPT_STOP_BUTTON_SELECTOR = '[data-testid="stop-button"], form[data-chatgpt-composer] button[type="button"][aria-label="Stop"]';
+// Captured in the launcher's current composer on 2026-10-09. The primary action's
+// square glyph identifies Stop without its translated label. Button type/class alone
+// also match voice controls; keep the observed icon and composer ownership together.
+const CHATGPT_STOP_ICON_PATH = "M4.5 5.75C4.5 5.05964 5.05964 4.5 5.75 4.5H14.25C14.9404 4.5 15.5 5.05964 15.5 5.75V14.25C15.5 14.9404 14.9404 15.5 14.25 15.5H5.75C5.05964 15.5 4.5 14.9404 4.5 14.25V5.75Z";
+export const CHATGPT_STOP_BUTTON_SELECTOR = '[data-testid="stop-button"], '
+  + `form[data-chatgpt-composer] button[type="button"].size-token-button-composer:has(svg.icon-primary-action > path[d="${CHATGPT_STOP_ICON_PATH}"])`;
+// Captured Luna Think control (2026-09-08). The brain glyph's opening contour,
+// composer pill and pressed state identify this action independently of its label.
+// Other composer pills (search, tools, attachments) must not be treated as Think.
+// The Free account in the DEV launcher (2026-10-11) uses an SVG sprite instead.
+// The sprite fragment stays the same with Think on/off; the asset hash does not.
+export const CHATGPT_THINK_BUTTON_SELECTOR = [
+  'button[type="button"].__composer-pill[aria-pressed]:has(> .__composer-pill-icon > svg[viewBox="0 0 24 24"] > path[d^="M14.8974 2.29998C15.8303 2.29013 16.802 2.58194 17.5566 3.22577"])',
+  'button[type="button"][aria-pressed]:has(> svg[viewBox="0 0 20 20"] > use[href$="#brain-regular-20"])',
+].join(", ");
 // The new footer is shared with user messages. Response extraction additionally requires
 // this control to FOLLOW the last assistant answer, excluding the user's earlier footer.
 export const CHATGPT_COMPLETION_ACTION_SELECTOR = 'button[data-testid="copy-turn-action-button"], [data-turn-key] .turn-action-controls button';
@@ -132,6 +192,10 @@ export async function activateChatGptEffortMenu(
   control: Locator,
   options: { settleMs?: number } = {},
 ): Promise<ChatGptEffortActivation> {
+  const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+  if (viewport.width < 320 || viewport.height < 240) {
+    await page.setViewportSize({ width: 1280, height: 900 });
+  }
   const openSurface = await visibleEffortSurface(page, control);
   if (openSurface) return { method: "already-open", ...openSurface };
 
