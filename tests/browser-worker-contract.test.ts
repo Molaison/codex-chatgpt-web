@@ -1395,6 +1395,11 @@ test("compaction prompt attachment retries once only before submission evidence"
       compaction: boolean,
       baseline: unknown,
       captureDiagnostic?: (checkpoint: string) => Promise<void>,
+      abortSignal?: AbortSignal,
+      catalogRefreshAvailable?: boolean,
+      connectorAttemptBudget?: unknown,
+      requireThink?: boolean,
+      retryPaperAttachment?: boolean,
     ): Promise<void>;
   }).attachPromptWithCompactionRetry;
   const baseline = {
@@ -1434,6 +1439,20 @@ test("compaction prompt attachment retries once only before submission evidence"
     "ChatGPT changed while the compaction prompt was being prepared",
   );
   expect(duplicateAttempts).toBe(1);
+
+  // A paper with a PDF may re-attach once if its pre-Send composer was corrupted.
+  let paperAttempts = 0;
+  let paperResets = 0;
+  await attachWithRetry.call({
+    attachPrompt: async () => {
+      paperAttempts += 1;
+      if (paperAttempts === 1) throw new ChatGptPromptAttachmentIntegrityError("composer changed before Send");
+    },
+    currentSubmissionEvidence: async () => undefined,
+    resetCompactionComposerForRetry: async () => { paperResets += 1; },
+  }, {}, "paper PDF prompt", false, false, baseline, undefined, undefined, false, undefined, false, true);
+  expect(paperAttempts).toBe(2);
+  expect(paperResets).toBe(1);
 
   let normalAttempts = 0;
   await expect(attachWithRetry.call({

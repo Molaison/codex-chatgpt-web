@@ -6,6 +6,7 @@ import { notifyLauncherTurn, readLauncherBrowserHostDescriptor } from "../../lau
 import { ChatGptCompactionHandoffAccepted, ChatGptWebAdapterError } from "./adapter-error";
 import type { CompiledChatGptWebPrompt } from "./prompt";
 import type { BrowserTurn, ResolvedBrowserConfig } from "./browser-worker";
+import type { ChatGptChartWidget } from "./rich-widget";
 import {
   parseChatGptLunaCheckpoint,
   type ChatGptLunaCheckpoint,
@@ -26,6 +27,7 @@ interface PendingTurn {
 type HelperMessage =
   | { type: "ready"; features?: string[] }
   | { type: "event"; id: string; event: "heartbeat" | "generation_progress" | "send_activated" | "submitted" | "reasoning" | "commentary" | "text"; text?: string; continuation?: boolean }
+  | { type: "event"; id: string; event: "rich_widgets"; widgets: ChatGptChartWidget[] }
   | { type: "event"; id: string; event: "tool_batch_observed"; revision: number }
   | { type: "event"; id: string; event: "multipart_stage_acknowledged"; stageIndex: number }
   | { type: "event"; id: string; event: "completion_fence_begin"; requestId: number }
@@ -93,6 +95,14 @@ function parseHelperMessage(line: string): HelperMessage {
         requestId: message.requestId as number,
         revision: message.revision as number,
       };
+    }
+    if (event === "rich_widgets") {
+      if (!Array.isArray(message.widgets) || message.widgets.length > 4
+        || message.widgets.some(widget => !widget || widget.kind !== "cartesian_chart" || widget.version !== 1
+          || !Array.isArray(widget.points) || widget.points.length > 300)) {
+        throw new Error("Launcher browser helper rich widgets are invalid");
+      }
+      return { type: "event", id: message.id, event, widgets: message.widgets as ChatGptChartWidget[] };
     }
     if (event === "luna_checkpoint") {
       if (typeof message.answerHash !== "string" || !/^[a-f0-9]{64}$/.test(message.answerHash)) {
@@ -569,6 +579,7 @@ export class LauncherBrowserHelperClient {
       }
       else if (message.event === "commentary" && message.text) pending.turn.onCommentary?.(message.text, message.continuation === true);
       else if (message.event === "text" && message.text) pending.turn.onTextDelta(message.text);
+      else if (message.event === "rich_widgets") pending.turn.onRichWidgets?.(message.widgets);
       return;
     }
     if (message.type === "result") {

@@ -4,6 +4,7 @@ import { createContext, runInContext } from "node:vm";
 import type { Locator } from "playwright-core";
 import { ChatGptBrowserWorker, ChatGptCompletionTracker, ChatGptTurnDomHealthTracker, chatGptTurnIsComplete, ChatGptVisibleTraceTracker, CHATGPT_COMPLETION_SETTLE_MS } from "../src/adapters/chatgpt-web/browser-worker";
 import { chatGptHtmlToMarkdown, ChatGptMarkdownBuffer, ChatGptMarkdownConsistencyError, type ChatGptMarkdownSegment } from "../src/adapters/chatgpt-web/markdown";
+import { parseChatGptChartWidgets } from "../src/adapters/chatgpt-web/rich-widget";
 
 const smokeHtml = readFileSync(new URL("./fixtures/chatgpt-dil-smoke.html", import.meta.url), "utf8");
 const powerCompleteHtml = readFileSync(new URL("./fixtures/chatgpt-power-complete.html", import.meta.url), "utf8");
@@ -17,6 +18,7 @@ type Snapshot = {
   downloadableFiles: string[];
   visibleText: string;
   fullHtml: string;
+  richWidgetSources: string[];
   markdownSegments: ChatGptMarkdownSegment[];
   completionActionVisible: boolean;
   traceBlocks: { kind: "answer" | "commentary" | "status"; text: string }[];
@@ -785,4 +787,28 @@ test("repeated text cannot rebind a known node to another committed source range
   expect(buffer.observe(before!.markdownSegments, 0)).toBe("Repeated.\n\nRepeated.");
   expect(buffer.observe(shifted!.markdownSegments, 1)).toBe("");
   expect(() => buffer.finish()).toThrow(ChatGptMarkdownConsistencyError);
+});
+
+
+test("chart DOM transports data while the Markdown view excludes renderer controls", async () => {
+  const spec = JSON.stringify({
+    mark: "bar", title: "Enzyme activity",
+    encoding: { x: { field: "variant" }, y: { field: "activity" }, color: { field: "sample" } },
+    data: { values: [{ variant: "WT", activity: 1.4, sample: "A" }, { variant: "mut", activity: 2.3, sample: "B" }] },
+  });
+  const page = `<section id="turn"><div class="markdown"><p>Activity by variant.</p>
+    <div class="chart-widget-container"><pre><code class="language-vega-lite">${spec}</code></pre><button>Zoom</button></div>
+    <p>Two variants shown.</p></div><button aria-label="Copy"></button></section>`;
+  const result = await snapshot(page);
+  expect(result.richWidgetSources).toEqual([spec]);
+  const widgets = parseChatGptChartWidgets(result.richWidgetSources);
+  expect(widgets).toEqual([{
+    version: 1, kind: "cartesian_chart", id: "chart-1", mark: "bar",
+    title: "Enzyme activity", xField: "variant", yField: "activity", seriesField: "sample",
+    points: [{ x: "WT", y: 1.4, series: "A" }, { x: "mut", y: 2.3, series: "B" }],
+  }]);
+  expect(result.markdownSegments.map(segment => segment.html).join("")).not.toContain("chart-widget-container");
+  expect(result.markdownSegments.map(segment => segment.html).join("")).not.toContain("Zoom");
+  expect(parseChatGptChartWidgets(['{"mark":"bar","data":{"values":[{"x":"v","y":1}]}, "encoding":{"x":{"field":"x"},"y":{"field":"y"}},"transform":[{"calculate":"alert(1)"}]}'])[0])
+    .toEqual({version: 1, kind: "cartesian_chart", id: "chart-1", mark: "bar", title: "", xField: "x", yField: "y", points: [{x:"v",y:1}]});
 });

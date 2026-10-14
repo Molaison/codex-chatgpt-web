@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { observeChatGptAttachmentUploads } from "./attachment-upload";
+import { parseChatGptChartWidgets, type ChatGptChartWidget } from "./rich-widget";
 import { chatGptResponseStructureLogEntries, chatGptResponseStructures } from "./browser-response-structure";
 import { BrowserDiagnosticHistory } from "./browser-diagnostic-history";
 import { skillFileTokens, validateSkillFiles } from "./skill-attachments";
@@ -1402,6 +1403,8 @@ export interface BrowserTurn {
   onCommentary?: (text: string, continuation?: boolean) => void;
   /** Serialize the latest answer only after browser completion; visible progress remains live. */
   deferTextUntilComplete?: boolean;
+  /** Inert chart data emitted only after successful browser completion. */
+  onRichWidgets?: (widgets: ChatGptChartWidget[]) => void;
   /** Append-only, structurally stable Markdown chunks. */
   onTextDelta: (delta: string) => void;
   /** Proven current-turn MCP activity; never response content or completion. */
@@ -1918,6 +1921,7 @@ interface ChatGptResponseDomSnapshot {
   visibleText: string;
   fullHtml: string;
   markdownSegments: ChatGptMarkdownSegment[];
+  richWidgetSources: string[];
   completionActionVisible: boolean;
   stoppedThinkingVisible: boolean;
   traceBlocks: ChatGptVisibleTraceBlock[];
@@ -1938,6 +1942,7 @@ const absentResponseDomSnapshot = (): ChatGptResponseDomSnapshot => ({
   visibleText: "",
   fullHtml: "",
   markdownSegments: [],
+  richWidgetSources: [],
   completionActionVisible: false,
   stoppedThinkingVisible: false,
   traceBlocks: [],
@@ -4254,8 +4259,9 @@ export class ChatGptBrowserWorker {
     catalogRefreshAvailable = false,
     connectorAttemptBudget?: ChatGptConnectorAttemptBudget,
     requireThink = false,
+    retryPaperAttachment = false,
   ): Promise<void> {
-    let retryAvailable = compaction;
+    let retryAvailable = compaction || retryPaperAttachment;
     for (;;) {
       try {
         await this.attachPrompt(
@@ -5091,6 +5097,12 @@ export class ChatGptBrowserWorker {
           visibleText: answerContentRoots.map(markdownText).filter(Boolean).join("\n\n"),
           fullHtml: answerContentRoots.map(candidate => candidate.innerHTML).join(""),
           markdownSegments,
+          // Read chart data from the original answer DOM; the Markdown projection strips widgets.
+          richWidgetSources: renderedRoots.flatMap(candidate =>
+            candidate.querySelector(".chart-widget-container")
+              ? Array.from(candidate.querySelectorAll<HTMLElement>('pre code[class*="language-vega-lite"], .cm-content[data-language="vega-lite"]'))
+                .map(code => (code.textContent ?? "").trim()).filter(code => code.length > 0 && code.length <= 64_000)
+              : []),
           completionActionVisible: completionAction !== undefined,
           stoppedThinkingVisible,
           traceBlocks,
@@ -5803,6 +5815,7 @@ export class ChatGptBrowserWorker {
                 catalogRefreshAvailable,
                 connectorAttemptBudget,
                 mode.thinkEnabled,
+                !prepared.multipart && (prepared.files ?? []).some(file => file.filename.toLowerCase().endsWith(".pdf")),
               );
             },
             chatGptSuspensionClock,
@@ -5810,6 +5823,16 @@ export class ChatGptBrowserWorker {
           );
           break;
         } catch (error) {
+          // The entire prompt attachment stage precedes Send. Preserve the paper reservation
+          // after a proven pre-Send editor failure; never claim that a submitted turn failed.
+          if (error instanceof ChatGptPromptAttachmentIntegrityError && !prepared.multipart
+            && (prepared.files ?? []).some(file => file.filename.toLowerCase().endsWith(".pdf"))) {
+            const evidence = await this.currentSubmissionEvidence(page, submissionBaseline, turn.abortSignal);
+            if (!evidence) throw new ChatGptWebAdapterError(
+              `PDF/paper prompt could not be attached before Send; no question was submitted: ${error.message}`,
+              { status: 422, errorType: "invalid_request_error", code: "prompt_attachments_not_submitted", retryable: false, cause: error },
+            );
+          }
           if (!(error instanceof ChatGptConnectorCatalogStaleError) || !catalogRefreshAvailable) throw error;
           catalogRefreshAvailable = false;
           await diagnostics.capture(page, "connector-catalog-stale");
@@ -6194,6 +6217,7 @@ export class ChatGptBrowserWorker {
               throw new Error("ChatGPT completed with visible text that could not be serialized as Markdown");
             }
             completedImages = snapshot.images;
+            turn.onRichWidgets?.(parseChatGptChartWidgets(snapshot.richWidgetSources));
             completedFileOnly = allowFileOnlyCompletion && snapshot.visibleText.length === 0
               && snapshot.downloadableFiles.length > 0;
             if (final.delta) emitMarkdownDelta(final.delta);

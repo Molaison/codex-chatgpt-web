@@ -200,9 +200,12 @@ export interface CodexProviderContinuationState {
   [provider: string]: Record<string, unknown> | undefined;
 }
 
+import type { ChatGptChartWidget } from "./adapters/chatgpt-web/rich-widget";
+
 export type AdapterEvent =
   | { type: "heartbeat" }
   | { type: "text_delta"; text: string; phase?: CodexMessagePhase }
+  | { type: "rich_widget"; widget: ChatGptChartWidget }
   | { type: "thinking_delta"; thinking: string }
   // Opaque signed-reasoning metadata preserved when it appears in a Codex history.
   | { type: "thinking_signature"; signature: string }

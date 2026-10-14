@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { ChatGptChartWidget } from "./rich-widget";
 import type { AdapterEvent, CodexParsedRequest } from "../../types";
 import type { BrokerToolRequest } from "./turn-broker";
 import { ChatGptWebAdapterError, chatGptBrowserTabClosedError, chatGptTurnSupersededError } from "./adapter-error";
@@ -156,6 +157,7 @@ interface ChatGptTurnRuntimeBase {
   physicalSettlement: Promise<void>;
   trace: ChatGptTraceFeed;
   text: ChatGptTextFeed;
+  richWidgets?: ChatGptChartWidget[];
   usageInput?: CodexParsedRequest;
   conversationKey?: string;
   releaseRetainedConversation?: () => Promise<void>;
