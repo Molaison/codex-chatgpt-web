@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,7 +18,7 @@ function payload(turn: string, text = "RECEIPT_CANARY", previous?: string, strea
     ...(previous ? { previous_response_id: previous } : {}),
     client_metadata: { "x-codex-turn-metadata": JSON.stringify({ thread_id: "receipt-thread", turn_id: turn }) } };
 }
-function fixture() {
+function fixture(maxPages?: number) {
   const root = mkdtempSync(join(tmpdir(), "qa-request-receipts-")), key = "r".repeat(32);
   writeFileSync(join(root, "key"), key);
   const otherKey = "s".repeat(32); writeFileSync(join(root, "other-key"), otherKey);
@@ -35,7 +36,18 @@ function fixture() {
   globalThis.fetch = (async (_url, init) => {
     const body = JSON.parse(init!.body as string); calls.push(body); upstreamSignals.push(init?.signal); return respond(body);
   }) as typeof fetch;
-  let pool = createQaPool(config), open = true;
+  let pageLimitHook: ReturnType<typeof spyOn> | undefined;
+  if (maxPages !== undefined) {
+    const originalExec = Database.prototype.exec;
+    pageLimitHook = spyOn(Database.prototype, "exec").mockImplementation(function (this: Database, sql: any, ...args: any[]) {
+      const result = originalExec.call(this, sql, ...args);
+      if (String(sql).includes("PRAGMA journal_mode")) originalExec.call(this, `PRAGMA max_page_count=${maxPages}`);
+      return result;
+    });
+  }
+  let pool: ReturnType<typeof createQaPool>;
+  try { pool = createQaPool(config); } finally { pageLimitHook?.mockRestore(); }
+  let open = true;
   const stop = () => { if (open) { pool.close(); open = false; } };
   return { calls, upstreamSignals, config, root, key,
     request: (body: object, otherClient = false, path = "/v1/responses", signal?: AbortSignal) => pool.fetch(new Request("http://pool" + path, { method: "POST",
@@ -544,3 +556,108 @@ try {
     expect(JSON.stringify(f.calls[1].input)).toContain("CONCURRENT_CONTEXT");
   } finally { hook?.mockRestore(); f.close(); }
 }, 5000);
+
+test("connection refusal is safely retryable while an unknown connection reset stays blocked", async () => {
+  for (const code of ["ECONNREFUSED", "ECONNRESET"]) {
+    const f = fixture(); let unavailable = true, submitted = 0;
+    try {
+      f.respond(() => {
+        if (unavailable) throw Object.assign(new Error(`injected ${code}`), { code });
+        submitted++;
+        return Response.json({ id: `recovered-${submitted}`, status: "completed", output: [] });
+      });
+      const first = await f.request(payload("connect")); expect(first.status).toBe(502); await first.text();
+      expect(submitted).toBe(0); unavailable = false; f.restart();
+      const retry = await f.request(payload("connect"));
+      expect(retry.status).toBe(code === "ECONNREFUSED" ? 200 : 409); await retry.text();
+      const next = await f.request(payload("after-connect"));
+      expect(next.status).toBe(code === "ECONNREFUSED" ? 200 : 409); await next.text();
+      expect(submitted).toBe(code === "ECONNREFUSED" ? 2 : 0);
+    } finally { f.close(); }
+  }
+});
+
+test("SQLite space pressure degrades optional cache but retains uncertainty when required history cannot fit", async () => {
+  const f = fixture(91);
+  try {
+    const seed = await f.request(payload("seed")); expect(seed.status).toBe(200); await seed.text();
+    f.respond(() => Response.json({ id: "large-history-head", status: "completed", output: [
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "x".repeat(200 * 1024) }] }] }));
+    const second = await f.request(payload("large-answer")); expect(second.status).toBe(200);
+    expect((await second.json()).id).toBe("large-history-head");
+    expect(f.rows("SELECT response_id FROM temporary_history")).toEqual([{ response_id: "large-history-head" }]);
+    expect(f.rows("SELECT pending_history_turn FROM sessions")).toEqual([{ pending_history_turn: null }]);
+    expect(f.rows("SELECT response_json FROM qa_request_receipts")).toEqual([{ response_json: null }]);
+    f.respond(() => Response.json({ id: "following-head", status: "completed", output: [] }));
+    const next = await f.request(payload("following", "CONTINUE_AFTER_LARGE_ANSWER", "large-history-head"));
+    expect(next.status).toBe(200); expect((await next.json()).id).toBe("following-head");
+    expect(f.calls).toHaveLength(3);
+    expect(JSON.stringify(f.calls[2].input)).toContain("x".repeat(200 * 1024));
+  } finally { f.close(); }
+  const required = fixture(40);
+  try {
+    const seed = await required.request(payload("seed")); expect(seed.status).toBe(200); await seed.text();
+    required.respond(() => Response.json({ id: "uncommitted-large-head", status: "completed", output: [
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "x".repeat(200 * 1024) }] }] }));
+    const failed = await required.request(payload("large-answer")); expect(failed.status).toBe(502); await failed.text();
+    expect(required.rows("SELECT COUNT(*) AS n FROM sessions WHERE pending_history_turn IS NOT NULL")).toEqual([{ n: 1 }]);
+    expect(required.rows("SELECT response_id FROM temporary_history")).toEqual([{ response_id: "receipt-response-1" }]);
+    required.restart();
+    const next = await required.request(payload("following")); expect(next.status).toBe(409); await next.text();
+    expect(required.calls).toHaveLength(2);
+  } finally { required.close(); }
+});
+
+for (const purpose of ["trigger", "memento"] as const) {
+  test(`a legitimate same-turn ${purpose} compaction does not collide with a normal request`, async () => {
+    const f = fixture();
+    try {
+      const ordinary = payload("one");
+      const first = await f.request(ordinary); expect(first.status).toBe(200); const firstId = (await first.json()).id;
+      const replay = await f.request(ordinary); expect(replay.status).toBe(200); expect((await replay.json()).id).toBe(firstId);
+      const changed = await f.request(payload("one", "CHANGED_NORMAL_INPUT")); expect(changed.status).toBe(409); await changed.text();
+      expect(f.calls).toHaveLength(1);
+      const compact = purpose === "trigger"
+        ? { ...ordinary, input: [...ordinary.input, { type: "compaction_trigger" }] }
+        : { ...ordinary, client_metadata: { "x-codex-turn-metadata": JSON.stringify({ thread_id: "receipt-thread", turn_id: "one",
+          request_kind: "compaction", compaction: { implementation: "responses", strategy: "memento" } }) } };
+      const response = await f.request(compact); expect(response.status).toBe(200); await response.text();
+      const revised = { ...compact, input: [...compact.input, { type: "message", role: "assistant", content: "NEW_COMPACTION_REVISION" }] };
+      const compactRevision = await f.request(revised); expect(compactRevision.status).toBe(200); await compactRevision.text();
+      expect(f.calls).toHaveLength(3);
+      if (purpose === "memento") {
+        const invalid = { ...ordinary, client_metadata: { "x-codex-turn-metadata": JSON.stringify({ thread_id: "receipt-thread", turn_id: "one",
+          request_kind: "compaction", compaction: { implementation: "unsupported", strategy: "memento" } }) } };
+        const invalidResponse = await f.request(invalid); expect(invalidResponse.status).toBe(400); await invalidResponse.text();
+        expect(f.calls).toHaveLength(3);
+      }
+      f.respond(() => { throw Object.assign(new Error("uncertain ordinary turn"), { code: "ECONNRESET" }); });
+      const uncertain = await f.request(payload("ordinary-pending")); expect(uncertain.status).toBe(502); await uncertain.text();
+      const blocked = await f.request(compact); expect(blocked.status).toBe(409); await blocked.text();
+      expect(f.calls).toHaveLength(4);
+    } finally { f.close(); }
+  });
+}
+
+test("a completed legacy ordinary receipt survives an upgrade without another forward", async () => {
+  {
+    const f = fixture();
+    try {
+      const body = { ...payload("upgrade"), input: [
+        { ...payload("upgrade").input[0], id: "migration-user" },
+      ] };
+      const first = await f.request(body); expect(first.status).toBe(200); const id = (await first.json()).id;
+      const row = f.rows("SELECT session_hash, identity_hash FROM qa_request_receipts")[0] as { session_hash: string; identity_hash: string };
+      const scope = JSON.stringify([row.session_hash, "receipt-account", null, "/v1/responses"]);
+      // Previous released receipt encoding, before compaction purpose separation.
+      const legacyKey = createHash("sha256").update(JSON.stringify(["qa-receipt/v1", scope,
+        ["turn", "upgrade", [["user", "migration-user"]]],
+      ])).digest("hex");
+      expect(row.identity_hash).toBe(legacyKey);
+      f.sql(`UPDATE qa_request_receipts SET identity_hash='${legacyKey}'`);
+      f.restart();
+      const replay = await f.request(body); expect(replay.status).toBe(200);
+      expect((await replay.json()).id).toBe(id); expect(f.calls).toHaveLength(1);
+    } finally { f.close(); }
+  }
+});

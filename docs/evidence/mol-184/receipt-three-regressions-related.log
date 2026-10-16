@@ -1,0 +1,107 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/paper-history.test.ts:
+(pass) history uses the current native reader and exports only visible body text in message order [4.34ms]
+(pass) history rejects incomplete or mismatched native branches and unknown visible formats [2.36ms]
+(pass) history keeps titles, null timestamps and literal text while skipping empty body and hidden unknown formats [0.23ms]
+(pass) JSON and SSE share completed Responses, zero usage, alias identity and verified URL without any DB or mapping changes [17.62ms]
+(pass) unknown/no conversation are 404; busy is 409; uncertain reads preserve state; missing descriptor is 503 [6.02ms]
+(pass) history enforces authenticated route, account models and alias scope before invoking the reader [4.83ms]
+(pass) in-memory history lock covers aliases and blocks chat before prepare/begin; failures release it without writes [4.28ms]
+(pass) chat in flight rejects history until its existing completion path releases ownership [6.00ms]
+(pass) malformed reader results return explicit errors without state changes or a completed SSE; the next read can succeed [3.93ms]
+(pass) history blocks uncertain reconciliation and chat through every alias without registry writes [7.09ms]
+(pass) reconciliation blocks history and chat through aliases until its existing completion path finishes [5.41ms]
+(pass) aborted history releases its canonical lock without accepting a late result or changing the registry [3.93ms]
+
+tests/qa-portable-sessions.test.ts:
+(pass) portable QA keys use account and own thread; fork lineage is not identity [3.92ms]
+[chatgpt-web] browser_settled {"traceId":"7e2caa0982b2","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"f838c7007cf9","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) the real QA adapter keeps its saved-chat key across deployment and model settings [151.54ms]
+[chatgpt-web] browser_settled {"traceId":"976f1369548e","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"3e207fd8c325","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"5d5586b3d3cf","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"cd28a792fde8","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) fork seeds supplied human history once and keeps parent and child prompts independent [13.48ms]
+[chatgpt-web] browser_settled {"traceId":"fcae8421d72d","outcome":"error","compaction":false,"submission":"prepared","code":"fork_history_missing","retryable":false}
+[chatgpt-web] browser_settled {"traceId":"f570c13bd710","outcome":"error","compaction":false,"submission":"prepared","code":"fork_history_missing","retryable":false}
+(pass) a cold fork cannot silently replace missing inherited history with runtime wrappers [2.80ms]
+[chatgpt-web] browser_settled {"traceId":"f5c0e3476be0","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) a saved fork can restore with an incremental request and repeated fork metadata [1.56ms]
+[chatgpt-web] browser_settled {"traceId":"23e9abef1de1","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) an inherited assistant answer is valid fork context even when its earlier question is absent [1.53ms]
+[chatgpt-web] browser_settled {"traceId":"c41a161749db","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"dac76ed58cf7","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) same account/thread still queues across mutable configuration changes [4.51ms]
+(pass) QA config defaults to saved chats while explicit Temporary Chat opt-out survives reload [5.23ms]
+(pass) manual configuration without a preference remains Temporary Chat [0.59ms]
+(pass) portable mapping directory resolves at the account home after relocation [0.47ms]
+(pass) saved-chat directory validation rejects invalid types, blanks and NULs [1.50ms]
+(pass) direct worker and provider agree on QA defaults, account-relative paths and explicit opt-out [0.15ms]
+
+tests/qa-sessions.test.ts:
+(pass) QA chat identity survives model, effort, family and context compaction changes [0.54ms]
+(pass) account IDs alone isolate execution namespaces [0.05ms]
+(pass) missing thread identity cannot share an anonymous retained chat [0.08ms]
+(pass) QA incremental requests can continue without assistant history [0.09ms]
+(pass) QA continuation ignores commentary and tool-only assistant messages as answer boundaries [0.68ms]
+(pass) queued canonical history omits the previous question even before its answer arrives [0.18ms]
+(pass) an intentional repeated question with a different message ID is still submitted [0.15ms]
+[chatgpt-web] browser_settled {"traceId":"e5e07577081f","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"85500387420b","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"7c6900dfa8e9","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) three QA rounds reuse one chat across model effort changes and submit incremental prompts [5.69ms]
+[chatgpt-web] browser_settled {"traceId":"5630dd1dd087","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"a561872f19f4","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) concurrent requests in one QA thread queue without aborting the first answer [3.29ms]
+[chatgpt-web] browser_settled {"traceId":"9bf067a690f0","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"370ce0b7884c","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) same thread and turn IDs on different accounts never share browser execution or replies [2.92ms]
+[chatgpt-web] browser_settled {"traceId":"dceaf5e9994c","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) an exact request retry replays the completed answer without another browser submission [1.50ms]
+[chatgpt-web] browser_settled {"traceId":"31c40353a288","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) disconnecting an accepted QA response preserves it for reconnect [1.69ms]
+[chatgpt-web] browser_settled {"traceId":"b98ab21c45ea","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) cancelling a queued QA request never submits it or cancels the active answer [1.64ms]
+[chatgpt-web] browser_settled {"traceId":"0925ce3165ac","outcome":"error","compaction":false,"submission":"prepared","code":"test_capacity","retryable":true}
+[chatgpt-web] browser_settled {"traceId":"0925ce3165ac","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) retryable pre-submission failure can retry the same QA execution [1.76ms]
+[chatgpt-web] browser_settled {"traceId":"52a2e9c1e5d8","outcome":"error","compaction":false,"submission":"accepted"}
+(pass) failure after accepted submission cannot duplicate the question on an exact retry [0.82ms]
+[chatgpt-web] browser_settled {"traceId":"3ab9c3587b9b","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) explicit fresh-chat mode still disables retained QA conversations [1.14ms]
+[chatgpt-web] browser_settled {"traceId":"30fda9cc6d21","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"3cafc192b6a3","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"c43cd9498380","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"f97cfefb26a2","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) QA adapter forwards only an explicit internal deferred-text flag [5.09ms]
+
+tests/paper-recovery-reader.test.ts:
+(skip) native recovery closes its owned interception without waiting for Fetch.disable and rereads the same target
+
+tests/paper-recovery.test.ts:
+(pass) first upload recovers using verified hash, saved PDF and current terminal; aliases retain canonical ownership [3.95ms]
+(pass) a failed continuation reuses registered PDF even with earlier pages omitted and no attachment in this question [1.89ms]
+(pass) unverified native evidence leaves the actual SQLite row and event log unchanged [29.26ms]
+(pass) a first upload requires the SHA verified by prepare, not a matching filename [1.50ms]
+(pass) ownership, native mapping and active dispatch are checked before reading [5.20ms]
+(pass) two overlapping reconciliations commit exactly once [1.95ms]
+(pass) state, dispatch, alias and native-map changes during the read reject stale recovery [9.19ms]
+(pass) read errors and cancellation never promote uncertain [1.53ms]
+(skip) browser request scope permits history GET and blocks send/upload/download, then removes its handler
+(pass) pool recovery shares canonical and alias resolves without generation and preserves native failures [6.99ms]
+
+tests/paper-registry.test.ts:
+(pass) paper protocol persists reservations and saved identity, strips repeats, serializes turns and refuses unsafe migration [22.92ms]
+(pass) a confirmed pre-send attachment failure keeps the reservation retryable while ambiguous failures stay uncertain [13.93ms]
+
+2 tests skipped:
+(skip) native recovery closes its owned interception without waiting for Fetch.disable and rereads the same target
+(skip) browser request scope permits history GET and blocks send/upload/download, then removes its handler
+
+ 52 pass
+ 2 skip
+ 0 fail
+ 473 expect() calls
+Ran 54 tests across 6 files. [999.00ms]

@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { isNativeTextCompaction } from "./responses/compaction";
 import { createHash } from "node:crypto";
 
 export const MAX_RECEIPT_BYTES = 1024 * 1024;
@@ -7,6 +8,11 @@ function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, entry]) => [key, canonical(entry)]));
   return value;
+}
+
+export function isQaCompactionRequest(payload: Record<string, unknown>): boolean {
+  return (Array.isArray(payload.input) && payload.input.some(item => item && typeof item === "object"
+    && (item as Record<string, unknown>).type === "compaction_trigger")) || isNativeTextCompaction(payload);
 }
 
 export function receiptIdentity(payload: Record<string, unknown>, native: Record<string, unknown>, scope: string) {

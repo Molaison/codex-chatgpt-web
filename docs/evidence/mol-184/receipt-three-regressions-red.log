@@ -1,0 +1,65 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/qa-pool-request-receipts.test.ts:
+567 |         return Response.json({ id: `recovered-${submitted}`, status: "completed", output: [] });
+568 |       });
+569 |       const first = await f.request(payload("connect")); expect(first.status).toBe(502); await first.text();
+570 |       expect(submitted).toBe(0); unavailable = false; f.restart();
+571 |       const retry = await f.request(payload("connect"));
+572 |       expect(retry.status).toBe(code === "ECONNREFUSED" ? 200 : 409); await retry.text();
+                                 ^
+error: expect(received).toBe(expected)
+
+Expected: 200
+Received: 409
+
+      at <anonymous> (/tmp/mol184-regression-review/candidate/tests/qa-pool-request-receipts.test.ts:572:28)
+(fail) connection refusal is safely retryable while an unknown connection reset stays blocked [11.33ms]
+581 |   const f = fixture(91);
+582 |   try {
+583 |     const seed = await f.request(payload("seed")); expect(seed.status).toBe(200); await seed.text();
+584 |     f.respond(() => Response.json({ id: "large-history-head", status: "completed", output: [
+585 |       { type: "message", role: "assistant", content: [{ type: "output_text", text: "x".repeat(200 * 1024) }] }] }));
+586 |     const second = await f.request(payload("large-answer")); expect(second.status).toBe(200);
+                                                                                         ^
+error: expect(received).toBe(expected)
+
+Expected: 200
+Received: 502
+
+      at <anonymous> (/tmp/mol184-regression-review/candidate/tests/qa-pool-request-receipts.test.ts:586:84)
+(fail) SQLite space pressure degrades optional cache but retains uncertainty when required history cannot fit [4.63ms]
+619 |       expect(f.calls).toHaveLength(1);
+620 |       const compact = purpose === "trigger"
+621 |         ? { ...ordinary, input: [...ordinary.input, { type: "compaction_trigger" }] }
+622 |         : { ...ordinary, client_metadata: { "x-codex-turn-metadata": JSON.stringify({ thread_id: "receipt-thread", turn_id: "one",
+623 |           request_kind: "compaction", compaction: { implementation: "responses", strategy: "memento" } }) } };
+624 |       const response = await f.request(compact); expect(response.status).toBe(200); await response.text();
+                                                                               ^
+error: expect(received).toBe(expected)
+
+Expected: 200
+Received: 409
+
+      at <anonymous> (/tmp/mol184-regression-review/candidate/tests/qa-pool-request-receipts.test.ts:624:74)
+(fail) a legitimate same-turn trigger compaction does not collide with a normal request [4.31ms]
+619 |       expect(f.calls).toHaveLength(1);
+620 |       const compact = purpose === "trigger"
+621 |         ? { ...ordinary, input: [...ordinary.input, { type: "compaction_trigger" }] }
+622 |         : { ...ordinary, client_metadata: { "x-codex-turn-metadata": JSON.stringify({ thread_id: "receipt-thread", turn_id: "one",
+623 |           request_kind: "compaction", compaction: { implementation: "responses", strategy: "memento" } }) } };
+624 |       const response = await f.request(compact); expect(response.status).toBe(200); await response.text();
+                                                                               ^
+error: expect(received).toBe(expected)
+
+Expected: 200
+Received: 409
+
+      at <anonymous> (/tmp/mol184-regression-review/candidate/tests/qa-pool-request-receipts.test.ts:624:74)
+(fail) a legitimate same-turn memento compaction does not collide with a normal request [1.99ms]
+
+ 0 pass
+ 31 filtered out
+ 4 fail
+ 17 expect() calls
+Ran 4 tests across 1 file. [645.00ms]

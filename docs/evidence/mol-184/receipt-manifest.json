@@ -88,6 +88,34 @@
     "receipt-ci-first-run.json": {
       "sha256": "ab459f5b728a0c2d07d8a0e7d3bb8819f618f76341f9482a588b53cbdf96cf48",
       "source": "https://github.com/Molaison/codex-chatgpt-web/actions/runs/38942373166"
+    },
+    "receipt-three-regressions-red.log": {
+      "sha256": "8eae9e0e11c842929db7e5bbab7793edb6e56dba2ff2db06d5db0d2bb20c20a6",
+      "source": "/tmp/mol184-three-regressions-red.log"
+    },
+    "receipt-three-regressions-focused.log": {
+      "sha256": "1770f763b4ac1a495d4e13f03cad261c1edecd93da24ed459dc9070dbb0182af",
+      "source": "/tmp/mol184-three-regressions-focused.log"
+    },
+    "receipt-three-regressions-types.log": {
+      "sha256": "e576e4d30f5392d9dec436980fdafe8b9b900832b6fe6adc3043841047674093",
+      "source": "/tmp/mol184-three-regressions-types.log"
+    },
+    "receipt-three-regressions-related.log": {
+      "sha256": "2ab027b5c23dfd55c7b7712b250d1258b72e3e1950841e9096273a79135f859e",
+      "source": "/tmp/mol184-three-regressions-related.log"
+    },
+    "receipt-three-regressions-base.jsonl": {
+      "sha256": "116805a8546164e192bbb0240a8dac45743b1013913e1ee73960eebabe732208",
+      "source": "/tmp/mol184-regression-review/base.jsonl"
+    },
+    "receipt-three-regressions-candidate.jsonl": {
+      "sha256": "d640962cdb70cf5354e3701b4e5e4527fd5d163ca07427a173693f3d946bfef7",
+      "source": "/tmp/mol184-regression-review/candidate.jsonl"
+    },
+    "receipt-three-regressions-fixed.jsonl": {
+      "sha256": "5850c8ce7b71cbc720a9bf097528c52a31e45334c6b6e64fa54d72d67421d9fc",
+      "source": "/tmp/mol184-regression-review/fixed.jsonl"
     }
   },
   "candidate": {
@@ -129,7 +157,19 @@
   "exactHeadCI": {
     "firstRun": "receipt-ci-first-run.json",
     "conclusion": "failure",
-    "afterTestBudgetCorrection": "pending"
+    "afterTestBudgetCorrection": "completed: failure; d28024715ead3c31329039521e16beb3d528a02b; https://github.com/Molaison/codex-chatgpt-web/actions/runs/38943753938; see timeoutOnlyFollowup for per-platform results",
+    "timeoutOnlyFollowup": {
+      "head": "d28024715ead3c31329039521e16beb3d528a02b",
+      "runUrl": "https://github.com/Molaison/codex-chatgpt-web/actions/runs/38943753938",
+      "conclusion": "failure",
+      "receiptAndExpiry": "30 receipt and 10 expiry pass on all three platforms",
+      "rootSuites": {
+        "windows": "1205 pass / 104 skip / 10 fail",
+        "macos": "1213 pass / 96 skip / 10 fail",
+        "ubuntu": "1212 pass / 97 skip / 10 fail"
+      },
+      "coverageLimit": "does not cover subsequent three regression categories"
+    }
   },
   "realBrowser": "not run; no execution authorization added",
   "intermediateIntegration": {
@@ -146,7 +186,33 @@
     "localSingle": "1 pass / 275 assertions / exit 0",
     "localFocused": "45 pass / 595 assertions / exit 0",
     "localTypecheck": "pass / exit 0",
-    "windowsAfterCorrection": "not run",
-    "nextHeadCI": "pending"
+    "windowsAfterCorrection": "verified at d28024715ead3c31329039521e16beb3d528a02b; https://github.com/Molaison/codex-chatgpt-web/actions/runs/38943753938: 30 receipt and 10 expiry tests pass; root suite 1205 pass / 104 skip / 10 baseline failures",
+    "nextHeadCI": "completed: failure; d28024715ead3c31329039521e16beb3d528a02b; https://github.com/Molaison/codex-chatgpt-web/actions/runs/38943753938; this is the timeout-only correction, not the subsequent three-regression correction"
+  },
+  "threeRegressionCorrection": {
+    "sourceAndTestHashes": {
+      "src/qa-pool.ts": "bda36eb8584318cc3eb0a416d9d8bbbff691724ce0e86c2f875bad034793b38f",
+      "src/qa-pool-receipts.ts": "652dc732d2959b003a647b4ede90a676b04c9061979d662135cd4d25a544690c",
+      "tests/qa-pool-request-receipts.test.ts": "481e115749746f44abd016c1f3d41b9ca13b77201f54c27b5e7eb1bf250177d9"
+    },
+    "probeSources": [
+      "26bd5a9d94ddf82da8c5a3993b5b07aeda4bc4b1",
+      "d28024715ead3c31329039521e16beb3d528a02b",
+      "corrected working tree, hashes above"
+    ],
+    "scope": "actual pool/SQLite; injected refusal error code not real socket; real 91-page SQLite limit with second 200KiB response; inline trigger/memento paths",
+    "regressionRed": "4 fail / 17 assertions against frozen d280; exit 1",
+    "localFocused": {
+      "command": "bun test tests/qa-pool.test.ts tests/qa-pool-history-expiry.test.ts tests/qa-pool-request-receipts.test.ts",
+      "result": "50 pass / 650 assertions / exit 0"
+    },
+    "localTypecheck": {
+      "command": "bun run typecheck",
+      "result": "pass / exit 0"
+    },
+    "related": "52 pass / 2 existing skips / 473 assertions / exit 0",
+    "independentAudit": "5 pass / 55 assertions; candidate review approved, not real acceptance",
+    "nextCI": "pending",
+    "remaining": "generic 503 lacks trusted proof of non-submission; real browser and integrated CPR validation not established"
   }
 }

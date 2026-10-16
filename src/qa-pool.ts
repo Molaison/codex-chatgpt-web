@@ -1,4 +1,4 @@
-import { createReceiptStore, receiptIdentity, replayReceipt, MAX_RECEIPT_BYTES } from "./qa-pool-receipts";
+import { createReceiptStore, receiptIdentity, replayReceipt, MAX_RECEIPT_BYTES, isQaCompactionRequest } from "./qa-pool-receipts";
 import { PaperRegistry, PaperError, normalizePaperId, poolSessionHash, type PaperScope, type PaperRow } from "./paper-registry";
 import type { PaperRecoveryReader } from "./paper-recovery";
 import { parsePaperHistory, readLauncherPaperHistory, type PaperHistoryReader } from "./paper-history";
@@ -337,7 +337,10 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
     }
     const retainHistory = account.sessionModes && (selection.mode === "temporary" || cached !== null && cached !== undefined);
     receipts.purge();
-    const receipt = !paper && pathname === "/v1/responses" && (account.sessionModes || owner.pending_history_turn)
+    let compactionRequest: boolean;
+    try { compactionRequest = pathname === "/v1/responses/compact" || isQaCompactionRequest(normalized.payload); }
+    catch { return failure(400, "invalid_compaction_request", "Unsupported native compaction protocol"); }
+    const receipt = !paper && !compactionRequest && (account.sessionModes || owner.pending_history_turn)
       ? receiptIdentity({ ...normalized.payload, session_mode: selection.mode }, receiptNative, JSON.stringify([hash, owner.account_id, owner.project_id, pathname])) : undefined;
     if (receipt) {
       let prior = receipts.get(hash, receipt.key);
@@ -434,11 +437,15 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
         promoteHistory(hash);
         return;
       }
-      commitHistory(value, wire, cacheable);
+      try { commitHistory(value, wire, cacheable); }
+      catch (error) {
+        if (!receipt || !historyReserved || !cacheable || record(error).code !== "SQLITE_FULL") throw error;
+        commitHistory(value, undefined, false);
+      }
       settleReceipt();
       return true;
     };
-    if (retainHistory && !paper && pathname === "/v1/responses") {
+    if (retainHistory && !paper && !compactionRequest) {
       try {
         const reserved = db.transaction(() => {
           if (receipt && receipts.get(hash, receipt.key)) return "existing";
@@ -471,10 +478,12 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
     }
     if (paper) papers.begin(paper.id);
     if (retainHistory) activeHistories.add(hash);
+    let receivedResponse = false;
     try {
       const response = await fetch(account.origin.replace(/\/$/, "") + pathname, {
         method: "POST", headers, body: JSON.stringify(normalized.payload), signal: observation?.signal ?? request.signal, redirect: "error",
       });
+      receivedResponse = true;
       if (closed || observation?.signal.aborted) { await response.body?.cancel(); throw new Error("Observation ended"); }
       let body: BodyInit | null = response.body;
       let notSubmitted = false;
@@ -549,7 +558,10 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
         "content-type": response.headers.get("content-type") ?? "application/json",
         "cache-control": "no-store",
       } });
-    } catch { release(); return failure(502, "session_account_unreachable", "This session's account runtime is unreachable; retry after it recovers"); }
+    } catch (error) {
+      const connectionCode = record(error).code ?? record(record(error).cause).code;
+      release(!receivedResponse && (connectionCode === "ECONNREFUSED" || connectionCode === "ConnectionRefused"));
+      return failure(502, "session_account_unreachable", "This session's account runtime is unreachable; retry after it recovers"); }
   }
   return { fetch: async (request: Request) => {
     try { return await fetchRequest(request); }

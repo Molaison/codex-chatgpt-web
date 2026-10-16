@@ -1,0 +1,5 @@
+{"kind":"refused","first":502,"second":200,"third":200,"calls":2,"head":[{"response_id":"r2"}]}
+{"kind":"503","first":503,"second":409,"third":409,"error":{"code":"temporary_turn_uncertain","type":"qa_pool_error","message":"This request may have been submitted; reconcile it before retrying"},"calls":0,"head":[]}
+{"kind":"capacity","first":200,"second":200,"calls":2,"head":[{"response_id":"r2"}]}
+{"kind":"trigger","first":200,"second":200,"calls":2,"head":[{"response_id":"r2"}]}
+{"kind":"memento","first":200,"second":200,"calls":2,"head":[{"response_id":"r2"}]}
