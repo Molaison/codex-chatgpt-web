@@ -12,6 +12,7 @@ const {
 } = require("./process-tree.cjs");
 const { runtimeInvocation } = require("./runtime-command.cjs");
 const { windowsTrustEnvironment } = require("./windows-trust.cjs");
+const { tunnelConnectionEnvironment } = require("./tunnel-proxy.cjs");
 
 const RESTART_WINDOW_MS = 60_000;
 const MAX_RESTARTS_PER_WINDOW = 5;
@@ -349,6 +350,7 @@ class RuntimeSupervisor {
     publishOperation,
     runtimeInvocationFactory = runtimeInvocation,
     onConfigRead,
+    resolveProxy,
   }) {
     this.app = app;
     this.logger = logger;
@@ -364,6 +366,7 @@ class RuntimeSupervisor {
     this.publishOperation = publishOperation;
     this.runtimeInvocationFactory = runtimeInvocationFactory;
     this.onConfigRead = onConfigRead;
+    this.resolveProxy = resolveProxy;
     this.configPath = path.join(coreHome, "config.json");
     this.statePath = path.join(coreHome, "runtime", "launcher-supervisor.json");
     this.daemon = null;
@@ -1062,6 +1065,7 @@ class RuntimeSupervisor {
   }
 
   async runTunnelConnectCommand(config) {
+    const connection = await tunnelConnectionEnvironment({ resolveProxy: this.resolveProxy });
     const contract = config.browserInteractionMode === "manual" ? "safe" : "native";
     const invocation = this.runtimeCommand([
       "mcp",
@@ -1072,9 +1076,10 @@ class RuntimeSupervisor {
     ]);
     return await this.runTunnelCommand(
       config,
-      managedTunnelConnectArgs(config, invocation),
+      [...managedTunnelConnectArgs(config, invocation), "--control-plane-base-url", connection.baseURL],
       TUNNEL_START_TIMEOUT_MS,
       "Tunnel managed startup",
+      connection.env,
     );
   }
 
@@ -1617,7 +1622,7 @@ class RuntimeSupervisor {
     );
   }
 
-  async runTunnelCommand(config, args, timeoutMs, label) {
+  async runTunnelCommand(config, args, timeoutMs, label, env = process.env) {
     if (config.mcpProvider === "external-http") {
       throw new Error("This runtime does not own a managed OpenAI tunnel");
     }
@@ -1626,6 +1631,7 @@ class RuntimeSupervisor {
     return await new Promise((resolve, reject) => {
       const child = spawn(tunnel.binaryPath, args, {
         cwd: tunnel.profileDir,
+        env,
         detached: DETACH_OWNED_CHILD,
         stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true,

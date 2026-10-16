@@ -542,6 +542,7 @@ export class LauncherBrowserHelperClient {
                 text: prepared.text,
                 images: prepared.images,
                 ...(prepared.files ? { files: prepared.files } : {}),
+                ...(prepared.turnToken ? { turnToken: prepared.turnToken } : {}),
                 ...(prepared.skillFiles ? { skillFiles: prepared.skillFiles } : {}),
                 ...(prepared.multipart ? { multipart: prepared.multipart } : {}),
                 ...(prepared.trimmedCompactionMessages !== undefined

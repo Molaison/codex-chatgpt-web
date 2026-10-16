@@ -10,6 +10,7 @@ import { dirname, join, resolve } from "node:path";
 import { observeChatGptAttachmentUploads } from "./attachment-upload";
 import { chatGptResponseStructureLogEntries, chatGptResponseStructures } from "./browser-response-structure";
 import { BrowserDiagnosticHistory } from "./browser-diagnostic-history";
+import { readChatGptUserMessage } from "./browser-user-message";
 import { skillFileTokens, validateSkillFiles } from "./skill-attachments";
 import { detectChatGptLimitsPlan, readChatGptUsageAccount, readChatGptUsageModel, supportsChatGptUsageTracking, type ChatGptUsageModel } from "./limits";
 import { chromium, type Browser, type BrowserContext, type Locator, type Page, type Request, type Response } from "playwright-core";
@@ -1429,6 +1430,7 @@ interface ChatGptSubmissionBaseline {
   domCache: ChatGptSubmissionDomCache;
   submittedText?: string;
   submissionReceipt?: string;
+  turnToken?: string;
   acceptedUserIdentity?: string;
   acknowledgedStages?: readonly ChatGptAcknowledgedMultipartStage[];
 }
@@ -1659,8 +1661,12 @@ export async function setChatGptThinkMode(
   if (pressed !== target) {
     const composerState = () => composer.evaluate(element => {
       const copy = element.cloneNode(true) as HTMLElement;
-      const pills = [...copy.querySelectorAll('[data-id^="plugin:"][data-keyword]')];
-      const connectors = pills.map(pill => pill.getAttribute("data-keyword")).sort();
+      const pills = [...copy.querySelectorAll(
+        '[data-id^="plugin:"][data-keyword], [app-mention-path^="app://"][app-mention-display-name][contenteditable="false"]',
+      )];
+      const connectors = pills.map(pill => (
+        pill.getAttribute("data-id") ?? pill.getAttribute("app-mention-path")
+      )).sort();
       for (const pill of pills) pill.remove();
       const text = element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement
         ? element.value : copy.textContent ?? "";
@@ -3353,8 +3359,12 @@ export class ChatGptBrowserWorker {
     page: Page,
     submittedText?: string,
     acknowledgedStages: readonly ChatGptAcknowledgedMultipartStage[] = [],
+    turnToken?: string,
     knownTurnIdentities: readonly string[] = [],
   ): Promise<ChatGptSubmissionBaseline> {
+    if (turnToken !== undefined && (!/^turn_[A-Za-z0-9_-]{32}$/.test(turnToken) || !submittedText?.includes(turnToken))) {
+      throw new Error("ChatGPT submission identity does not match its prepared prompt");
+    }
     const userTurns = page.locator(CHATGPT_USER_TURN_SELECTOR);
     const responseTurns = page.locator(CHATGPT_ASSISTANT_TURN_SELECTOR);
     const domCache: ChatGptSubmissionDomCache = {};
@@ -3366,6 +3376,7 @@ export class ChatGptBrowserWorker {
       domCache,
       submittedText,
       submissionReceipt: submittedText?.match(/^\[codex-submission:[0-9a-f-]{36}\]\n/)?.[0].trimEnd(),
+      turnToken,
       acknowledgedStages: [...acknowledgedStages],
     };
     // A stage can persist under its new key before the next baseline is captured.
@@ -3547,7 +3558,7 @@ export class ChatGptBrowserWorker {
     if (newUsers.length > 0) {
       // Activity can unmount the accepted user group while it renders a temporary
       // assistant group. Its return must match the ID that acknowledged Send. If no
-      // user ID was observed then, require this Send's receipt or exact text. A
+      // user ID was observed then, verify this turn's broker token, Send receipt, or exact text.
       // surviving old group or any competing new turn remains foreign.
       const user = newUsers[0]!;
       const replacement = identity && newUsers.length === 1
@@ -3561,7 +3572,9 @@ export class ChatGptBrowserWorker {
         const locator = page.locator(chatGptAssistantTurnSelector(identity!));
         matches = baseline.acceptedUserIdentity
           ? user === baseline.acceptedUserIdentity
-          : Boolean(baseline.submittedText) && await withChatGptBrowserObservationTimeout(withBrowserTurnAbort(locator.evaluate((group, { submitted, receipt }) => {
+          : baseline.turnToken || !baseline.submissionReceipt
+            ? Boolean(baseline.submittedText) && await this.userMessageMatchesSubmission(locator, baseline.submittedText!, signal, baseline.turnToken)
+            : Boolean(baseline.submittedText) && await withChatGptBrowserObservationTimeout(withBrowserTurnAbort(locator.evaluate((group, { submitted, receipt }) => {
           const bubbles = group.querySelectorAll<HTMLElement>("[data-user-message-bubble]");
           const contents = bubbles.length === 1
             ? bubbles[0]!.querySelectorAll<HTMLElement>("[data-search-result-target]")
@@ -3588,6 +3601,14 @@ export class ChatGptBrowserWorker {
         // a completed answer here mistakes that same unfinished turn for a foreign one.
       }
       if (!matches) throw new Error("ChatGPT opened another user turn while the bound assistant response was detached");
+      // Expanding a truncated bubble can yield to another DOM update. Keep the
+      // no-competing-turn check valid after that action, not just before it.
+      const current = await this.submissionDomState(page, baseline.domCache, signal);
+      if (!current.userIdentities.includes(user) || !current.responseIdentities.includes(identity!)
+        || current.turnIdentities.includes(binding.identity)
+        || current.turnIdentities.some(turn => !acceptedTurns.has(turn) && turn !== user && turn !== identity)) {
+        throw new Error("ChatGPT changed conversation turns while verifying the submitted message");
+      }
     }
     if (!identity || identity === binding.identity) return binding;
     return {
@@ -3595,6 +3616,42 @@ export class ChatGptBrowserWorker {
       locator: page.locator(chatGptAssistantTurnSelector(identity)),
       acceptedTurnIdentities: state.turnIdentities,
     };
+  }
+
+  private async userMessageMatchesSubmission(group: Locator, submitted: string, signal?: AbortSignal, turnToken?: string): Promise<boolean> {
+    const bubble = group.locator("[data-user-message-bubble]");
+    if (await bubble.count() !== 1) return false;
+    // Inline links have their own search targets. Only the outer message target
+    // identifies the complete user content.
+    const content = bubble.locator("[data-search-result-target]:not([data-search-result-target] [data-search-result-target])");
+    if (await content.count() !== 1) return false;
+    // Captured on 2026-10-15: long messages are truncated in the DOM, not just
+    // clipped by CSS. Expand the message using its semantic control in any locale.
+    const expand = bubble.locator('button[type="button"][aria-expanded][data-thread-find-skip="true"][data-markdown-copy="exclude"]');
+    const count = await expand.count();
+    if (count > 1) return false;
+    if (count === 1 && await expand.getAttribute("aria-expanded") === "false") {
+      await expand.press("Enter", { signal, timeout: CHATGPT_CONNECTOR_ACTION_TIMEOUT_MS });
+      await expand.locator('xpath=self::*[@aria-expanded="true"]').waitFor({
+        state: "attached", signal, timeout: CHATGPT_CONNECTOR_ACTION_TIMEOUT_MS,
+      });
+    }
+    if (turnToken !== undefined) {
+      // The composer was already checked byte-for-byte before Send. ChatGPT's
+      // rich-text renderer can rewrite JSON/link labels afterwards, so use the
+      // exact broker identity for this turn, never a shared prompt prefix or a
+      // token inferred from the rendered message. Expand first to expose its tail.
+      return withChatGptBrowserObservationTimeout(withBrowserTurnAbort(content.evaluate((element, token) => {
+        const tokens = (element.textContent ?? "").match(/(?<![A-Za-z0-9_-])turn_[A-Za-z0-9_-]{32}(?![A-Za-z0-9_-])/g) ?? [];
+        return tokens.length === 1 && tokens[0] === token;
+      }, turnToken), signal));
+    }
+    const observed = await withChatGptBrowserObservationTimeout(withBrowserTurnAbort(
+      content.evaluate(readChatGptUserMessage, this.config?.appName), signal,
+    ));
+    return observed !== undefined && this.promptTextEquivalent(
+      submitted.replace(/\r\n?/g, "\n"), observed.text.replace(/\r\n?/g, "\n"),
+    );
   }
 
   private async attachedPromptText(page: Page, abortSignal?: AbortSignal): Promise<string> {
@@ -3985,12 +4042,6 @@ export class ChatGptBrowserWorker {
         await this.assertPromptAttached(page, prompt, abortSignal);
         return;
       }
-      if (requireThink) {
-        const composer = await this.activeComposer(page, 30_000, abortSignal);
-        composerMutationStarted = true;
-        await composer.fill("", { signal: abortSignal, timeout: CHATGPT_CONNECTOR_ACTION_TIMEOUT_MS });
-        await setChatGptThinkMode(composer, true, captureDiagnostic, abortSignal);
-      }
       // A retained tab preserves history, but ChatGPT can require the plugin on each new
       // message. Reuse an existing selected pill only when selectConnector verifies it here.
       const selectedComposer = await this.selectConnector(
@@ -4004,12 +4055,9 @@ export class ChatGptBrowserWorker {
       // attachment owns the selected pill and prompt text as one transaction.
       composerMutationStarted = true;
       if (requireThink) {
-        const controls = chatGptThinkButtons(selectedComposer);
-        if (await controls.count() !== 1 || await controls.first().getAttribute("aria-pressed", {
-          signal: abortSignal, timeout: CHATGPT_CONNECTOR_ACTION_TIMEOUT_MS,
-        }) !== "true") {
-          throw new Error("ChatGPT connector selection did not preserve Think mode");
-        }
+        // Selecting a plugin resets Think on Free accounts. Select it first, then
+        // enable Think and verify that the selected plugin survives the toggle.
+        await setChatGptThinkMode(selectedComposer, true, captureDiagnostic, abortSignal);
       }
       await selectedComposer.focus({ signal: abortSignal, timeout: CHATGPT_CONNECTOR_ACTION_TIMEOUT_MS });
       await selectedComposer.press(CHATGPT_COMPOSER_DOCUMENT_END_KEY, {
@@ -4712,6 +4760,12 @@ export class ChatGptBrowserWorker {
           ".chart-widget-container, [data-code-block-preview-pane], script, style, svg, img, picture, source",
         ))) widget.remove();
         for (const button of Array.from(content.querySelectorAll("button"))) {
+          // Follow-up labels also live in hidden sizing siblings; removing only buttons leaks them.
+          if (button.classList.contains("group/suggested-followup")) {
+            for (const sibling of Array.from(button.parentElement?.parentElement?.children ?? [])) {
+              if (sibling.matches('[aria-hidden="true"].pointer-events-none')) sibling.remove();
+            }
+          }
           // Observed file-reference controls have a label but no authoritative download URL.
           // Keep only their text; never carry button attributes or infer a link from the name.
           if (button.matches(".behavior-btn.entity-underline")
@@ -5788,7 +5842,7 @@ export class ChatGptBrowserWorker {
               { onSubmitted: recordStageUsage, onSendActivated: async () => {
                 await this.assertSelectedEffort(page, mode);
                 Object.assign(stageBaseline, await this.captureSubmissionBaseline(
-                  page, stage.text, acknowledgedStages, stageBaseline.initialTurnIdentities,
+                  page, stage.text, acknowledgedStages, undefined, stageBaseline.initialTurnIdentities,
                 ));
                 submissionRejection.begin(page);
               } },
@@ -5881,7 +5935,7 @@ export class ChatGptBrowserWorker {
       // Keep physical-Send identity outside the potentially collapsed task context.
       // Recovery reuses this receipt; it never creates or sends another message.
       finalPrompt = `[codex-submission:${randomUUID()}]\n\n${finalPrompt}`;
-      let submissionBaseline = await this.captureSubmissionBaseline(page, finalPrompt, acknowledgedStages);
+      let submissionBaseline = await this.captureSubmissionBaseline(page, finalPrompt, acknowledgedStages, prepared.turnToken);
       let catalogRefreshAvailable = mode.localTools && !reuseConversation && !prepared.multipart;
       const connectorAttemptBudget: ChatGptConnectorAttemptBudget = { triggerAttempts: 0 };
       for (;;) {
@@ -5937,7 +5991,7 @@ export class ChatGptBrowserWorker {
                 trackUsage,
                 turn.modelFamily,
               );
-              submissionBaseline = await this.captureSubmissionBaseline(page, finalPrompt);
+              submissionBaseline = await this.captureSubmissionBaseline(page, finalPrompt, [], prepared.turnToken);
             },
           );
           await diagnostics.capture(page, "connector-catalog-refreshed");
@@ -6000,7 +6054,7 @@ export class ChatGptBrowserWorker {
             // Saved history can rekey while the connector and prompt are prepared.
             // Refresh before Send; retain previously observed identities for virtualized turns.
             Object.assign(submissionBaseline, await this.captureSubmissionBaseline(
-              page, finalPrompt, acknowledgedStages, submissionBaseline.initialTurnIdentities,
+              page, finalPrompt, acknowledgedStages, prepared.turnToken, submissionBaseline.initialTurnIdentities,
             ));
             if (persistent && !persistent.saved && !persistent.claim) {
               persistent.claim = persistent.store.reserve(persistent.key);
