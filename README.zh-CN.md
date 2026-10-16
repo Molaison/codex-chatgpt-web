@@ -1,3 +1,17 @@
+## Molaison 纯问答与 Full 工具
+
+普通 QA 模型仅向 ChatGPT 提交问答，不导入 Codex 运行时提示词，也不调用本地工具。
+公网 `-tools` 模型仍走独立鉴权的 Full provider；下列 QA 规则不关闭 Full 工具。
+每个账号使用独立浏览器资料；同一账号和 session 复用 ChatGPT 会话，后续只提交新问题。
+保存的会话映射不设空闲过期时间；重启后重新打开原会话。fork 分支首次带入分叉前的
+问答，此后分别持久化、增量续聊。多账号部署使用持久化账号池，避免上游短期亲和记录过期后换号。
+默认每账号 Pro 并发 2、普通模型并发 5，同时受总并发 5 限制。生成文件返回可下载链接。
+
+详情与边界：[会话与重启](docs/question-answer-sessions.md)、
+[提示词过滤](docs/question-answer-prompts.md)、[并发配置](docs/question-answer-concurrency.md)、
+[文件下载](docs/question-answer-downloads.md)、[跨网络部署与备份](docs/question-answer-deployment.md)。
+这些修改需要构建本分支的运行时和启动器；下面的上游安装包不包含本分支修改。
+
 <p align="center">
   <img src="assets/readme/hero.svg" width="960" alt="切换到网页版模型，继续使用 Codex。你的 ChatGPT 订阅。你的工作流。充分发挥模型能力。">
 </p>
@@ -27,6 +41,8 @@
 在 Codex 原生模型选择器中使用账户可用的 ChatGPT 网页版模型，包括 Pro。使用 ChatGPT 网页版的独立额度，不消耗 Work 或 Codex 额度。保留原有的界面、任务、图片和流式输出。
 
 完整 harness 模式通过 MCP 将 ChatGPT 连接到当前任务的文件、终端、工具和审批流程。对话始终关联到你的 Codex 任务，上下文增长时也能继续工作。
+
+在共享 Linux 服务器上保留纯聊天并启用工具模式，见[双账号 Cloudflare 部署说明](docs/public-tools-deployment.md)。API 客户端只需地址、工具 key 和模型，不需要本机隧道。
 
 <div id="get-started"><a id="quick-start"></a></div>
 
