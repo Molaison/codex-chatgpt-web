@@ -729,7 +729,7 @@ test("an accepted Full-mode send survives one stalled DOM probe and a later MCP 
   const sendButton = {
     waitFor: async () => {},
     isEnabled: async () => true,
-    press: async () => { sendPresses += 1; },
+    click: async () => { sendPresses += 1; },
   };
   const composer = {
     locator: () => ({ locator: (selector: string) => { expect(selector).toBe(CHATGPT_SEND_BUTTON_SELECTOR); return sendButton; } }),
@@ -840,8 +840,7 @@ test("Bigger Context send activation keeps the outer stage budget instead of res
   const sendButton = {
     waitFor: async () => {},
     isEnabled: async () => true,
-    press: async (
-      _key: string,
+    click: async (
       options?: { noWaitAfter?: boolean; signal?: AbortSignal; timeout?: number },
     ) => {
       pressOptions = options;
@@ -4924,7 +4923,7 @@ test("broker acceptance precedes a lost DOM boundary without replay or clearing 
     worker.activeComposer = async () => ({
       locator: () => ({ locator: () => ({
         waitFor: async () => {}, isEnabled: async () => true,
-        press: async () => {
+        click: async () => {
           sends += 1;
           if (timing === "before-boundary") batch = progress.recordToolBatch(1);
         },

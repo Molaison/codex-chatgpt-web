@@ -16,6 +16,7 @@ import {
   extractChatGptCalendarEnvironmentDelta,
   hasRawChatGptEnvironmentContext,
   legacyChatGptEnvironmentClaims,
+  hasOnlyPermissionNeutralChatGptCalendarHistory,
   unattributedChatGptEnvironmentMessages,
   isChatGptCompactionContinuation,
   MissingTrustedCodexEnvironmentError,
@@ -126,7 +127,9 @@ function matchesAcceptedHistory(parsed: CodexParsedRequest, stored: StoredThread
   const input = body?.input;
   if (!proof || !Array.isArray(input) || input.length <= proof.inputLength) return false;
   if (historyDigest(input.slice(0, proof.inputLength)) !== proof.sha256) return false;
-  if (hasRawChatGptEnvironmentContext({ ...parsed, _rawBody: { ...body, input: input.slice(proof.inputLength) } })) return false;
+  const continuation = { ...parsed, _rawBody: { ...body, input: input.slice(proof.inputLength) } };
+  if (hasRawChatGptEnvironmentContext(continuation)
+    && !hasOnlyPermissionNeutralChatGptCalendarHistory(continuation, { ...stored, tools: [] })) return false;
   // Current sandbox/workspace metadata must still validate the proven envelope.
   // Reuse its exact accepted prefix; never search arbitrary earlier XML for a match.
   try {

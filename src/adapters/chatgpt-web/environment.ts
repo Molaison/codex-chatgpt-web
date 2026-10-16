@@ -488,6 +488,104 @@ export function extractChatGptCalendarEnvironmentDelta(parsed: CodexParsedReques
   return deltas > 0 ? { workspaceRoots } : undefined;
 }
 
+/** A proven historical prefix may carry repeated calendar/permission fragments, never new authority. */
+export function hasOnlyPermissionNeutralChatGptCalendarHistory(
+  parsed: CodexParsedRequest,
+  environment: ChatGptTurnEnvironment,
+): boolean {
+  if (environment.sandboxPolicy.type !== "dangerFullAccess") return false;
+  const metadata = clientTurnMetadata(parsed);
+  if (!metadata) return false;
+  const body = record(parsed._rawBody);
+  const input = Array.isArray(body?.input) ? body.input : [];
+  const expectedRoots = new Set(environment.roots.map(pathIdentity));
+  let found = false;
+  for (const value of input) {
+    const item = record(value);
+    if (!hasEnvironmentContextFragment(item)) continue;
+    if (typeof item.id !== "string" || !item.id) return false;
+    const text = rawMessageText(item).trim();
+    const match = /^<environment_context>\s*<current_date>\d{4}-\d{2}-\d{2}<\/current_date>\s*(?:<timezone>[^<>]+<\/timezone>\s*)?<filesystem>\s*(?:<workspace_roots>((?:\s*<root>[^<>]+<\/root>\s*)+)<\/workspace_roots>\s*)?<permission_profile type="disabled">\s*<file_system type="unrestricted"\s*\/>\s*<\/permission_profile>\s*<\/filesystem>\s*<\/environment_context>$/.exec(text);
+    if (!match || !sandboxMetadataMatchesEnvironment(canonicalSandboxMetadata(metadata), text)
+      || [metadata.sandbox_mode, metadata.sandbox].some(value => value !== undefined
+        && !sandboxMetadataMatchesEnvironment(value, text))) return false;
+    if (match[1]) {
+      const values = [...match[1].matchAll(/<root>([^<]+)<\/root>/g)]
+        .map(root => decodeXmlText(root[1]!.trim()));
+      if (values.some(root => !isAbsolute(root))) return false;
+      const roots = new Set(values.map(pathIdentity));
+      if (roots.size !== expectedRoots.size || [...roots].some(root => !expectedRoots.has(root))) return false;
+    }
+    found = true;
+  }
+  return found;
+}
+
+/** 原生记忆说明在权限包前；只剥离已观察到的完整记忆段，不搜索任意正文。 */
+function withoutNativeMemoryPrefix(text: string): string {
+  if (!text.startsWith("## Memory\n\nYou have access to a memory folder with guidance from prior runs.")) return text;
+  const boundary = text.indexOf("<skills_instructions>");
+  if (boundary < 0) return text;
+  const prefix = text.slice(0, boundary);
+  const begin = "========= MEMORY_SUMMARY BEGINS =========";
+  const end = "========= MEMORY_SUMMARY ENDS =========";
+  const footer = `${end}\n\nWhen memory is likely relevant, start with the quick memory pass above before\ndeep repo exploration.\n\n`;
+  // 记忆正文不提供权限；其中出现权限包、重复边界或不完整收尾时保持拒绝。
+  if (prefix.split(begin).length !== 2 || prefix.split(end).length !== 2
+    || prefix.indexOf(begin) > prefix.indexOf(end) || !prefix.endsWith(footer)
+    || /<\/?(?:permissions instructions|skills_instructions)>/.test(prefix)) return text;
+  return text.slice(boundary);
+}
+
+/** Codex 0.162+ separates network authority from the adjacent filesystem envelope. */
+function withCurrentNetworkPermission(
+  input: unknown[], contextIndex: number, environmentText: string,
+  turnId: string, metadata?: Record<string, unknown>,
+): string {
+  // This only supplements a proven current envelope. Historical permissions, user text and
+  // parsed prompts cannot become a new source of authority. Filesystem roots stay unchanged.
+  if (!metadata || metadata.turn_id !== turnId
+    || !environmentMatchesCanonicalMetadata(environmentText, metadata, false)
+    || sandboxTypeFromEnvironment(environmentText) === "dangerFullAccess") return environmentText;
+  const context = record(input[contextIndex]);
+  if (typeof context?.id !== "string" || !context.id) return environmentText;
+  const permissions: string[] = [];
+  for (let index = contextIndex - 1; index >= 0; index -= 1) {
+    const item = record(input[index]);
+    if (item?.type !== "message" || item.role !== "developer") break;
+    const owner = itemTurnId(item);
+    if (typeof item.id !== "string" || !item.id || (owner !== undefined && owner !== turnId)) return environmentText;
+    const text = withoutNativeMemoryPrefix(rawMessageText(item).trim());
+    if (!text.startsWith("<permissions instructions>") && !text.startsWith("<skills_instructions>")) continue;
+    // Official 0.162.1 packs skills, permissions and collaboration into one native message.
+    // Match the entire known packet, never a quoted or nested permissions fragment. Only
+    // the permissions sibling supplies network policy; sibling prose cannot override it.
+    const packet = /^(?:<skills_instructions>[\s\S]*?<\/skills_instructions>\s*)?(<permissions instructions>[\s\S]*?<\/permissions instructions>)(?:\s*<collaboration_mode>[\s\S]*?<\/collaboration_mode>)?$/.exec(text);
+    if (!packet || [...text.matchAll(/<\/?permissions instructions>/g)].length !== 2
+      || [...text.matchAll(/<\/?skills_instructions>/g)].length !== (text.startsWith("<skills_instructions>") ? 2 : 0)) {
+      throw new Error("ChatGPT web has malformed trusted Codex permissions instructions");
+    }
+    permissions.push(packet[1]!);
+  }
+  if (permissions.length === 0) return environmentText;
+  if (permissions.length !== 1) throw new Error("ChatGPT web has conflicting trusted Codex permissions instructions");
+  const text = permissions[0]!;
+  const modes = [...text.matchAll(/`sandbox_mode` is `([^`]+)`/g)];
+  const networks = [...text.matchAll(/Network access is (enabled|restricted|disabled)\./g)];
+  if (modes.length !== 1 || networks.length !== 1
+    || !sandboxMetadataMatchesEnvironment(modes[0]![1], environmentText)
+    || [metadata.sandbox_mode, metadata.sandbox].some(value => value !== undefined
+      && !sandboxMetadataMatchesEnvironment(value, environmentText))) {
+    throw new Error("ChatGPT web has conflicting trusted Codex network/sandbox permissions");
+  }
+  const enabled = networks[0]![1] === "enabled";
+  const existing = [...environmentText.matchAll(/<network_access>(enabled|restricted|disabled)<\/network_access>|network access is (enabled|restricted|disabled)/gi)];
+  if (existing.some(match => ((match[1] ?? match[2])!.toLowerCase() === "enabled") !== enabled)) {
+    throw new Error("ChatGPT web has conflicting trusted Codex network permissions");
+  }
+  return `${environmentText}\n<network_access>${enabled ? "enabled" : "disabled"}</network_access>`;
+}
+
 function environmentBeforeUser(input: unknown[], userIndex: number, expectedTurnId?: string, metadata?: Record<string, unknown>): string | undefined {
   if (userIndex <= 0) return undefined;
   const user = record(input[userIndex]);
@@ -514,7 +612,9 @@ function environmentBeforeUser(input: unknown[], userIndex: number, expectedTurn
     const text = record(part)?.text;
     if (typeof text !== "string") continue;
     const trimmed = text.trim();
-    if (/^<environment_context>[\s\S]*<\/environment_context>$/.test(trimmed)) return trimmed;
+    if (/^<environment_context>[\s\S]*<\/environment_context>$/.test(trimmed)) {
+      return withCurrentNetworkPermission(input, candidateIndex, trimmed, userTurnId, metadata);
+    }
   }
   return undefined;
 }
@@ -694,7 +794,7 @@ function canonicalMetadataEnvironmentBefore(
     // canonical turn/sandbox metadata; when Git roots are present, require the primary cwd to agree
     // with them as an additional check.
     if (!environmentMatchesCanonicalMetadata(trimmed, metadata, requireMetadataBoundRoots)) continue;
-    return trimmed;
+    return withCurrentNetworkPermission(input, candidateIndex, trimmed, metadataTurnId, metadata);
   }
   return undefined;
 }

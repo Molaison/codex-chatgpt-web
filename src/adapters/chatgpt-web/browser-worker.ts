@@ -1428,6 +1428,7 @@ interface ChatGptSubmissionBaseline {
   initialTurnIdentities: readonly string[];
   domCache: ChatGptSubmissionDomCache;
   submittedText?: string;
+  submissionReceipt?: string;
   acceptedUserIdentity?: string;
   acknowledgedStages?: readonly ChatGptAcknowledgedMultipartStage[];
 }
@@ -3352,6 +3353,7 @@ export class ChatGptBrowserWorker {
     page: Page,
     submittedText?: string,
     acknowledgedStages: readonly ChatGptAcknowledgedMultipartStage[] = [],
+    knownTurnIdentities: readonly string[] = [],
   ): Promise<ChatGptSubmissionBaseline> {
     const userTurns = page.locator(CHATGPT_USER_TURN_SELECTOR);
     const responseTurns = page.locator(CHATGPT_ASSISTANT_TURN_SELECTOR);
@@ -3360,14 +3362,15 @@ export class ChatGptBrowserWorker {
     const baseline: ChatGptSubmissionBaseline = {
       userTurns,
       responseTurns,
-      initialTurnIdentities: [],
+      initialTurnIdentities: [...knownTurnIdentities],
       domCache,
       submittedText,
+      submissionReceipt: submittedText?.match(/^\[codex-submission:[0-9a-f-]{36}\]\n/)?.[0].trimEnd(),
       acknowledgedStages: [...acknowledgedStages],
     };
     // A stage can persist under its new key before the next baseline is captured.
     await this.reconcileMultipartHistory(page, baseline, state);
-    baseline.initialTurnIdentities = state.turnIdentities;
+    baseline.initialTurnIdentities = [...new Set([...baseline.initialTurnIdentities, ...state.turnIdentities])];
     return baseline;
   }
 
@@ -3544,7 +3547,7 @@ export class ChatGptBrowserWorker {
     if (newUsers.length > 0) {
       // Activity can unmount the accepted user group while it renders a temporary
       // assistant group. Its return must match the ID that acknowledged Send. If no
-      // user ID was observed then, require the entire submitted text instead. A
+      // user ID was observed then, require this Send's receipt or exact text. A
       // surviving old group or any competing new turn remains foreign.
       const user = newUsers[0]!;
       const replacement = identity && newUsers.length === 1
@@ -3558,17 +3561,29 @@ export class ChatGptBrowserWorker {
         const locator = page.locator(chatGptAssistantTurnSelector(identity!));
         matches = baseline.acceptedUserIdentity
           ? user === baseline.acceptedUserIdentity
-          : Boolean(baseline.submittedText) && await withChatGptBrowserObservationTimeout(withBrowserTurnAbort(locator.evaluate((group, submitted) => {
+          : Boolean(baseline.submittedText) && await withChatGptBrowserObservationTimeout(withBrowserTurnAbort(locator.evaluate((group, { submitted, receipt }) => {
           const bubbles = group.querySelectorAll<HTMLElement>("[data-user-message-bubble]");
           const contents = bubbles.length === 1
             ? bubbles[0]!.querySelectorAll<HTMLElement>("[data-search-result-target]")
             : [];
           const normalize = (text: string) => text.replace(/\r\n?/g, "\n");
+          if (contents.length !== 1) return false;
+          if (receipt) {
+            // The power UI prepends the native-app mention and truncates long user
+            // bubbles. A fresh receipt at the start survives both render changes;
+            // a quote later in another user's text does not establish ownership.
+            let text = normalize(contents[0]!.innerText);
+            const mention = contents[0]!.querySelector<HTMLElement>(
+              '[data-prompt-link-href^="app://"][data-prompt-link-label]',
+            )?.innerText;
+            if (mention && text.startsWith(mention)) text = text.slice(mention.length);
+            return text.trimStart().split("\n", 1)[0] === receipt;
+          }
           // The bubble also contains Show more and accessibility spacing. Only its
           // observed message-content target represents the submitted prompt.
-          return contents.length === 1 && normalize(contents[0]!.innerText) === normalize(submitted);
-        }, baseline.submittedText!), signal));
-        // The accepted user identity (or exact submitted text) establishes ownership.
+          return normalize(contents[0]!.innerText) === normalize(submitted);
+        }, { submitted: baseline.submittedText!, receipt: baseline.submissionReceipt }), signal));
+        // The accepted user identity, fresh receipt, or exact text establishes ownership.
         // Activity can replace its temporary group while still generating; requiring
         // a completed answer here mistakes that same unfinished turn for a foreign one.
       }
@@ -4124,10 +4139,11 @@ export class ChatGptBrowserWorker {
     const activationAbort = new AbortController();
     const activationSignal = AbortSignal.any([sendSignal, activationAbort.signal]);
     let activationRetiredForRecovery = false;
-    // Enter can already have submitted the prompt while the renderer blocks its command reply.
-    // Observe acceptance concurrently; never press again or wait for that reply after proof.
+    // Model-menu dismissal can restore keyboard focus after verification. Click the
+    // verified Send control so Enter cannot reopen that menu instead of submitting.
+    // Observe acceptance concurrently; never activate again after submission proof.
     const activation = withBrowserTurnAbort(
-      sendButton.press("Enter", { noWaitAfter: true, signal: activationSignal, timeout: 0 }),
+      sendButton.click({ noWaitAfter: true, signal: activationSignal, timeout: 0 }),
       activationSignal,
     ).catch(error => {
       if (!activationRetiredForRecovery || sendSignal.aborted || !(error instanceof DOMException)
@@ -4137,8 +4153,8 @@ export class ChatGptBrowserWorker {
       page, baseline, sendSignal, externalProgress, initialToolBatchRevision, completionTracker,
       recoverObservation ? async (...args) => {
         // Same-page recovery intentionally disconnects the old transport. Retire its pending
-        // keypress first, so that disconnect cannot fail the turn while recovery is still running.
-        // Only acceptance evidence from the rebound page can establish success; never press again.
+        // click first, so that disconnect cannot fail the turn while recovery is still running.
+        // Only acceptance evidence from the rebound page can establish success; never activate again.
         activationRetiredForRecovery = true;
         activationAbort.abort();
         await activation;
@@ -5771,6 +5787,9 @@ export class ChatGptBrowserWorker {
               undefined,
               { onSubmitted: recordStageUsage, onSendActivated: async () => {
                 await this.assertSelectedEffort(page, mode);
+                Object.assign(stageBaseline, await this.captureSubmissionBaseline(
+                  page, stage.text, acknowledgedStages, stageBaseline.initialTurnIdentities,
+                ));
                 submissionRejection.begin(page);
               } },
               undefined,
@@ -5859,6 +5878,9 @@ export class ChatGptBrowserWorker {
         finalPrompt = multipartFinalPrompt;
       }
 
+      // Keep physical-Send identity outside the potentially collapsed task context.
+      // Recovery reuses this receipt; it never creates or sends another message.
+      finalPrompt = `[codex-submission:${randomUUID()}]\n\n${finalPrompt}`;
       let submissionBaseline = await this.captureSubmissionBaseline(page, finalPrompt, acknowledgedStages);
       let catalogRefreshAvailable = mode.localTools && !reuseConversation && !prepared.multipart;
       const connectorAttemptBudget: ChatGptConnectorAttemptBudget = { triggerAttempts: 0 };
@@ -5975,6 +5997,11 @@ export class ChatGptBrowserWorker {
             if (persistent?.saved && canonicalSavedChatUrl(page.url()) !== persistent.saved.url) {
               throw conversationPersistenceError("saved_conversation_unavailable", "ChatGPT left the saved conversation before submission; no new message was sent.");
             }
+            // Saved history can rekey while the connector and prompt are prepared.
+            // Refresh before Send; retain previously observed identities for virtualized turns.
+            Object.assign(submissionBaseline, await this.captureSubmissionBaseline(
+              page, finalPrompt, acknowledgedStages, submissionBaseline.initialTurnIdentities,
+            ));
             if (persistent && !persistent.saved && !persistent.claim) {
               persistent.claim = persistent.store.reserve(persistent.key);
             }
