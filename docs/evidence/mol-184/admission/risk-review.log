@@ -1,0 +1,10 @@
+{"case":"actual-connection-refused-then-recovery","name":"baseline","first":502,"retry":200,"next":200,"backendForwards":2}
+{"case":"actual-connection-refused-then-recovery","name":"pob","first":502,"retry":200,"next":200,"backendForwards":2}
+{"case":"real-sqlite-limit-91-pages","name":"baseline","status":200,"resultId":"r2","head":{"response_id":"r2"},"backendForwards":2,"pending":null}
+{"case":"real-sqlite-limit-91-pages","name":"pob","status":200,"resultId":"r2","head":{"response_id":"r2"},"backendForwards":2,"pending":{"present":0}}
+{"case":"supported-compaction-shape-after-completion","kind":"trigger","name":"baseline","status":200,"backendForwards":2}
+{"case":"supported-compaction-shape-after-completion","kind":"trigger","name":"pob","status":200,"backendForwards":2}
+{"case":"supported-compaction-shape-after-completion","kind":"native-memento","name":"baseline","status":200,"backendForwards":2}
+{"case":"supported-compaction-shape-after-completion","kind":"native-memento","name":"pob","status":200,"backendForwards":2}
+{"case":"old-binary-after-pob-success","status":200,"head":{"response_id":"r2"},"backendForwards":2}
+{"case":"receipt-store-1000-latest-writes","row":{"n":1},"latest":"completed"}

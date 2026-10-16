@@ -1,0 +1,120 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/dot-cpr-admission.test.ts:
+392 |   if (!isAbsolute(executable)) throw new Error(`Runtime executable must be absolute: ${executable}`);
+393 |   const ephemeralRoots = [tmpdir(), "/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp"];
+394 |   for (const part of command) {
+395 |     if (!isAbsolute(part)) continue;
+396 |     if (ephemeralRoots.some(root => inside(part, root))) {
+397 |       throw new Error(`Runtime command must not reference an ephemeral path: ${part}`);
+                      ^
+error: Runtime command must not reference an ephemeral path: /tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts
+      at assertDurableRuntimeCommand (/tmp/mol184-admission-integration/baseline/src/config.ts:397:17)
+      at runtimeCommandForProcess (/tmp/mol184-admission-integration/baseline/src/config.ts:374:5)
+      at defaultConfig (/tmp/mol184-admission-integration/baseline/src/config.ts:296:21)
+      at fixture (/tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts:42:22)
+      at <anonymous> (/tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts:100:13)
+(fail) CPR before-headers accepted disconnect reconnect, caller ID [2.21ms]
+392 |   if (!isAbsolute(executable)) throw new Error(`Runtime executable must be absolute: ${executable}`);
+393 |   const ephemeralRoots = [tmpdir(), "/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp"];
+394 |   for (const part of command) {
+395 |     if (!isAbsolute(part)) continue;
+396 |     if (ephemeralRoots.some(root => inside(part, root))) {
+397 |       throw new Error(`Runtime command must not reference an ephemeral path: ${part}`);
+                      ^
+error: Runtime command must not reference an ephemeral path: /tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts
+      at assertDurableRuntimeCommand (/tmp/mol184-admission-integration/baseline/src/config.ts:397:17)
+      at runtimeCommandForProcess (/tmp/mol184-admission-integration/baseline/src/config.ts:374:5)
+      at defaultConfig (/tmp/mol184-admission-integration/baseline/src/config.ts:296:21)
+      at fixture (/tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts:42:22)
+      at <anonymous> (/tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts:100:13)
+(fail) CPR after-headers accepted disconnect reconnect, caller ID [0.36ms]
+392 |   if (!isAbsolute(executable)) throw new Error(`Runtime executable must be absolute: ${executable}`);
+393 |   const ephemeralRoots = [tmpdir(), "/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp"];
+394 |   for (const part of command) {
+395 |     if (!isAbsolute(part)) continue;
+396 |     if (ephemeralRoots.some(root => inside(part, root))) {
+397 |       throw new Error(`Runtime command must not reference an ephemeral path: ${part}`);
+                      ^
+error: Runtime command must not reference an ephemeral path: /tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts
+      at assertDurableRuntimeCommand (/tmp/mol184-admission-integration/baseline/src/config.ts:397:17)
+      at runtimeCommandForProcess (/tmp/mol184-admission-integration/baseline/src/config.ts:374:5)
+      at defaultConfig (/tmp/mol184-admission-integration/baseline/src/config.ts:296:21)
+      at fixture (/tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts:42:22)
+      at <anonymous> (/tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts:123:11)
+(fail) real runtime draining JSON rejects before admission then retry and next turn succeed [0.71ms]
+392 |   if (!isAbsolute(executable)) throw new Error(`Runtime executable must be absolute: ${executable}`);
+393 |   const ephemeralRoots = [tmpdir(), "/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp"];
+394 |   for (const part of command) {
+395 |     if (!isAbsolute(part)) continue;
+396 |     if (ephemeralRoots.some(root => inside(part, root))) {
+397 |       throw new Error(`Runtime command must not reference an ephemeral path: ${part}`);
+                      ^
+error: Runtime command must not reference an ephemeral path: /tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts
+      at assertDurableRuntimeCommand (/tmp/mol184-admission-integration/baseline/src/config.ts:397:17)
+      at runtimeCommandForProcess (/tmp/mol184-admission-integration/baseline/src/config.ts:374:5)
+      at defaultConfig (/tmp/mol184-admission-integration/baseline/src/config.ts:296:21)
+      at fixture (/tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts:42:22)
+      at <anonymous> (/tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts:123:11)
+(fail) real runtime draining SSE rejects before admission then retry and next turn succeed [0.28ms]
+392 |   if (!isAbsolute(executable)) throw new Error(`Runtime executable must be absolute: ${executable}`);
+393 |   const ephemeralRoots = [tmpdir(), "/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp"];
+394 |   for (const part of command) {
+395 |     if (!isAbsolute(part)) continue;
+396 |     if (ephemeralRoots.some(root => inside(part, root))) {
+397 |       throw new Error(`Runtime command must not reference an ephemeral path: ${part}`);
+                      ^
+error: Runtime command must not reference an ephemeral path: /tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts
+      at assertDurableRuntimeCommand (/tmp/mol184-admission-integration/baseline/src/config.ts:397:17)
+      at runtimeCommandForProcess (/tmp/mol184-admission-integration/baseline/src/config.ts:374:5)
+      at defaultConfig (/tmp/mol184-admission-integration/baseline/src/config.ts:296:21)
+      at fixture (/tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts:42:22)
+      at <anonymous> (/tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts:140:11)
+(fail) draining compact is explicitly unadmitted while the model catalog does not claim submission state [0.57ms]
+392 |   if (!isAbsolute(executable)) throw new Error(`Runtime executable must be absolute: ${executable}`);
+393 |   const ephemeralRoots = [tmpdir(), "/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp"];
+394 |   for (const part of command) {
+395 |     if (!isAbsolute(part)) continue;
+396 |     if (ephemeralRoots.some(root => inside(part, root))) {
+397 |       throw new Error(`Runtime command must not reference an ephemeral path: ${part}`);
+                      ^
+error: Runtime command must not reference an ephemeral path: /tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts
+      at assertDurableRuntimeCommand (/tmp/mol184-admission-integration/baseline/src/config.ts:397:17)
+      at runtimeCommandForProcess (/tmp/mol184-admission-integration/baseline/src/config.ts:374:5)
+      at defaultConfig (/tmp/mol184-admission-integration/baseline/src/config.ts:296:21)
+      at fixture (/tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts:42:22)
+      at <anonymous> (/tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts:153:11)
+(fail) accepted 503 is not retried blindly: generic [0.46ms]
+392 |   if (!isAbsolute(executable)) throw new Error(`Runtime executable must be absolute: ${executable}`);
+393 |   const ephemeralRoots = [tmpdir(), "/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp"];
+394 |   for (const part of command) {
+395 |     if (!isAbsolute(part)) continue;
+396 |     if (ephemeralRoots.some(root => inside(part, root))) {
+397 |       throw new Error(`Runtime command must not reference an ephemeral path: ${part}`);
+                      ^
+error: Runtime command must not reference an ephemeral path: /tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts
+      at assertDurableRuntimeCommand (/tmp/mol184-admission-integration/baseline/src/config.ts:397:17)
+      at runtimeCommandForProcess (/tmp/mol184-admission-integration/baseline/src/config.ts:374:5)
+      at defaultConfig (/tmp/mol184-admission-integration/baseline/src/config.ts:296:21)
+      at fixture (/tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts:42:22)
+      at <anonymous> (/tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts:153:11)
+(fail) accepted 503 is not retried blindly: server_draining [0.31ms]
+392 |   if (!isAbsolute(executable)) throw new Error(`Runtime executable must be absolute: ${executable}`);
+393 |   const ephemeralRoots = [tmpdir(), "/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp"];
+394 |   for (const part of command) {
+395 |     if (!isAbsolute(part)) continue;
+396 |     if (ephemeralRoots.some(root => inside(part, root))) {
+397 |       throw new Error(`Runtime command must not reference an ephemeral path: ${part}`);
+                      ^
+error: Runtime command must not reference an ephemeral path: /tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts
+      at assertDurableRuntimeCommand (/tmp/mol184-admission-integration/baseline/src/config.ts:397:17)
+      at runtimeCommandForProcess (/tmp/mol184-admission-integration/baseline/src/config.ts:374:5)
+      at defaultConfig (/tmp/mol184-admission-integration/baseline/src/config.ts:296:21)
+      at fixture (/tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts:42:22)
+      at <anonymous> (/tmp/mol184-admission-integration/baseline/tests/dot-cpr-admission.test.ts:153:11)
+(fail) accepted 503 is not retried blindly: other_failure [0.34ms]
+
+ 0 pass
+ 3 filtered out
+ 8 fail
+Ran 8 tests across 1 file. [760.00ms]

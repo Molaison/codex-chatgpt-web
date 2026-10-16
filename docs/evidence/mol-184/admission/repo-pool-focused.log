@@ -1,0 +1,116 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/qa-pool-history-expiry.test.ts:
+(pass) temporary history fails closed after request expiry, retries and restart [9.47ms]
+(pass) temporary history fails closed after restart expiry, retries and restart [3.30ms]
+(pass) temporary history fails closed after purged expiry, retries and restart [2.90ms]
+(pass) legacy retained history migrates before startup expiry purge [3.18ms]
+(pass) unexpired history survives restart and successful promotion clears its expectation [3.38ms]
+(pass) failed http promotion preserves history expectation [2.29ms]
+(pass) failed incomplete promotion preserves history expectation [2.19ms]
+(pass) failed stream promotion preserves history expectation [2.93ms]
+(pass) completed streamed promotion clears history expectation across restart [2.20ms]
+(pass) failed temporary history commit preserves a durable uncertain-turn barrier [3.21ms]
+
+tests/qa-pool-observer-cleanup.test.ts:
+(pass) observer listener is removed after completion with a live request signal [3.32ms]
+(pass) observer listener is removed after completion with an already-aborted request signal [3.12ms]
+(pass) abort wakes a parked observer, saves accepted work, and removes the listener [5.63ms]
+(pass) upstream read failure removes the observer listener and preserves uncertainty [2.03ms]
+(pass) timeout removes a parked observer listener and cancels its upstream reader [2.89ms]
+(pass) shutdown removes a parked observer listener and cancels its upstream reader [4.29ms]
+
+tests/qa-pool-admission-observer.test.ts:
+[chatgpt-web] browser_settled {"traceId":"2172077d22ec","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"cpr-accepted-reconnect","point":"before-headers","explicitId":true,"status":200,"workerStarts":1,"adapterCalls":1,"terminalCount":1}
+[chatgpt-web] browser_settled {"traceId":"33197daf02ae","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) CPR before-headers accepted disconnect reconnect, caller ID [260.26ms]
+[chatgpt-web] browser_settled {"traceId":"a9d36f1a871f","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"cpr-accepted-reconnect","point":"after-headers","explicitId":true,"status":200,"workerStarts":1,"adapterCalls":1,"terminalCount":1}
+[chatgpt-web] browser_settled {"traceId":"060fb0808595","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) CPR after-headers accepted disconnect reconnect, caller ID [79.60ms]
+[chatgpt-web] browser_settled {"traceId":"970079715154","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"c5834d40aae5","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"runtime-drain-recovery","stream":false,"error":{"error":{"message":"codex-chatgpt-web is draining for a requested service operation","type":"server_error","code":"server_draining","retryable":true,"submission_state":"not_submitted","phase":"admission"}},"pending":{"pending":0},"retry":200,"next":200,"workerStarts":2,"adapterCalls":2}
+(pass) real runtime draining JSON rejects before admission then retry and next turn succeed [40.14ms]
+[chatgpt-web] browser_settled {"traceId":"1f6aa1044cd9","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"971fc715e1af","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"runtime-drain-recovery","stream":true,"error":{"error":{"message":"codex-chatgpt-web is draining for a requested service operation","type":"server_error","code":"server_draining","retryable":true,"submission_state":"not_submitted","phase":"admission"}},"pending":{"pending":0},"retry":200,"next":200,"workerStarts":2,"adapterCalls":2}
+(pass) real runtime draining SSE rejects before admission then retry and next turn succeed [40.06ms]
+(pass) draining compact is explicitly unadmitted while the model catalog does not claim submission state [32.17ms]
+[chatgpt-web] browser_settled {"traceId":"bb6f30b778e7","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"accepted-503-blocked","code":"generic","retry":409,"next":409,"workerStarts":1}
+(pass) accepted 503 is not retried blindly: generic [34.13ms]
+[chatgpt-web] browser_settled {"traceId":"a8b25052e315","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"accepted-503-blocked","code":"server_draining","retry":409,"next":409,"workerStarts":1}
+(pass) accepted 503 is not retried blindly: server_draining [34.05ms]
+[chatgpt-web] browser_settled {"traceId":"3bdd02a35d1e","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"accepted-503-blocked","code":"other_failure","retry":409,"next":409,"workerStarts":1}
+(pass) accepted 503 is not retried blindly: other_failure [37.32ms]
+[chatgpt-web] browser_settled {"traceId":"e92e5ec88979","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"type","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: type [35.77ms]
+[chatgpt-web] browser_settled {"traceId":"925e2084661a","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"code","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: code [33.71ms]
+[chatgpt-web] browser_settled {"traceId":"45b2400c3042","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"retryable","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: retryable [40.04ms]
+[chatgpt-web] browser_settled {"traceId":"15e349ea009c","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"submission_state","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: submission_state [35.92ms]
+[chatgpt-web] browser_settled {"traceId":"31b797c1d03c","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"phase","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: phase [39.05ms]
+[chatgpt-web] browser_settled {"traceId":"4ea63b4c0eb6","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"status","status":500,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: status [37.33ms]
+
+tests/qa-pool-request-receipts.test.ts:
+(pass) missing message IDs are stable for a native turn and distinct for a new turn [0.22ms]
+(pass) completed JSON receipt replays original previous head after restart [5.80ms]
+(pass) completed stream receipt replays original previous head after restart [2.66ms]
+(pass) history write failure leaves a durable barrier to a context-free next turn [3.06ms]
+(pass) same native turn retries replay while intentional identical text in a new turn forwards [2.37ms]
+(pass) reusing a native turn with changed input rejects rather than replaying or forwarding [3.15ms]
+(pass) identical thread and turn across authenticated client scopes do not share receipts [3.91ms]
+(pass) failure to persist the pending barrier prevents any backend forward [3.26ms]
+(pass) a same-process observer reconnect joins the accepted request and receives its complete wire [13.88ms]
+(pass) unknown upstream outcome remains blocked after restart [5.80ms]
+(pass) a malformed stream without a saved terminal cannot unlock the next temporary turn [2.91ms]
+(pass) a eof stream without a saved terminal cannot unlock the next temporary turn [2.31ms]
+(pass) a cancel stream without a saved terminal cannot unlock the next temporary turn [2.09ms]
+(pass) legacy temporary requests without a stable turn still retain the uncertainty barrier [2.22ms]
+(pass) expired latest receipt removes cached content and cannot replay stale output [3.12ms]
+(pass) more than 256 intentional turns continue normally with only one latest receipt [160.42ms]
+(pass) distinct tool rounds and explicit Steer message IDs in one native turn are not collapsed [2.01ms]
+(pass) successful promotion removes cached responses and blocks duplicate promotion [2.57ms]
+(pass) pure persistent turns do not introduce a durable response cache [1.44ms]
+(pass) an explicit pre-Send attachment rejection releases the request for a safe retry [2.47ms]
+(pass) stream replay preserves incremental consumer text and structured output events [2.56ms]
+(pass) replayed LF terminal retains a split frame delimiter [2.32ms]
+(pass) replayed CRLF terminal retains a split frame delimiter [1.97ms]
+(pass) oversized JSON response delivers normally without a replay cache [20.55ms]
+(pass) oversized stream response delivers normally without a replay cache [14.46ms]
+(pass) compact success does not leave a pending marker that blocks ordinary continuation [2.27ms]
+(pass) new completion rolls latest receipt and history expiry together while replay does not extend either [10.89ms]
+(pass) pool shutdown settles an attached replay without claiming completion or losing uncertainty [15.02ms]
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+(pass) real admission rejection before worker start permits recovery and the next temporary question [14.65ms]
+(pass) a second pool committing between history read and reservation prevents stale forwarding [511.52ms]
+(pass) connection refusal is safely retryable while an unknown connection reset stays blocked [7.26ms]
+(pass) SQLite space pressure degrades optional cache but retains uncertainty when required history cannot fit [8.55ms]
+(pass) a legitimate same-turn trigger compaction does not collide with a normal request [2.30ms]
+(pass) a legitimate same-turn memento compaction does not collide with a normal request [2.04ms]
+(pass) a completed legacy ordinary receipt survives an upgrade without another forward [2.50ms]
+
+ 65 pass
+ 0 fail
+ 735 expect() calls
+Ran 65 tests across 4 files. [2.31s]

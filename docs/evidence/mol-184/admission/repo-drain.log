@@ -1,0 +1,10 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/server-lifecycle.test.ts:
+(pass) a drained runtime rejects new model-catalog work before shutdown [17.34ms]
+
+ 1 pass
+ 45 filtered out
+ 0 fail
+ 4 expect() calls
+Ran 1 test across 1 file. [724.00ms]

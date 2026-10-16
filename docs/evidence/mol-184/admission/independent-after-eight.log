@@ -1,0 +1,35 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/dot-cpr-admission.test.ts:
+[chatgpt-web] browser_settled {"traceId":"1e205231cfa1","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"cpr-accepted-reconnect","point":"before-headers","explicitId":true,"status":200,"workerStarts":1,"adapterCalls":1,"terminalCount":1}
+[chatgpt-web] browser_settled {"traceId":"a4ea39cff93c","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) CPR before-headers accepted disconnect reconnect, caller ID [248.28ms]
+[chatgpt-web] browser_settled {"traceId":"619018aeeab3","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"cpr-accepted-reconnect","point":"after-headers","explicitId":true,"status":200,"workerStarts":1,"adapterCalls":1,"terminalCount":1}
+[chatgpt-web] browser_settled {"traceId":"0d4ea6262a4a","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) CPR after-headers accepted disconnect reconnect, caller ID [76.66ms]
+[chatgpt-web] browser_settled {"traceId":"a16d358b5b01","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"1939c60f5cfd","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"runtime-drain-recovery","stream":false,"error":{"error":{"message":"codex-chatgpt-web is draining for a requested service operation","type":"server_error","code":"server_draining","retryable":true,"submission_state":"not_submitted","phase":"admission"}},"pending":{"pending":0},"retry":200,"next":200,"workerStarts":2,"adapterCalls":2}
+(pass) real runtime draining JSON rejects before admission then retry and next turn succeed [51.73ms]
+[chatgpt-web] browser_settled {"traceId":"2815291c4f92","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"b5d91b6a5b04","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"runtime-drain-recovery","stream":true,"error":{"error":{"message":"codex-chatgpt-web is draining for a requested service operation","type":"server_error","code":"server_draining","retryable":true,"submission_state":"not_submitted","phase":"admission"}},"pending":{"pending":0},"retry":200,"next":200,"workerStarts":2,"adapterCalls":2}
+(pass) real runtime draining SSE rejects before admission then retry and next turn succeed [39.01ms]
+(pass) draining compact is explicitly unadmitted while the model catalog does not claim submission state [33.07ms]
+[chatgpt-web] browser_settled {"traceId":"b611be5dd24a","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"accepted-503-blocked","code":"generic","retry":409,"next":409,"workerStarts":1}
+(pass) accepted 503 is not retried blindly: generic [32.09ms]
+[chatgpt-web] browser_settled {"traceId":"e6cef07147a1","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"accepted-503-blocked","code":"server_draining","retry":409,"next":409,"workerStarts":1}
+(pass) accepted 503 is not retried blindly: server_draining [33.41ms]
+[chatgpt-web] browser_settled {"traceId":"39f8fbe0881c","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"accepted-503-blocked","code":"other_failure","retry":409,"next":409,"workerStarts":1}
+(pass) accepted 503 is not retried blindly: other_failure [35.12ms]
+
+ 8 pass
+ 3 filtered out
+ 0 fail
+ 73 expect() calls
+Ran 8 tests across 1 file. [1190.00ms]

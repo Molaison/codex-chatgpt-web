@@ -1,0 +1,80 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/dot-cpr-admission.test.ts:
+[chatgpt-web] browser_settled {"traceId":"519ad10a81f5","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"cpr-accepted-reconnect","point":"before-headers","explicitId":false,"status":409,"workerStarts":1,"adapterCalls":1,"terminalCount":0,"error":"temporary_turn_uncertain"}
+110 |       const retry=f.request(body);await delay(30);f.release.resolve();
+111 |       const response=await bounded(retry),text=await bounded(response.text());
+112 |       const events=response.ok?text.split("\n").filter(line=>line.startsWith("data: ")).map(line=>JSON.parse(line.slice(6))):[];
+113 |       const terminal=events.filter(event=>event.type==="response.completed");
+114 |       observe({case:"cpr-accepted-reconnect",point,explicitId,status:response.status,workerStarts:f.starts.length,adapterCalls:f.execution.length,terminalCount:terminal.length,error:response.ok?undefined:JSON.parse(text).error?.code});
+115 |       expect(response.status).toBe(200);expect(terminal).toHaveLength(1);expect(terminal[0].response.status).toBe("completed");expect(terminal[0].response.output[0].content[0].text).toBe("ANSWER_1");
+                                    ^
+error: expect(received).toBe(expected)
+
+Expected: 200
+Received: 409
+
+      at <anonymous> (/workspace/shared/mol184-admission-after/tests/dot-cpr-admission.test.ts:115:31)
+(fail) CPR before-headers accepted disconnect reconnect, missing ID [190.04ms]
+[chatgpt-web] browser_settled {"traceId":"3e9f07f79eac","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"cpr-accepted-reconnect","point":"before-headers","explicitId":true,"status":200,"workerStarts":1,"adapterCalls":1,"terminalCount":1}
+[chatgpt-web] browser_settled {"traceId":"25c5c66a6dc5","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) CPR before-headers accepted disconnect reconnect, caller ID [77.91ms]
+[chatgpt-web] browser_settled {"traceId":"863427a03d10","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"cpr-accepted-reconnect","point":"after-headers","explicitId":false,"status":409,"workerStarts":1,"adapterCalls":1,"terminalCount":0,"error":"temporary_turn_uncertain"}
+110 |       const retry=f.request(body);await delay(30);f.release.resolve();
+111 |       const response=await bounded(retry),text=await bounded(response.text());
+112 |       const events=response.ok?text.split("\n").filter(line=>line.startsWith("data: ")).map(line=>JSON.parse(line.slice(6))):[];
+113 |       const terminal=events.filter(event=>event.type==="response.completed");
+114 |       observe({case:"cpr-accepted-reconnect",point,explicitId,status:response.status,workerStarts:f.starts.length,adapterCalls:f.execution.length,terminalCount:terminal.length,error:response.ok?undefined:JSON.parse(text).error?.code});
+115 |       expect(response.status).toBe(200);expect(terminal).toHaveLength(1);expect(terminal[0].response.status).toBe("completed");expect(terminal[0].response.output[0].content[0].text).toBe("ANSWER_1");
+                                    ^
+error: expect(received).toBe(expected)
+
+Expected: 200
+Received: 409
+
+      at <anonymous> (/workspace/shared/mol184-admission-after/tests/dot-cpr-admission.test.ts:115:31)
+(fail) CPR after-headers accepted disconnect reconnect, missing ID [61.68ms]
+[chatgpt-web] browser_settled {"traceId":"974bdaeddbf8","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"cpr-accepted-reconnect","point":"after-headers","explicitId":true,"status":200,"workerStarts":1,"adapterCalls":1,"terminalCount":1}
+[chatgpt-web] browser_settled {"traceId":"033919599a34","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) CPR after-headers accepted disconnect reconnect, caller ID [69.27ms]
+[chatgpt-web] browser_settled {"traceId":"0ce8623c5c52","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"71b19e342ef2","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"runtime-drain-recovery","stream":false,"error":{"error":{"message":"codex-chatgpt-web is draining for a requested service operation","type":"server_error","code":"server_draining","retryable":true,"submission_state":"not_submitted","phase":"admission"}},"pending":{"pending":0},"retry":200,"next":200,"workerStarts":2,"adapterCalls":2}
+(pass) real runtime draining JSON rejects before admission then retry and next turn succeed [35.78ms]
+[chatgpt-web] browser_settled {"traceId":"5810eefcad6a","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"5177d65b7a0b","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"runtime-drain-recovery","stream":true,"error":{"error":{"message":"codex-chatgpt-web is draining for a requested service operation","type":"server_error","code":"server_draining","retryable":true,"submission_state":"not_submitted","phase":"admission"}},"pending":{"pending":0},"retry":200,"next":200,"workerStarts":2,"adapterCalls":2}
+(pass) real runtime draining SSE rejects before admission then retry and next turn succeed [34.97ms]
+(pass) draining compact is explicitly unadmitted while the model catalog does not claim submission state [28.61ms]
+[chatgpt-web] browser_settled {"traceId":"b01fedba8620","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"accepted-503-blocked","code":"generic","retry":409,"next":409,"workerStarts":1}
+(pass) accepted 503 is not retried blindly: generic [32.01ms]
+[chatgpt-web] browser_settled {"traceId":"4b9ccdd1f709","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"accepted-503-blocked","code":"server_draining","retry":409,"next":409,"workerStarts":1}
+(pass) accepted 503 is not retried blindly: server_draining [32.62ms]
+[chatgpt-web] browser_settled {"traceId":"b1182b2a0dde","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"accepted-503-blocked","code":"other_failure","retry":409,"next":409,"workerStarts":1}
+(pass) accepted 503 is not retried blindly: other_failure [30.74ms]
+162 | test("CPR user identity preserves caller IDs and distinguishes turns, tools and steering",()=>{
+163 |   const make=(turn="turn",input:any[]=[{type:"message",role:"user",content:[{type:"input_text",text:"SAME"}]}]):any=>({model:MODEL,input,reasoning:{effort:"low"},client_metadata:{"x-codex-turn-metadata":JSON.stringify({thread_id:"thread",turn_id:turn})}});
+164 |   const normalize=(body:any,requestId:string)=>normalizeQaPoolRequest(normalizeCprRequest(body,{},requestId),new Headers(),requestId).payload;
+165 |   const first=normalize(make(),"http-a"),retry=normalize(make(),"http-b");
+166 |   const firstInput=first.input as any[],retryInput=retry.input as any[];
+167 |   expect(firstInput[0].id).toBe(retryInput[0].id);
+                                 ^
+error: expect(received).toBe(expected)
+
+Expected: "cpr-message-http-b-0"
+Received: "cpr-message-http-a-0"
+
+      at <anonymous> (/workspace/shared/mol184-admission-after/tests/dot-cpr-admission.test.ts:167:28)
+(fail) CPR user identity preserves caller IDs and distinguishes turns, tools and steering [0.55ms]
+
+ 8 pass
+ 3 fail
+ 77 expect() calls
+Ran 11 tests across 1 file. [1214.00ms]

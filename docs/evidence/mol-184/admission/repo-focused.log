@@ -1,0 +1,214 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/qa-pool-history-expiry.test.ts:
+(pass) temporary history fails closed after request expiry, retries and restart [8.75ms]
+(pass) temporary history fails closed after restart expiry, retries and restart [3.21ms]
+(pass) temporary history fails closed after purged expiry, retries and restart [3.19ms]
+(pass) legacy retained history migrates before startup expiry purge [2.96ms]
+(pass) unexpired history survives restart and successful promotion clears its expectation [3.72ms]
+(pass) failed http promotion preserves history expectation [2.37ms]
+(pass) failed incomplete promotion preserves history expectation [1.88ms]
+(pass) failed stream promotion preserves history expectation [2.62ms]
+(pass) completed streamed promotion clears history expectation across restart [2.31ms]
+(pass) failed temporary history commit preserves a durable uncertain-turn barrier [3.25ms]
+
+tests/server-lifecycle.test.ts:
+(pass) DEV harness configuration cannot bind a Responses listener [1.45ms]
+(pass) Luna Bigger Context reaches the adapter for every Free route and response mode [14.68ms]
+(pass) HTTP turn tracking follows the response stream instead of Bun's global request count [0.75ms]
+(pass) HTTP turn tracking releases a cancelled response stream [0.21ms]
+(pass) HTTP turn tracking uses a tee branch on Windows [5.31ms]
+(pass) HTTP turn tracking uses direct pull and cancellation outside Windows [0.29ms]
+(pass) HTTP turn tracking records privacy-safe client stream failure evidence [0.40ms]
+(pass) HTTP turn tracking records privacy-safe Windows lifecycle failure evidence [0.21ms]
+(pass) HTTP stream diagnostics cannot replace the source failure or retain turn ownership [0.12ms]
+(pass) HTTP turn tracking releases a stream whose client disconnected without cancelling [0.17ms]
+(pass) HTTP turn tracking releases a stream requested by an already disconnected client [0.12ms]
+(pass) a real HTTP peer disconnect releases a streaming turn [11.30ms]
+(pass) HTTP turn cancellation aborts the tracked request and waits for lifecycle release [0.44ms]
+(pass) native Codex interrupt cancels only HTTP streams owned by the exact thread and turn [0.71ms]
+(pass) native Codex interrupt remains authoritative when it arrives before HTTP identity binding [0.21ms]
+(pass) native passthrough response and compaction requests expose their exact interrupt identity [1.33ms]
+[chatgpt-web] browser_settled {"traceId":"interrupt-hook-trace","outcome":"error","compaction":false,"submission":"unknown"}
+(pass) authenticated Interrupt hook endpoint releases the exact routed Web turn [6.63ms]
+(pass) authenticated Interrupt hook endpoint also releases the exact native compaction request [7.05ms]
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+(pass) Interrupt acknowledges after exact browser cancellation starts without waiting for helper teardown [14.97ms]
+[chatgpt-web] browser_settled {"traceId":"logical-complete-trace","outcome":"final","compaction":false,"submission":"unknown"}
+(pass) Interrupt retires a logically complete browser turn whose helper is still physically stuck [3.81ms]
+(pass) Interrupt cancels a detached structured compaction by exact native turn identity [3.08ms]
+(pass) authenticated lifecycle control cancels orphaned browser turns [3.04ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown","code":"client_cancelled","retryable":false}
+(pass) targeted cancellation preserves peer turns and its cause: user close [3.78ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown","code":"browser_surface_bootstrap_timeout","retryable":false}
+(pass) targeted cancellation preserves peer turns and its cause: browser_surface_bootstrap_timeout [2.20ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown","code":"helper_heartbeat_expired","retryable":false}
+(pass) targeted cancellation preserves peer turns and its cause: helper_heartbeat_expired [2.39ms]
+(pass) authenticated targeted cancellation aborts a shared structured compaction owner [4.18ms]
+(pass) authenticated cancel-all aborts fresh structured compaction work [3.07ms]
+[chatgpt-web] browser_settled {"traceId":"495456f1edc4","outcome":"error","compaction":false,"submission":"unknown","code":"client_cancelled","retryable":false}
+(pass) a Codex retry after tab cancellation receives terminal HTTP 400 without a new browser [1.45ms]
+(pass) a restart recovery turn without a new user instruction fails terminally instead of replaying the stopped prompt [1.20ms]
+(pass) a native turn with no instruction fails before browser construction, stream=%s [0.51ms]
+(pass) a native turn with no instruction fails before browser construction, stream=%s [0.34ms]
+(pass) authenticated lifecycle control aborts active alpha/search before acknowledging cancellation [3.38ms]
+(pass) authenticated lifecycle control aborts active images/generations before acknowledging cancellation [2.44ms]
+[chatgpt-web] turn broker server error at /tmp/cgw-serve-LcMj90/runtime/turn-broker.sock: Failed to listen at /tmp/cgw-serve-LcMj90/runtime/turn-broker.sock
+[chatgpt-web] turn broker endpoint is unavailable: Failed to listen at /tmp/cgw-serve-LcMj90/runtime/turn-broker.sock
+(fail) a full-mode runtime exposes its broker endpoint before any turn registers [5000.12ms]
+  ^ this test timed out after 5000ms.
+[chatgpt-web] turn broker server error at /tmp/cgw-dev-lifecycle-XkY8Z0/runtime/turn-broker.sock: Failed to listen at /tmp/cgw-dev-lifecycle-XkY8Z0/runtime/turn-broker.sock
+849 |         server.on("error", error => {
+850 |           console.error(
+851 |             `[chatgpt-web] turn broker server error at ${this.socketPath}: ${errorOf(error).message}`,
+852 |           );
+853 |         });
+854 |         server.listen(this.socketPath, () => {
+                     ^
+error: Failed to listen at /tmp/cgw-dev-lifecycle-XkY8Z0/runtime/turn-broker.sock
+      at <anonymous> (node:net:2065:34)
+      at listenInCluster (node:net:2177:24)
+      at listen (node:net:2054:20)
+      at listen (/workspace/shared/mol184/src/adapters/chatgpt-web/turn-broker.ts:854:16)
+      at <anonymous> (/workspace/shared/mol184/src/adapters/chatgpt-web/turn-broker.ts:870:9)
+      at new Promise (1:11)
+      at start (/workspace/shared/mol184/src/adapters/chatgpt-web/turn-broker.ts:829:21)
+      at listen (/workspace/shared/mol184/src/adapters/chatgpt-web/turn-broker.ts:342:16)
+      at <anonymous> (/workspace/shared/mol184/tests/server-lifecycle.test.ts:1113:55)
+(fail) lifecycle drain and cancellation include browser turns owned by the external DEV driver [2.58ms]
+(pass) a drained runtime rejects new model-catalog work before shutdown [4.35ms]
+(pass) health proves that Codex received a successful augmented model catalog [5.85ms]
+
+# Unhandled error between tests
+-------------------------------
+1097 |       // An in-flight ChatGPT turn calls the bridge from a separate process; it must reach the
+1098 |       // broker itself rather than an endpoint that no longer exists.
+1099 |       if (!message.includes("unavailable") || Date.now() >= deadline) break;
+1100 |       await Bun.sleep(20);
+1101 |     }
+1102 |     expect(message).toContain("turn token is invalid");
+                           ^
+error: expect(received).toContain(expected)
+
+Expected to contain: "turn token is invalid"
+Received: "ChatGPT web turn broker unavailable: connect ECONNREFUSED /tmp/cgw-serve-LcMj90/runtime/turn-broker.sock"
+
+      at <anonymous> (/workspace/shared/mol184/tests/server-lifecycle.test.ts:1102:21)
+-------------------------------
+
+(pass) server exposes authenticated standalone Web Search on the routed v1 base URL [3.52ms]
+(pass) standalone native image generation and edits preserve their upstream protocol [6.55ms]
+(pass) authenticated shutdown requires a verified idle drain [23.43ms]
+[codex-chatgpt-web] model_catalog_failed {"request":1,"at":"2026-10-16T23:47:43.563Z","status":502,"failure":{"stage":"request"},"elapsedMs":0}
+[codex-chatgpt-web] model_catalog_failed {"request":2,"at":"2026-10-16T23:47:43.564Z","status":502,"failure":{"stage":"transport","code":"UnsupportedProxyProtocol"},"elapsedMs":0}
+[codex-chatgpt-web] model_catalog_failed {"request":3,"at":"2026-10-16T23:47:43.565Z","status":403,"failure":{"stage":"upstream"},"elapsedMs":1}
+[codex-chatgpt-web] model_catalog_failed {"request":4,"at":"2026-10-16T23:47:43.567Z","status":502,"failure":{"stage":"catalog"},"elapsedMs":1}
+(pass) model catalog health distinguishes no request, transport failure, upstream denial, and recovery without secrets [9.81ms]
+[codex-chatgpt-web] model_catalog_failed {"request":1,"at":"2026-10-16T23:47:43.570Z","status":403,"failure":{"stage":"upstream"},"elapsedMs":0}
+(pass) a cancelled model request does not replace health from the last completed request [5.00ms]
+(pass) a web page cannot start or control turns through the loopback route [3.98ms]
+(pass) a catalog request that outlives the client's deadline completes for its retry [404.24ms]
+[codex-chatgpt-web] model_catalog_failed {"request":3,"at":"2026-10-16T23:47:43.985Z","status":403,"failure":{"stage":"upstream"},"elapsedMs":0}
+(pass) shared catalog attempts stay bound to one request identity and are final once delivered [6.47ms]
+(pass) an abandoned catalog attempt serves the retry once and is cancelled when nobody returns [126.39ms]
+
+tests/qa-pool-admission-observer.test.ts:
+[chatgpt-web] browser_settled {"traceId":"40f75c43b1f6","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"cpr-accepted-reconnect","point":"before-headers","explicitId":true,"status":200,"workerStarts":1,"adapterCalls":1,"terminalCount":1}
+[chatgpt-web] browser_settled {"traceId":"497ce3fe4685","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) CPR before-headers accepted disconnect reconnect, caller ID [218.95ms]
+[chatgpt-web] browser_settled {"traceId":"ffaf9d58eb2c","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"cpr-accepted-reconnect","point":"after-headers","explicitId":true,"status":200,"workerStarts":1,"adapterCalls":1,"terminalCount":1}
+[chatgpt-web] browser_settled {"traceId":"a296893d6f7a","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) CPR after-headers accepted disconnect reconnect, caller ID [78.52ms]
+[chatgpt-web] browser_settled {"traceId":"271b0fe757a8","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"54c2ef8b2777","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"runtime-drain-recovery","stream":false,"error":{"error":{"message":"codex-chatgpt-web is draining for a requested service operation","type":"server_error","code":"server_draining","retryable":true,"submission_state":"not_submitted","phase":"admission"}},"pending":{"pending":0},"retry":200,"next":200,"workerStarts":2,"adapterCalls":2}
+(pass) real runtime draining JSON rejects before admission then retry and next turn succeed [36.74ms]
+[chatgpt-web] browser_settled {"traceId":"f29ef90daa06","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"3b0de153bcc6","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"runtime-drain-recovery","stream":true,"error":{"error":{"message":"codex-chatgpt-web is draining for a requested service operation","type":"server_error","code":"server_draining","retryable":true,"submission_state":"not_submitted","phase":"admission"}},"pending":{"pending":0},"retry":200,"next":200,"workerStarts":2,"adapterCalls":2}
+(pass) real runtime draining SSE rejects before admission then retry and next turn succeed [37.85ms]
+(pass) draining compact is explicitly unadmitted while the model catalog does not claim submission state [29.02ms]
+[chatgpt-web] browser_settled {"traceId":"c0f2ed4d2f52","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"accepted-503-blocked","code":"generic","retry":409,"next":409,"workerStarts":1}
+(pass) accepted 503 is not retried blindly: generic [33.34ms]
+[chatgpt-web] browser_settled {"traceId":"f05f0002b760","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"accepted-503-blocked","code":"server_draining","retry":409,"next":409,"workerStarts":1}
+(pass) accepted 503 is not retried blindly: server_draining [33.12ms]
+[chatgpt-web] browser_settled {"traceId":"d6d9910715e7","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"accepted-503-blocked","code":"other_failure","retry":409,"next":409,"workerStarts":1}
+(pass) accepted 503 is not retried blindly: other_failure [33.80ms]
+[chatgpt-web] browser_settled {"traceId":"95afdc185a38","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"type","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: type [33.19ms]
+[chatgpt-web] browser_settled {"traceId":"8a247d2f4cfa","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"code","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: code [33.13ms]
+[chatgpt-web] browser_settled {"traceId":"7306ca175c9b","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"retryable","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: retryable [33.79ms]
+[chatgpt-web] browser_settled {"traceId":"5aacf8f54677","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"submission_state","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: submission_state [34.80ms]
+[chatgpt-web] browser_settled {"traceId":"e8dc57f4f859","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"phase","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: phase [30.32ms]
+[chatgpt-web] browser_settled {"traceId":"c5663ef0941e","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"status","status":500,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: status [31.61ms]
+
+tests/qa-pool-request-receipts.test.ts:
+(pass) missing message IDs are stable for a native turn and distinct for a new turn [0.21ms]
+(pass) completed JSON receipt replays original previous head after restart [3.11ms]
+(pass) completed stream receipt replays original previous head after restart [2.16ms]
+(pass) history write failure leaves a durable barrier to a context-free next turn [2.40ms]
+(pass) same native turn retries replay while intentional identical text in a new turn forwards [2.05ms]
+(pass) reusing a native turn with changed input rejects rather than replaying or forwarding [1.39ms]
+(pass) identical thread and turn across authenticated client scopes do not share receipts [1.62ms]
+(pass) failure to persist the pending barrier prevents any backend forward [1.77ms]
+(pass) a same-process observer reconnect joins the accepted request and receives its complete wire [12.22ms]
+(pass) unknown upstream outcome remains blocked after restart [1.97ms]
+(pass) a malformed stream without a saved terminal cannot unlock the next temporary turn [2.36ms]
+(pass) a eof stream without a saved terminal cannot unlock the next temporary turn [1.84ms]
+(pass) a cancel stream without a saved terminal cannot unlock the next temporary turn [1.74ms]
+(pass) legacy temporary requests without a stable turn still retain the uncertainty barrier [1.80ms]
+(pass) expired latest receipt removes cached content and cannot replay stale output [2.08ms]
+(pass) more than 256 intentional turns continue normally with only one latest receipt [152.95ms]
+(pass) distinct tool rounds and explicit Steer message IDs in one native turn are not collapsed [1.99ms]
+(pass) successful promotion removes cached responses and blocks duplicate promotion [2.17ms]
+(pass) pure persistent turns do not introduce a durable response cache [1.27ms]
+(pass) an explicit pre-Send attachment rejection releases the request for a safe retry [1.81ms]
+(pass) stream replay preserves incremental consumer text and structured output events [2.16ms]
+(pass) replayed LF terminal retains a split frame delimiter [1.99ms]
+(pass) replayed CRLF terminal retains a split frame delimiter [1.63ms]
+(pass) oversized JSON response delivers normally without a replay cache [12.38ms]
+(pass) oversized stream response delivers normally without a replay cache [7.59ms]
+(pass) compact success does not leave a pending marker that blocks ordinary continuation [1.95ms]
+(pass) new completion rolls latest receipt and history expiry together while replay does not extend either [9.60ms]
+(pass) pool shutdown settles an attached replay without claiming completion or losing uncertainty [12.73ms]
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+(pass) real admission rejection before worker start permits recovery and the next temporary question [5.28ms]
+(pass) a second pool committing between history read and reservation prevents stale forwarding [502.61ms]
+(pass) connection refusal is safely retryable while an unknown connection reset stays blocked [5.65ms]
+(pass) SQLite space pressure degrades optional cache but retains uncertainty when required history cannot fit [7.31ms]
+(pass) a legitimate same-turn trigger compaction does not collide with a normal request [2.13ms]
+(pass) a legitimate same-turn memento compaction does not collide with a normal request [1.69ms]
+(pass) a completed legacy ordinary receipt survives an upgrade without another forward [2.11ms]
+
+2 tests failed:
+(fail) a full-mode runtime exposes its broker endpoint before any turn registers [5000.12ms]
+  ^ this test timed out after 5000ms.
+(fail) lifecycle drain and cancellation include browser turns owned by the external DEV driver [2.58ms]
+
+ 103 pass
+ 2 fail
+ 1 error
+ 1009 expect() calls
+Ran 105 tests across 4 files. [7.86s]

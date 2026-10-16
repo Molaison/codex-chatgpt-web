@@ -1022,6 +1022,16 @@ async function redownloadGeneratedFile(
   return expired();
 }
 
+// Emitted only before HTTP turn admission; downstream pools may safely release
+// their local pending reservation on this exact structured contract.
+function drainingResponseAdmission(): Response {
+  return Response.json({ error: {
+    message: "codex-chatgpt-web is draining for a requested service operation",
+    type: "server_error", code: "server_draining", retryable: true,
+    submission_state: "not_submitted", phase: "admission",
+  } }, { status: 503 });
+}
+
 export function startServer(
   config: AppConfig,
   dependencies: {
@@ -1306,7 +1316,7 @@ export function startServer(
         });
       }
       if (req.method === "POST" && url.pathname === "/v1/responses") {
-        if (draining) return formatErrorResponse(503, "server_error", "codex-chatgpt-web is draining for a requested service operation");
+        if (draining) return drainingResponseAdmission();
         return httpTurns.track(
           (signal, bindIdentity) => responseRequest(
             new Request(req, { signal }),
@@ -1320,7 +1330,7 @@ export function startServer(
         );
       }
       if (req.method === "POST" && url.pathname === "/v1/responses/compact") {
-        if (draining) return formatErrorResponse(503, "server_error", "codex-chatgpt-web is draining for a requested service operation");
+        if (draining) return drainingResponseAdmission();
         return httpTurns.track(
           (signal, bindIdentity) => compactRequest(
             new Request(req, { signal }),

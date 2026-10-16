@@ -1,0 +1,16 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/dot-independent-delta-steer.test.ts:
+[chatgpt-web] browser_settled {"traceId":"38b3769daf0c","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"f9eb19b90f25","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"identical-delta-steering-diagnostic","callerIds":false,"first":200,"second":200,"firstId":"resp_7a35e8643ac04f008b4f89fd4c2fb44f","secondId":"resp_6cd3a3694d2544bab93eae81de378ba8","workerStarts":2,"adapterCalls":2,"executionKeysSame":false,"forwardedInput":[{"type":"message","role":"user","content":[{"type":"input_text","text":"SAME"}],"id":"cpr-message-1d7a1e4c-9623-437e-8d9f-6bbde466d3e9-0"},{"type":"message","id":"msg_493002f35d7d4aeebc48213911b53e63","role":"assistant","status":"completed","content":[{"type":"output_text","text":"ANSWER_1","annotations":[]}],"phase":"final_answer"},{"type":"message","role":"user","content":[{"type":"input_text","text":"SAME"}],"id":"cpr-message-0dc500f3-287c-4206-97bc-b81613f96eb3-0"}]}
+(pass) independent identical delta steering executes the new instruction, caller IDs false [197.11ms]
+[chatgpt-web] browser_settled {"traceId":"1ba706ee6735","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"5088f479a6ec","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"identical-delta-steering-diagnostic","callerIds":true,"first":200,"second":200,"firstId":"resp_eb2367bab65e4ecb92b0a40372d788cf","secondId":"resp_d5c76a85e4a84d6d97f105dbd3e3f6a7","workerStarts":2,"adapterCalls":2,"executionKeysSame":false,"forwardedInput":[{"type":"message","role":"user","id":"instruction-one","content":[{"type":"input_text","text":"SAME"}]},{"type":"message","id":"msg_604fa1ccec834798979fb1280e2eb95d","role":"assistant","status":"completed","content":[{"type":"output_text","text":"ANSWER_1","annotations":[]}],"phase":"final_answer"},{"type":"message","role":"user","id":"instruction-two","content":[{"type":"input_text","text":"SAME"}]}]}
+(pass) independent identical delta steering executes the new instruction, caller IDs true [40.38ms]
+
+ 2 pass
+ 0 fail
+ 6 expect() calls
+Ran 2 tests across 1 file. [877.00ms]

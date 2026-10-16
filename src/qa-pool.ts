@@ -26,6 +26,14 @@ function preSendAttachmentFailure(value: unknown, allowAdmissionFailure = false)
     .some(entry => entry.code === PRE_SEND_ATTACHMENT_FAILURE || (allowAdmissionFailure && entry.code === "concurrency_limit_exceeded"));
 }
 
+// Only the configured runtime's pre-admission 503 contract proves no execution.
+// A status, message, code alone, or an error after acceptance is insufficient.
+function responseNotAdmitted(value: unknown, status: number): boolean {
+  const error = record(record(value).error);
+  return status === 503 && error.type === "server_error" && error.code === "server_draining"
+    && error.retryable === true && error.submission_state === "not_submitted" && error.phase === "admission";
+}
+
 export function parseQaSessionEffort(value: unknown): { effort?: string; mode: "temporary" | "persistent"; explicit: boolean } {
   const effort = nonempty(value);
   const matched = effort && /^(none|minimal|low|medium|high|xhigh|max|ultra)-(temporary|persistent)$/.exec(effort);
@@ -404,10 +412,12 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
     let observation: AbortController | undefined;
     let observationTimer: ReturnType<typeof setTimeout> | undefined;
     let cancelRead: (() => void) | undefined;
-    const stopObservation = () => { if (observationTimer) clearTimeout(observationTimer); observation?.abort(); cancelRead?.(); settleReceipt(); };
+    let detachObserverAbort = () => {};
+    const stopObservation = () => { detachObserverAbort(); if (observationTimer) clearTimeout(observationTimer); observation?.abort(); cancelRead?.(); settleReceipt(); };
     const release = (notSubmitted = false) => {
       activeHistories.delete(hash);
       settleReceipt();
+      detachObserverAbort();
       if (observationTimer) clearTimeout(observationTimer);
       shutdownObservers.delete(stopObservation);
       if (closed) return;
@@ -495,7 +505,8 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
         let parsed: unknown; try { parsed = JSON.parse(new TextDecoder().decode(bytes)); } catch { parsed = undefined; }
         if (response.ok) completed(parsed);
         // A 200 stream-less body can still carry status:"failed" with the explicit adapter code.
-        if (!paperCompleted && parsed !== undefined && preSendAttachmentFailure(parsed, Boolean(retainHistory))) notSubmitted = true;
+        if (!paperCompleted && parsed !== undefined && (preSendAttachmentFailure(parsed, Boolean(retainHistory))
+          || responseNotAdmitted(parsed, response.status))) notSubmitted = true;
         body = bytes; release(notSubmitted);
       } else if ((retainHistory || paper) && response.body && response.ok) {
         const reader = response.body.getReader(); let buffered = Buffer.alloc(0);
@@ -503,6 +514,15 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
         const wire: Uint8Array[] = []; let wireBytes = 0; let terminalSaved = false; let cacheable = true;
         let observerCancelled = false;
         let resumeRead: (() => void) | undefined;
+        const observerAborted = () => { observerCancelled = true; resumeRead?.(); };
+        if (receipt) {
+          // A client may disconnect before Bun attaches the returned response body,
+          // so stream.cancel alone is insufficient to release reader backpressure.
+          // Keep observing accepted upstream work and persist its terminal result.
+          request.signal.addEventListener("abort", observerAborted, { once: true });
+          detachObserverAbort = () => request.signal.removeEventListener("abort", observerAborted);
+          if (request.signal.aborted) observerAborted();
+        }
         const consume = async (controller: ReadableStreamDefaultController<Uint8Array>) => {
             try {
               while (true) {
@@ -549,7 +569,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
         body = new ReadableStream<Uint8Array>({
           ...(receipt ? { start: (controller: ReadableStreamDefaultController<Uint8Array>) => { void consume(controller); }, pull: () => { resumeRead?.(); } } : { pull: consume }),
           async cancel(reason) {
-            observerCancelled = true; resumeRead?.();
+            observerAborted(); detachObserverAbort();
             if (!receipt || !historyReserved) { release(notSubmitted); await reader.cancel(reason); }
           },
         });

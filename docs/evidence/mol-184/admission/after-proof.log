@@ -1,0 +1,27 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/dot-independent-cpr-boundaries.test.ts:
+[chatgpt-web] browser_settled {"traceId":"1c715fcf7f5a","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"type","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: type [197.00ms]
+[chatgpt-web] browser_settled {"traceId":"3a8f08054613","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"code","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: code [38.89ms]
+[chatgpt-web] browser_settled {"traceId":"1cdc7aeb515d","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"retryable","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: retryable [35.15ms]
+[chatgpt-web] browser_settled {"traceId":"7e48282bc842","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"submission_state","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: submission_state [31.91ms]
+[chatgpt-web] browser_settled {"traceId":"92ac8fb68f28","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"phase","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: phase [35.07ms]
+[chatgpt-web] browser_settled {"traceId":"4d6dc13c9d1d","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"status","status":500,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: status [32.89ms]
+
+ 6 pass
+ 1 filtered out
+ 0 fail
+ 36 expect() calls
+Ran 6 tests across 1 file. [978.00ms]
