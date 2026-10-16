@@ -137,7 +137,7 @@ test("completed streamed promotion clears history expectation across restart", a
   } finally { f.close(); }
 });
 
-test("temporary completion persists history and expectation atomically", async () => {
+test("failed temporary history commit preserves a durable uncertain-turn barrier", async () => {
   const f = fixture();
   try {
     f.sql("CREATE TRIGGER reject_history BEFORE INSERT ON temporary_history BEGIN SELECT RAISE(ABORT, 'test storage failure'); END");
@@ -148,9 +148,10 @@ test("temporary completion persists history and expectation atomically", async (
       expect(db.query("SELECT COUNT(*) AS n FROM temporary_history").get()).toEqual({ n: 0 });
     } finally { db.close(); }
     f.sql("DROP TRIGGER reject_history");
-    expect((await f.request()).status).toBe(200);
-    f.sql("UPDATE temporary_history SET expires_at=0"); f.restart();
-    await expectExpired(await f.request());
-    expect(f.calls).toHaveLength(2);
+    f.restart();
+    const retry = await f.request();
+    expect(retry.status).toBe(409);
+    expect((await retry.json()).error.code).toBe("temporary_turn_uncertain");
+    expect(f.calls).toHaveLength(1);
   } finally { f.close(); }
 });
