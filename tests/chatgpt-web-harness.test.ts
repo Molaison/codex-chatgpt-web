@@ -23,7 +23,8 @@ import { ChatGptTextFeed, ChatGptTraceFeed, ChatGptTurnSessions, chatGptCompacti
 import { callTurnBroker, TurnBroker, RemoteTurnBroker, type BrokerToolResult } from "../src/adapters/chatgpt-web/turn-broker";
 import { ChatGptExternalTurnProgress, ChatGptMirroredTurnProgress, chatGptExternalProgressIsLive, chatGptExternalToolCallsAreInFlight } from "../src/adapters/chatgpt-web/turn-progress";
 import { CHATGPT_WEB_MCP_INVOCATION_TIMEOUT_MS, chatGptMcpInvocationTimeout } from "../src/adapters/chatgpt-web/mcp-server";
-import { defaultBrokerEndpoint } from "../src/config";
+import { defaultBrokerEndpoint, defaultConfig } from "../src/config";
+import { responseRequest } from "../src/server";
 import { estimateChatGptWebUsage } from "../src/adapters/chatgpt-web/usage";
 import { decodeCompactionSummary, SUMMARY_PREFIX } from "../src/responses/compaction";
 import { parseRequest } from "../src/responses/parser";
@@ -1197,6 +1198,223 @@ describe("ChatGPT outer-native harness v4", () => {
       }
     }
   }, 20_000);
+
+  test.each(["final", "error"])("reconnect preserves offline text when the browser settles with %s", async outcome => {
+    const provider: CodexProviderConfig = {
+      adapter: "chatgpt-web", baseUrl: `browser://offline-settlement-${outcome}-${Date.now()}`,
+      chatgptWeb: browserOnlyCapabilities,
+    };
+    const worker = ChatGptBrowserWorker.forProvider(provider);
+    const originalRun = worker.run.bind(worker);
+    let browserStarts = 0;
+    let finish!: () => void;
+    worker.run = turn => {
+      browserStarts += 1;
+      turn.onSendActivated?.();
+      turn.onSubmitted?.();
+      turn.onTextDelta("Before ");
+      return new Promise((resolve, reject) => { finish = () => {
+        turn.onReasoningSummary?.("Offline reasoning");
+        turn.onTextDelta("offline settlement");
+        if (outcome === "final") resolve("Before offline settlement");
+        else reject(new Error("accepted browser observation failed"));
+      }; });
+    };
+    const request = rawWireRequest(environmentXml);
+    const adapter = createChatGptWebAdapter(provider);
+    const text = (events: AdapterEvent[]) => events.filter((event): event is Extract<AdapterEvent, { type: "text_delta" }> =>
+      event.type === "text_delta" && event.phase === "final_answer").map(event => event.text).join("");
+    try {
+      await expect(adapter.runTurn!(request, { headers: new Headers() }, event => {
+        if (event.type === "text_delta" && event.phase === "final_answer") throw new TypeError("closed writer");
+      })).rejects.toMatchObject({ name: "AbortError" });
+      finish();
+      await Bun.sleep(0);
+      if (outcome === "final") {
+        // Reconnection itself can drop while replaying reasoning, before queued final text.
+        await expect(adapter.runTurn!(request, { headers: new Headers() }, event => {
+          if (event.type === "thinking_delta") throw new TypeError("closed again");
+        })).rejects.toMatchObject({ name: "AbortError" });
+      }
+      const replay: AdapterEvent[] = [];
+      await adapter.runTurn!(request, { headers: new Headers() }, event => replay.push(event));
+      expect(text(replay)).toBe("Before offline settlement");
+      expect(replay.at(-1)).toMatchObject(outcome === "final"
+        ? { type: "done", endTurn: true }
+        : { type: "error", code: "chatgpt_submitted_turn_failed", retryable: false });
+      expect(browserStarts).toBe(1);
+    } finally {
+      finish?.();
+      worker.run = originalRun;
+    }
+  });
+
+  test("overlapping exact reconnect takes over the observer before browser completion", async () => {
+    const provider: CodexProviderConfig = {
+      adapter: "chatgpt-web", baseUrl: `browser://overlapping-reconnect-${Date.now()}`,
+      chatgptWeb: browserOnlyCapabilities,
+    };
+    const worker = ChatGptBrowserWorker.forProvider(provider);
+    const originalRun = worker.run.bind(worker);
+    let browserStarts = 0;
+    let browserSignal: AbortSignal | undefined;
+    let finish!: () => void;
+    worker.run = turn => {
+      browserStarts += 1;
+      browserSignal = turn.abortSignal;
+      turn.onSendActivated?.();
+      turn.onSubmitted?.();
+      turn.onTextDelta("Existing ");
+      return new Promise(resolve => { finish = () => {
+        turn.onTextDelta("continued"); resolve("Existing continued");
+      }; });
+    };
+    const request = rawWireRequest(environmentXml);
+    const adapter = createChatGptWebAdapter(provider);
+    const oldConnection = new AbortController();
+    let sawPrefix!: () => void;
+    const prefix = new Promise<void>(resolve => { sawPrefix = resolve; });
+    const first = adapter.runTurn!(request, { headers: new Headers(), abortSignal: oldConnection.signal }, event => {
+      if (event.type === "text_delta" && event.phase === "final_answer") sawPrefix();
+    }).catch(error => error);
+    let reconnect: Promise<void> | undefined;
+    try {
+      await prefix;
+      let recoveredPrefix!: () => void;
+      const recovered = new Promise<void>(resolve => { recoveredPrefix = resolve; });
+      const events: AdapterEvent[] = [];
+      reconnect = adapter.runTurn!(request, { headers: new Headers() }, event => {
+        events.push(event);
+        if (event.type === "text_delta" && event.phase === "final_answer") recoveredPrefix();
+      });
+      // The old proxy connection has not reported abort; the same native round must still attach.
+      expect(await Promise.race([recovered.then(() => true), Bun.sleep(100).then(() => false)])).toBeTrue();
+      expect(await first).toMatchObject({ name: "AbortError" });
+      expect(browserSignal?.aborted).toBeFalse();
+      finish();
+      await reconnect;
+      expect(events.filter((event): event is Extract<AdapterEvent, { type: "text_delta" }> =>
+        event.type === "text_delta" && event.phase === "final_answer").map(event => event.text).join(""))
+        .toBe("Existing continued");
+      expect(browserStarts).toBe(1);
+    } finally {
+      oldConnection.abort();
+      finish?.();
+      await first;
+      await reconnect;
+      worker.run = originalRun;
+    }
+  });
+
+  test("a reconnect aborted during registry lookup leaves the live observer attached", async () => {
+    const provider: CodexProviderConfig = {
+      adapter: "chatgpt-web", baseUrl: `browser://aborted-reconnect-${Date.now()}`,
+      chatgptWeb: browserOnlyCapabilities,
+    };
+    const worker = ChatGptBrowserWorker.forProvider(provider);
+    const originalRun = worker.run.bind(worker);
+    let browserStarts = 0;
+    let finish!: () => void;
+    worker.run = turn => {
+      browserStarts += 1;
+      turn.onSendActivated?.();
+      turn.onSubmitted?.();
+      turn.onTextDelta("Existing ");
+      return new Promise(resolve => { finish = () => {
+        turn.onTextDelta("continued"); resolve("Existing continued");
+      }; });
+    };
+    const request = rawWireRequest(environmentXml);
+    const adapter = createChatGptWebAdapter(provider);
+    let sawPrefix!: () => void;
+    const prefix = new Promise<void>(resolve => { sawPrefix = resolve; });
+    const events: AdapterEvent[] = [];
+    const first = adapter.runTurn!(request, { headers: new Headers() }, event => {
+      events.push(event);
+      if (event.type === "text_delta" && event.phase === "final_answer") sawPrefix();
+    }).catch(error => error);
+    const disconnected = new AbortController();
+    const lookup = chatGptTurnSessions.getOrCreateAfterOwnerRetirement.bind(chatGptTurnSessions);
+    let lookupSpy: ReturnType<typeof spyOn> | undefined;
+    try {
+      await prefix;
+      lookupSpy = spyOn(chatGptTurnSessions, "getOrCreateAfterOwnerRetirement").mockImplementation(async (...args) => {
+        const session = await lookup(...args);
+        disconnected.abort();
+        return session;
+      });
+      await expect(adapter.runTurn!(request, { headers: new Headers(), abortSignal: disconnected.signal }, () => {}))
+        .rejects.toMatchObject({ name: "AbortError" });
+      finish();
+      expect(await first).toBeUndefined();
+      expect(events.filter((event): event is Extract<AdapterEvent, { type: "text_delta" }> =>
+        event.type === "text_delta" && event.phase === "final_answer").map(event => event.text).join(""))
+        .toBe("Existing continued");
+      expect(browserStarts).toBe(1);
+    } finally {
+      lookupSpy?.mockRestore();
+      finish?.();
+      await first;
+      worker.run = originalRun;
+    }
+  });
+
+  test("Responses SSE reconnect delivers offline output without resubmitting the browser prompt", async () => {
+    const provider: CodexProviderConfig = {
+      adapter: "chatgpt-web", baseUrl: `browser://http-recovery-${Date.now()}`,
+      chatgptWeb: browserOnlyCapabilities,
+    };
+    const worker = ChatGptBrowserWorker.forProvider(provider);
+    const originalRun = worker.run.bind(worker);
+    let browserStarts = 0;
+    let browserSignal: AbortSignal | undefined;
+    let finish!: () => void;
+    worker.run = turn => {
+      browserStarts += 1;
+      browserSignal = turn.abortSignal;
+      turn.onSendActivated?.();
+      turn.onSubmitted?.();
+      turn.onTextDelta("Before disconnect. ");
+      return new Promise(resolve => { finish = () => {
+        turn.onTextDelta("After disconnect.");
+        resolve("Before disconnect. After disconnect.");
+      }; });
+    };
+    const body = { ...rawWireRequest(environmentXml)._rawBody as object,
+      model: "chatgpt-web/high", stream: true };
+    const request = () => new Request("http://127.0.0.1/v1/responses", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    });
+    const adapter = createChatGptWebAdapter(provider);
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      const first = await responseRequest(request(), defaultConfig("browser-only"), () => adapter);
+      expect(first.status).toBe(200);
+      reader = first.body!.getReader();
+      let partial = "";
+      while (!partial.includes('"delta":"Before disconnect. "')) {
+        const chunk = await reader.read();
+        if (chunk.done) throw new Error(`SSE ended before prefix: ${partial}`);
+        partial += new TextDecoder().decode(chunk.value);
+      }
+      await reader.cancel("synthetic network disconnect");
+      expect(browserSignal?.aborted).toBeFalse();
+      finish();
+      await Bun.sleep(0);
+      const reconnect = await responseRequest(request(), defaultConfig("browser-only"), () => adapter);
+      const wire = await reconnect.text();
+      const events = wire.split("\n").filter(line => line.startsWith("data: {")).map(line => JSON.parse(line.slice(6)));
+      expect(events.filter(event => event.type === "response.output_text.delta").map(event => event.delta).join(""))
+        .toBe("Before disconnect. After disconnect.");
+      expect(events.filter(event => event.type === "response.completed")).toHaveLength(1);
+      expect(events.some(event => event.type === "response.failed")).toBeFalse();
+      expect(browserStarts).toBe(1);
+    } finally {
+      await reader?.cancel();
+      finish?.();
+      worker.run = originalRun;
+    }
+  });
 
   test("an ambiguous submission outcome is stable across native reconnects", async () => {
     const provider: CodexProviderConfig = {

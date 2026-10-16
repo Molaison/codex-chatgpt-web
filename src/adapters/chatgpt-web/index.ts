@@ -908,7 +908,9 @@ export function createChatGptWebAdapter(
       };
       const write = emit;
       emit = event => {
-        if (observerAbort.signal.aborted) throw observerAbort.signal.reason;
+        if (incoming.abortSignal?.aborted) {
+          throw new DOMException("ChatGPT web turn aborted", "AbortError");
+        }
         try { write(event); }
         catch (cause) {
           // The response writer is an observer, not the owner of browser execution. Its
@@ -1290,6 +1292,8 @@ export function createChatGptWebAdapter(
           // alone may supersede an unfinished instruction and retire its surface.
           mode.localTools ? chatGptInstructionLineage(parsed) : undefined,
         );
+        // A reconnect may disconnect while awaiting the registry; it must not evict a live observer.
+        if (incoming.abortSignal?.aborted) throw new DOMException("ChatGPT web turn aborted", "AbortError");
         const roundKey = chatGptTurnRoundKey(parsed);
         const emitRoundEvents = (events: readonly AdapterEvent[]): void => {
           // Journal the complete synchronous event batch before touching the HTTP observer. If the
@@ -1307,8 +1311,13 @@ export function createChatGptWebAdapter(
         };
         const emitRoundEvent = (event: AdapterEvent): void => emitRoundEvents([event]);
         let awaitingRuntime = false;
+        const releaseObserver = session.runtime.manualControl ? undefined : session.observeRound(roundKey, () => {
+          observerAbort.abort(new DOMException("ChatGPT observer replaced by an exact reconnect", "AbortError"));
+        });
         try {
-          await session.runExclusive(async () => {
+          await withAbort(session.runExclusive(async () => {
+            // A disconnected queued observer must never drain data after it finally acquires the lock.
+            if (incoming.abortSignal?.aborted) throw new DOMException("ChatGPT web turn aborted", "AbortError");
             const replay = session.roundEvents(roundKey);
             replayEvents(replay, emit);
             if (session.roundCompleted(roundKey)) {
@@ -1322,7 +1331,6 @@ export function createChatGptWebAdapter(
             }
             const settled = session.settledOutcome();
             if (settled) {
-              if (settled.type === "error") throw settled.error;
               const trace = session.runtime.trace.drain();
               const completedTextDeltas = session.runtime.text.drain();
               const finalReplay = replay.length === 0
@@ -1335,14 +1343,17 @@ export function createChatGptWebAdapter(
                 emitRoundEvents(finalReplay);
               } else {
                 session.appendRoundReasoning(roundKey, trace.map(event => event.text));
-                if (replay.length === 0 && !parsed._compactionRequest) {
-                  emitRoundBatch(buffer => emitReadOnlyContextWarning(parsed, turnCapabilities, buffer));
-                }
-                emitRoundBatch(buffer => emitTraceEvents(trace, buffer));
-                if (!bufferStructuredOutput) {
-                  emitRoundBatch(buffer => emitTextDeltas(completedTextDeltas, buffer));
-                }
+                // Both feeds were drained above: journal them together before any observer write.
+                emitRoundBatch(buffer => {
+                  if (replay.length === 0 && !parsed._compactionRequest) {
+                    emitReadOnlyContextWarning(parsed, turnCapabilities, buffer);
+                  }
+                  emitTraceEvents(trace, buffer);
+                  if (!bufferStructuredOutput) emitTextDeltas(completedTextDeltas, buffer);
+                });
               }
+              // A failed browser may still have produced text while the client was offline.
+              if (settled.type === "error") throw settled.error;
               if (session.runtime.text.value() !== settled.answer) {
                 throw new Error("ChatGPT browser Markdown stream did not reproduce the completed answer");
               }
@@ -1537,7 +1548,7 @@ export function createChatGptWebAdapter(
             } finally {
               toolWaitAbort.abort();
             }
-          });
+          }), incoming.abortSignal);
         } catch (error) {
           if (incoming.abortSignal?.aborted && error instanceof DOMException && error.name === "AbortError") {
             if (session.runtime.manualControl) {
@@ -1590,6 +1601,8 @@ export function createChatGptWebAdapter(
           session.failRound(roundKey, turnError);
           chatGptWebTurnRetryPolicy.clear(retryKey);
           throw turnError;
+        } finally {
+          releaseObserver?.();
         }
       };
 

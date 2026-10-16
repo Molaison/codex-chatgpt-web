@@ -296,6 +296,7 @@ export class ChatGptTurnSession {
   private settledPhysical = false;
   private attachedConversationKey: string | undefined;
   private tail: Promise<void> = Promise.resolve();
+  private readonly roundObservers = new Map<string, () => void>();
   private capabilityRetirementScheduled = false;
   private readonly rounds = new Map<string, {
     events: AdapterEvent[];
@@ -336,6 +337,15 @@ export class ChatGptTurnSession {
       })}`);
       return outcome;
     });
+  }
+
+  /** An exact reconnect replaces its stale HTTP observer, never the browser execution. */
+  observeRound(key: string, detach: () => void): () => void {
+    this.roundObservers.get(key)?.();
+    this.roundObservers.set(key, detach);
+    return () => {
+      if (this.roundObservers.get(key) === detach) this.roundObservers.delete(key);
+    };
   }
 
   runExclusive<T>(task: () => Promise<T>): Promise<T> {
