@@ -8,7 +8,7 @@ test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("CodeMirror language invalida
   const browser = await chromium.launch({ executablePath: process.env.CHATGPT_DOM_TEST_BROWSER, headless: true });
   try {
     const page = await browser.newPage();
-    await page.setContent(readFileSync(new URL("./fixtures/chatgpt-codemirror-reply-2026-10-11.html", import.meta.url), "utf8"));
+    await page.setContent(readFileSync(new URL("./fixtures/chatgpt-codemirror-reply-2026-10-11.html", import.meta.url), "utf8"), { waitUntil: "domcontentloaded" });
     const worker = Object.create(ChatGptBrowserWorker.prototype) as any;
     const cache = {};
     const observe = () => worker.responseDomSnapshot(page.locator("#turn"), cache);
