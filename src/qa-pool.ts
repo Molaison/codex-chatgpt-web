@@ -1,3 +1,4 @@
+import { createReceiptStore, receiptIdentity, replayReceipt, MAX_RECEIPT_BYTES } from "./qa-pool-receipts";
 import { PaperRegistry, PaperError, normalizePaperId, poolSessionHash, type PaperScope, type PaperRow } from "./paper-registry";
 import type { PaperRecoveryReader } from "./paper-recovery";
 import { parsePaperHistory, readLauncherPaperHistory, type PaperHistoryReader } from "./paper-history";
@@ -17,13 +18,12 @@ export interface QaPoolConfig {
 }
 const nonempty = (value: unknown): string | undefined => typeof value === "string" && value.trim() ? value.trim() : undefined;
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-// The only upstream failure that proves no question was submitted: the initial single-request
-// file attachment stage failed strictly before Send. Any other error stays uncertain.
+// These adapter codes are emitted before Send. HTTP status alone is not proof.
 const PRE_SEND_ATTACHMENT_FAILURE = "prompt_attachments_not_submitted";
-function preSendAttachmentFailure(value: unknown): boolean {
+function preSendAttachmentFailure(value: unknown, allowAdmissionFailure = false): boolean {
   const event = record(value);
   return [event, record(event.error), record(record(event.response).error)]
-    .some(entry => entry.code === PRE_SEND_ATTACHMENT_FAILURE);
+    .some(entry => entry.code === PRE_SEND_ATTACHMENT_FAILURE || (allowAdmissionFailure && entry.code === "concurrency_limit_exceeded"));
 }
 
 export function parseQaSessionEffort(value: unknown): { effort?: string; mode: "temporary" | "persistent"; explicit: boolean } {
@@ -33,7 +33,7 @@ export function parseQaSessionEffort(value: unknown): { effort?: string; mode: "
     : { effort, mode: "persistent", explicit: false };
 }
 
-export function normalizeQaPoolRequest(payload: Record<string, unknown>, headers: Headers, requestId = randomUUID()) {
+export function normalizeQaPoolRequest(payload: Record<string, unknown>, headers: Headers, requestId: string = randomUUID()) {
   const metadata = record(payload.client_metadata);
   const native = metadata["x-codex-turn-metadata"] ?? headers.get("x-codex-turn-metadata");
   let identity = record(native);
@@ -45,15 +45,17 @@ export function normalizeQaPoolRequest(payload: Record<string, unknown>, headers
     ?? nonempty(payload.session_id) ?? nonempty(payload.conversation_id) ?? nonempty(payload.prompt_cache_key);
   const thread = nonempty(identity.thread_id) ?? (session
     ? "qa-session-" + createHash("sha256").update(session).digest("hex") : "qa-request-" + requestId);
+  const stableTurn = nonempty(identity.turn_id) ?? nonempty(identity.request_id);
+  const messageSeed = stableTurn ? createHash("sha256").update(JSON.stringify([thread, stableTurn])).digest("hex") : requestId;
   const normalized: Record<string, unknown> = { ...payload, client_metadata: { ...metadata,
-    "x-codex-turn-metadata": JSON.stringify({ ...identity, thread_id: thread, turn_id: nonempty(identity.turn_id) ?? "qa-turn-" + requestId }),
+    "x-codex-turn-metadata": JSON.stringify({ ...identity, thread_id: thread, turn_id: nonempty(identity.turn_id) ?? "qa-turn-" + (nonempty(identity.request_id) ?? requestId) }),
   } };
   if (typeof normalized.input === "string") normalized.input = [{ type: "message", role: "user", content: [{ type: "input_text", text: normalized.input }] }];
   if (Array.isArray(normalized.input)) normalized.input = normalized.input.map((item, index) => {
     const message = record(item);
     if (typeof message.role !== "string") return item;
     return { ...message, type: message.type ?? "message",
-      ...(message.role === "user" && !message.id ? { id: "qa-message-" + requestId + "-" + index } : {}),
+      ...(message.role === "user" && !message.id ? { id: "qa-message-" + messageSeed + "-" + index } : {}),
     };
   });
   return { thread, payload: normalized };
@@ -131,23 +133,32 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
     // Preserve the existence of private context before any content expiry deletes it.
     db.exec("UPDATE sessions SET temporary_history_expected=1 WHERE session_hash IN (SELECT session_hash FROM temporary_history)");
   })();
+  if (!(db.query("PRAGMA table_info(sessions)").all() as Array<{ name: string }>).some(column => column.name === "pending_history_turn")) {
+    db.exec("ALTER TABLE sessions ADD COLUMN pending_history_turn TEXT");
+  }
+  const reserveHistoryTurn = db.query("UPDATE sessions SET pending_history_turn=? WHERE session_hash=? AND pending_history_turn IS NULL");
+  const clearHistoryTurn = db.query("UPDATE sessions SET pending_history_turn=NULL WHERE session_hash=? AND pending_history_turn=?");
   const history = db.query<{ input_json: string; response_id: string; expires_at: number }, [string]>("SELECT input_json, response_id, expires_at FROM temporary_history WHERE session_hash=?");
   const putHistory = db.query("INSERT OR REPLACE INTO temporary_history VALUES (?, ?, ?, ?)");
   const deleteHistory = db.query("DELETE FROM temporary_history WHERE session_hash=?");
   const expectHistory = db.query("UPDATE sessions SET temporary_history_expected=? WHERE session_hash=?");
-  const saveHistory = db.transaction((hash: string, input: string, responseId: string) => {
+  const saveHistory = db.transaction((hash: string, input: string, responseId: string, expiresAt: number) => {
     expectHistory.run(1, hash);
-    putHistory.run(hash, input, responseId, Date.now() + 48 * 60 * 60 * 1000);
+    putHistory.run(hash, input, responseId, expiresAt);
   });
   const promoteHistory = db.transaction((hash: string) => {
     deleteHistory.run(hash);
     expectHistory.run(0, hash);
   });
   const purgeHistory = db.query("DELETE FROM temporary_history WHERE expires_at<=?");
-  purgeHistory.run(Date.now());
-  const sweep = setInterval(() => purgeHistory.run(Date.now()), 60_000);
+  const receipts = createReceiptStore(db);
+  purgeHistory.run(Date.now()); receipts.purge();
+  const sweep = setInterval(() => { purgeHistory.run(Date.now()); receipts.purge(); }, 60_000);
   sweep.unref();
   const activeHistories = new Set<string>();
+  const activeReceipts = new Map<string, Promise<void>>();
+  const shutdownObservers = new Set<() => void>();
+  let closed = false;
   if (!(db.query("PRAGMA table_info(sessions)").all() as Array<{ name: string }>).some(column => column.name === "project_id")) {
     db.exec("ALTER TABLE sessions ADD COLUMN project_id TEXT; ALTER TABLE sessions ADD COLUMN project_name TEXT;");
   }
@@ -155,7 +166,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
   const paperRecoveries = new Map<string, Promise<unknown>>();
   const activePaperReads = new Set<string>();
   const readPaperHistory = options.paperHistoryReader ?? readLauncherPaperHistory;
-  const find = db.query<{ account_id: string; project_id: string | null; project_name: string | null; temporary_history_expected: number }, [string]>("SELECT account_id, project_id, project_name, temporary_history_expected FROM sessions WHERE session_hash = ?");
+  const find = db.query<{ account_id: string; project_id: string | null; project_name: string | null; temporary_history_expected: number; pending_history_turn: string | null }, [string]>("SELECT account_id, project_id, project_name, temporary_history_expected, pending_history_turn FROM sessions WHERE session_hash = ?");
   const insert = db.query("INSERT OR IGNORE INTO sessions (session_hash, account_id, created_at, project_id, project_name) VALUES (?, ?, ?, ?, ?)");
   const count = db.query<{ account_id: string; n: number }, []>("SELECT account_id, COUNT(*) AS n FROM sessions GROUP BY account_id");
   const clients = config.clients.map(client => {
@@ -179,6 +190,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
     return find.get(hash)!;
   });
   async function fetchRequest(request: Request): Promise<Response> {
+    if (closed) return failure(503, "pool_closed", "The QA pool is closed");
     const url = new URL(request.url);
     const supplied = createHash("sha256").update(request.headers.get("authorization") ?? "").digest();
     const client = clients.find(value => timingSafeEqual(value.digest, supplied));
@@ -236,6 +248,8 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
     let normalized: ReturnType<typeof normalizeQaPoolRequest>;
     try { normalized = normalizeQaPoolRequest(payload, request.headers); }
     catch { return failure(400, "invalid_identity", "Invalid session identity"); }
+    const originalNative = record(payload.client_metadata)["x-codex-turn-metadata"] ?? request.headers.get("x-codex-turn-metadata");
+    const receiptNative = typeof originalNative === "string" ? record(JSON.parse(originalNative)) : record(originalNative);
     const sessionScope = route?.sessionNamespace ? [client.id, route.sessionNamespace] : client.id;
     const paperMetadata = JSON.parse(record(normalized.payload.client_metadata)["x-codex-turn-metadata"] as string);
     let paper: { id: string; scope: PaperScope; row: PaperRow } | undefined;
@@ -322,6 +336,27 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
       return failure(409, "temporary_history_expired", "Temporary context expired or is unavailable; start a new thread seeded with the history you want to retain");
     }
     const retainHistory = account.sessionModes && (selection.mode === "temporary" || cached !== null && cached !== undefined);
+    receipts.purge();
+    const receipt = !paper && pathname === "/v1/responses" && (account.sessionModes || owner.pending_history_turn)
+      ? receiptIdentity({ ...normalized.payload, session_mode: selection.mode }, receiptNative, JSON.stringify([hash, owner.account_id, owner.project_id, pathname])) : undefined;
+    if (receipt) {
+      let prior = receipts.get(hash, receipt.key);
+      if (prior) {
+        if (prior.state === "completed_unretained") return failure(409, "request_completed_unretained", "This request completed, but its response is not cached locally; no new message was sent");
+        if (prior.state === "expired") return failure(409, "request_receipt_expired", "The request receipt expired; no new message was sent");
+        if (prior.digest !== receipt.digest) return failure(409, "request_identity_conflict", "This request identity was already used for a different payload");
+        if (prior.state === "pending") {
+          const active = activeReceipts.get(hash + ":" + receipt.key);
+          if (active) { await active; if (closed) return failure(503, "pool_closed", "The QA pool is closed"); prior = receipts.get(hash, receipt.key);
+            if (!prior) return failure(409, "request_receipt_unavailable", "The prior attempt has no retained receipt; no new message was sent"); }
+        }
+        if (prior.state === "completed_unretained") return failure(409, "request_completed_unretained", "This request completed, but its response is not cached locally; no new message was sent");
+        if (prior.state === "completed" && prior.response_json) return replayReceipt(JSON.parse(prior.response_json));
+        return failure(409, "temporary_turn_uncertain", "This request may have been submitted; reconcile it before retrying");
+      }
+    }
+    if (owner.pending_history_turn) return failure(409, "temporary_turn_uncertain", "A prior turn may have been submitted but its history was not committed; reconcile it before continuing");
+    const historyExpiresAt = Date.now() + 48 * 60 * 60 * 1000;
     if (retainHistory && activeHistories.has(hash)) return failure(409, "temporary_turn_in_progress", "Wait for this conversation's current turn to finish");
     if (cached) {
       const previous = nonempty(normalized.payload.previous_response_id);
@@ -360,62 +395,155 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
       const value = request.headers.get(name); if (value) headers.set(name, value);
     }
     let paperCompleted = false;
+    const historyAttempt = randomUUID();
+    let historyReserved = false;
+    let settleReceipt = () => {};
+    let observation: AbortController | undefined;
+    let observationTimer: ReturnType<typeof setTimeout> | undefined;
+    let cancelRead: (() => void) | undefined;
+    const stopObservation = () => { if (observationTimer) clearTimeout(observationTimer); observation?.abort(); cancelRead?.(); settleReceipt(); };
     const release = (notSubmitted = false) => {
       activeHistories.delete(hash);
+      settleReceipt();
+      if (observationTimer) clearTimeout(observationTimer);
+      shutdownObservers.delete(stopObservation);
+      if (closed) return;
+      if (notSubmitted && historyReserved) {
+        db.transaction(() => { clearHistoryTurn.run(hash, historyAttempt); if (receipt) receipts.release(hash, receipt.key); })();
+        historyReserved = false;
+      }
       if (!paper) return;
       if (notSubmitted && !paperCompleted) papers.release(paper.id); else papers.finish(paper.id, paperCompleted);
     };
-    const completed = (value: unknown) => {
+    const commitHistory = db.transaction((value: unknown, wire?: Uint8Array, cacheable = true) => {
       const response = record(value);
       if (response.status !== "completed" || typeof response.id !== "string" || !Array.isArray(response.output)) return;
-      if (paper && !paperCompleted) { papers.complete(paper.id,paper.scope); paperCompleted = true; }
-      if (selection.mode !== "temporary") { promoteHistory(hash); return; }
+      if (historyReserved) clearHistoryTurn.run(hash, historyAttempt);
+      if (selection.mode !== "temporary") { promoteHistory(hash); receipts.promote(hash); return; }
+      const expiresAt = Date.now() + 48 * 60 * 60 * 1000;
+      if (receipt && historyReserved) receipts.complete(hash, receipt.key, response, expiresAt, wire, cacheable);
       const messages = response.output.filter(item => record(item).type === "message" && record(item).role === "assistant");
-      saveHistory(hash, JSON.stringify([...(Array.isArray(normalized.payload.input) ? normalized.payload.input : []), ...messages]), response.id);
+      saveHistory(hash, JSON.stringify([...(Array.isArray(normalized.payload.input) ? normalized.payload.input : []), ...messages]), response.id, expiresAt);
+    });
+    const completed = (value: unknown, wire?: Uint8Array, cacheable = true) => {
+      if (closed || observation?.signal.aborted) throw new Error("Observation ended before completion was committed");
+      const response = record(value);
+      if (response.status !== "completed" || typeof response.id !== "string" || !Array.isArray(response.output)) return;
+      if (paper) {
+        if (!paperCompleted) { papers.complete(paper.id, paper.scope); paperCompleted = true; }
+        promoteHistory(hash);
+        return;
+      }
+      commitHistory(value, wire, cacheable);
+      settleReceipt();
+      return true;
     };
+    if (retainHistory && !paper && pathname === "/v1/responses") {
+      try {
+        const reserved = db.transaction(() => {
+          if (receipt && receipts.get(hash, receipt.key)) return "existing";
+          const current = history.get(hash);
+          if (current?.response_id !== cached?.response_id || (current && current.expires_at <= Date.now())
+            || (!current && find.get(hash)?.temporary_history_expected)) return "head_changed";
+          if (reserveHistoryTurn.run(historyAttempt, hash).changes !== 1) return "pending";
+          if (receipt) receipts.begin(hash, receipt.key, receipt.digest, historyExpiresAt);
+          return "reserved";
+        }).immediate();
+        if (reserved === "existing" && receipt) {
+          const existing = receipts.get(hash, receipt.key);
+          if (existing?.digest === receipt.digest && existing.state === "completed" && existing.response_json) return replayReceipt(JSON.parse(existing.response_json));
+          return failure(409, "request_receipt_changed", "This request already has a receipt; no new message was sent");
+        }
+        if (reserved === "head_changed") return failure(409, "temporary_history_changed", "The conversation head changed; reload it before continuing");
+        if (reserved !== "reserved") return failure(409, "temporary_turn_uncertain", "A prior turn is still pending; no new message was sent");
+        historyReserved = true;
+        if (receipt) {
+          const activeKey = hash + ":" + receipt.key;
+          let settle!: () => void;
+          activeReceipts.set(activeKey, new Promise<void>(resolve => { settle = resolve; }));
+          settleReceipt = () => { activeReceipts.delete(activeKey); settle(); };
+          observation = new AbortController();
+          observationTimer = setTimeout(stopObservation, 10 * 60 * 1000);
+          observationTimer.unref();
+          shutdownObservers.add(stopObservation);
+        }
+      } catch { return failure(503, "temporary_history_unavailable", "The pending turn could not be persisted; no message was sent"); }
+    }
     if (paper) papers.begin(paper.id);
     if (retainHistory) activeHistories.add(hash);
     try {
       const response = await fetch(account.origin.replace(/\/$/, "") + pathname, {
-        method: "POST", headers, body: JSON.stringify(normalized.payload), signal: request.signal, redirect: "error",
+        method: "POST", headers, body: JSON.stringify(normalized.payload), signal: observation?.signal ?? request.signal, redirect: "error",
       });
+      if (closed || observation?.signal.aborted) { await response.body?.cancel(); throw new Error("Observation ended"); }
       let body: BodyInit | null = response.body;
       let notSubmitted = false;
       const streaming = (response.headers.get("content-type") ?? "").includes("text/event-stream");
-      if (paper && response.body && !streaming) {
+      if ((paper || retainHistory) && response.body && !streaming) {
         // A failed paper turn is not always an HTTP error, so classify the explicit pre-send
         // attachment failure from the body before deciding whether the reservation is retryable.
         const bytes = await response.arrayBuffer();
         let parsed: unknown; try { parsed = JSON.parse(new TextDecoder().decode(bytes)); } catch { parsed = undefined; }
         if (response.ok) completed(parsed);
         // A 200 stream-less body can still carry status:"failed" with the explicit adapter code.
-        if (!paperCompleted && parsed !== undefined && preSendAttachmentFailure(parsed)) notSubmitted = true;
+        if (!paperCompleted && parsed !== undefined && preSendAttachmentFailure(parsed, Boolean(retainHistory))) notSubmitted = true;
         body = bytes; release(notSubmitted);
       } else if ((retainHistory || paper) && response.body && response.ok) {
-        if (!streaming) {
-          const bytes = await response.arrayBuffer(); completed(JSON.parse(new TextDecoder().decode(bytes)));
-          body = bytes; release();
-        } else {
-          const reader = response.body.getReader(), decoder = new TextDecoder(); let buffered = "";
-          body = new ReadableStream<Uint8Array>({
-            async pull(controller) {
-              try {
-                const chunk = await reader.read();
-                if (chunk.done) { release(notSubmitted); controller.close(); return; }
-                buffered += decoder.decode(chunk.value, { stream: true });
-                const lines = buffered.split("\n"); buffered = lines.pop() ?? "";
-                for (const line of lines) {
-                  if (!line.startsWith("data: ") || line.slice(6).trim() === "[DONE]") continue;
-                  const event = record(JSON.parse(line.slice(6)));
-                  if (event.type === "response.completed") completed(event.response);
-                  else if ((event.type === "response.failed" || event.type === "error") && preSendAttachmentFailure(event)) notSubmitted = true;
-                }
-                controller.enqueue(chunk.value);
-              } catch (error) { release(notSubmitted); controller.error(error); }
-            },
-            async cancel(reason) { release(notSubmitted); await reader.cancel(reason); },
-          });
-        }
+        const reader = response.body.getReader(); let buffered = Buffer.alloc(0);
+        cancelRead = () => { resumeRead?.(); void reader.cancel().catch(() => {}); };
+        const wire: Uint8Array[] = []; let wireBytes = 0; let terminalSaved = false; let cacheable = true;
+        let observerCancelled = false;
+        let resumeRead: (() => void) | undefined;
+        const consume = async (controller: ReadableStreamDefaultController<Uint8Array>) => {
+            try {
+              while (true) {
+              if (receipt && !observerCancelled && (controller.desiredSize ?? 1) <= 0) {
+                await new Promise<void>(resolve => { resumeRead = resolve; });
+                resumeRead = undefined;
+              }
+              const chunk = await reader.read();
+              if (closed || observation?.signal.aborted) throw new Error("Observation ended");
+              if (chunk.done) { release(notSubmitted); if (!observerCancelled) controller.close(); return; }
+              if (receipt && !terminalSaved) {
+                wireBytes += chunk.value.byteLength;
+                if (wireBytes > MAX_RECEIPT_BYTES) { cacheable = false; wire.length = 0; }
+              }
+              buffered = Buffer.concat([buffered, chunk.value]);
+              if (receipt && buffered.byteLength > 64 * MAX_RECEIPT_BYTES) throw new Error("Receipt event too large");
+              while (true) {
+                const lf = buffered.indexOf("\n\n"), crlf = buffered.indexOf("\r\n\r\n");
+                const end = lf < 0 ? crlf : crlf < 0 ? lf : Math.min(lf, crlf);
+                if (end < 0) break;
+                const length = end + (end === crlf ? 4 : 2);
+                const frame = buffered.subarray(0, length); buffered = buffered.subarray(length);
+                if (receipt && !terminalSaved && cacheable) wire.push(frame);
+                const data = frame.toString("utf8").split(/\r?\n/).filter(line => line.startsWith("data:"))
+                  .map(line => line.slice(5).replace(/^ /, "")).join("\n");
+                if (!data || data.trim() === "[DONE]") continue;
+                const event = record(JSON.parse(data));
+                if (event.type === "response.completed") {
+                  if (terminalSaved) throw new Error("Duplicate terminal event");
+                  const committed = completed(event.response, receipt && cacheable ? Buffer.concat(wire) : undefined, cacheable);
+                  if (receipt && !committed) throw new Error("Invalid completed response");
+                  terminalSaved = true;
+                } else if ((event.type === "response.failed" || event.type === "error") && preSendAttachmentFailure(event, Boolean(retainHistory))) notSubmitted = true;
+              }
+              if (!observerCancelled) controller.enqueue(chunk.value);
+              if (receipt && terminalSaved) {
+                release(notSubmitted); if (!observerCancelled) controller.close();
+                await reader.cancel(); return;
+              }
+              if (!receipt) return;
+              }
+            } catch (error) { release(notSubmitted); if (!observerCancelled) controller.error(error); }
+        };
+        body = new ReadableStream<Uint8Array>({
+          ...(receipt ? { start: (controller: ReadableStreamDefaultController<Uint8Array>) => { void consume(controller); }, pull: () => { resumeRead?.(); } } : { pull: consume }),
+          async cancel(reason) {
+            observerCancelled = true; resumeRead?.();
+            if (!receipt || !historyReserved) { release(notSubmitted); await reader.cancel(reason); }
+          },
+        });
       } else release();
       return new Response(body, { status: response.status, headers: {
         "content-type": response.headers.get("content-type") ?? "application/json",
@@ -426,7 +554,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
   return { fetch: async (request: Request) => {
     try { return await fetchRequest(request); }
     catch (error) { if (error instanceof PaperError) return failure(error.status,error.code,error.message); throw error; }
-  }, close: () => { clearInterval(sweep); db.close(); } };
+  }, close: () => { closed = true; clearInterval(sweep); for (const stop of shutdownObservers) stop(); shutdownObservers.clear(); db.close(); } };
 }
 
 if (import.meta.main) {
