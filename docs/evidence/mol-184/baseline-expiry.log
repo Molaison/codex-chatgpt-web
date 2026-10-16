@@ -1,0 +1,145 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/qa-pool-history-expiry.test.ts:
+36 |     close: () => { pool.close(); globalThis.fetch = originalFetch; rmSync(root, { recursive: true, force: true }); },
+37 |   };
+38 | }
+39 | 
+40 | async function expectExpired(response: Response) {
+41 |   expect(response.status).toBe(409);
+                               ^
+error: expect(received).toBe(expected)
+
+Expected: 409
+Received: 200
+
+      at expectExpired (<BASELINE_CHECKOUT>/tests/qa-pool-history-expiry.test.ts:41:27)
+      at <anonymous> (<BASELINE_CHECKOUT>/tests/qa-pool-history-expiry.test.ts:54:13)
+(fail) temporary history fails closed after request expiry, retries and restart [6.13ms]
+36 |     close: () => { pool.close(); globalThis.fetch = originalFetch; rmSync(root, { recursive: true, force: true }); },
+37 |   };
+38 | }
+39 | 
+40 | async function expectExpired(response: Response) {
+41 |   expect(response.status).toBe(409);
+                               ^
+error: expect(received).toBe(expected)
+
+Expected: 409
+Received: 200
+
+      at expectExpired (<BASELINE_CHECKOUT>/tests/qa-pool-history-expiry.test.ts:41:27)
+      at <anonymous> (<BASELINE_CHECKOUT>/tests/qa-pool-history-expiry.test.ts:53:13)
+(fail) temporary history fails closed after restart expiry, retries and restart [1.85ms]
+36 |     close: () => { pool.close(); globalThis.fetch = originalFetch; rmSync(root, { recursive: true, force: true }); },
+37 |   };
+38 | }
+39 | 
+40 | async function expectExpired(response: Response) {
+41 |   expect(response.status).toBe(409);
+                               ^
+error: expect(received).toBe(expected)
+
+Expected: 409
+Received: 200
+
+      at expectExpired (<BASELINE_CHECKOUT>/tests/qa-pool-history-expiry.test.ts:41:27)
+      at <anonymous> (<BASELINE_CHECKOUT>/tests/qa-pool-history-expiry.test.ts:53:13)
+(fail) temporary history fails closed after purged expiry, retries and restart [1.18ms]
+36 |     close: () => { pool.close(); globalThis.fetch = originalFetch; rmSync(root, { recursive: true, force: true }); },
+37 |   };
+38 | }
+39 | 
+40 | async function expectExpired(response: Response) {
+41 |   expect(response.status).toBe(409);
+                               ^
+error: expect(received).toBe(expected)
+
+Expected: 409
+Received: 200
+
+      at expectExpired (<BASELINE_CHECKOUT>/tests/qa-pool-history-expiry.test.ts:41:27)
+      at <anonymous> (<BASELINE_CHECKOUT>/tests/qa-pool-history-expiry.test.ts:83:11)
+(fail) legacy retained history migrates before startup expiry purge [1.73ms]
+36 |     close: () => { pool.close(); globalThis.fetch = originalFetch; rmSync(root, { recursive: true, force: true }); },
+37 |   };
+38 | }
+39 | 
+40 | async function expectExpired(response: Response) {
+41 |   expect(response.status).toBe(409);
+                               ^
+error: expect(received).toBe(expected)
+
+Expected: 409
+Received: 200
+
+      at expectExpired (<BASELINE_CHECKOUT>/tests/qa-pool-history-expiry.test.ts:41:27)
+      at <anonymous> (<BASELINE_CHECKOUT>/tests/qa-pool-history-expiry.test.ts:105:11)
+(fail) unexpired history survives restart and successful promotion clears its expectation [3.12ms]
+36 |     close: () => { pool.close(); globalThis.fetch = originalFetch; rmSync(root, { recursive: true, force: true }); },
+37 |   };
+38 | }
+39 | 
+40 | async function expectExpired(response: Response) {
+41 |   expect(response.status).toBe(409);
+                               ^
+error: expect(received).toBe(expected)
+
+Expected: 409
+Received: 503
+
+      at expectExpired (<BASELINE_CHECKOUT>/tests/qa-pool-history-expiry.test.ts:41:27)
+      at <anonymous> (<BASELINE_CHECKOUT>/tests/qa-pool-history-expiry.test.ts:119:13)
+(fail) failed http promotion preserves history expectation [1.81ms]
+36 |     close: () => { pool.close(); globalThis.fetch = originalFetch; rmSync(root, { recursive: true, force: true }); },
+37 |   };
+38 | }
+39 | 
+40 | async function expectExpired(response: Response) {
+41 |   expect(response.status).toBe(409);
+                               ^
+error: expect(received).toBe(expected)
+
+Expected: 409
+Received: 200
+
+      at expectExpired (<BASELINE_CHECKOUT>/tests/qa-pool-history-expiry.test.ts:41:27)
+      at <anonymous> (<BASELINE_CHECKOUT>/tests/qa-pool-history-expiry.test.ts:119:13)
+(fail) failed incomplete promotion preserves history expectation [1.39ms]
+36 |     close: () => { pool.close(); globalThis.fetch = originalFetch; rmSync(root, { recursive: true, force: true }); },
+37 |   };
+38 | }
+39 | 
+40 | async function expectExpired(response: Response) {
+41 |   expect(response.status).toBe(409);
+                               ^
+error: expect(received).toBe(expected)
+
+Expected: 409
+Received: 200
+
+      at expectExpired (<BASELINE_CHECKOUT>/tests/qa-pool-history-expiry.test.ts:41:27)
+      at <anonymous> (<BASELINE_CHECKOUT>/tests/qa-pool-history-expiry.test.ts:119:13)
+(fail) failed stream promotion preserves history expectation [1.71ms]
+(pass) completed streamed promotion clears history expectation across restart [1.38ms]
+142 |   try {
+143 |     f.sql("CREATE TRIGGER reject_history BEFORE INSERT ON temporary_history BEGIN SELECT RAISE(ABORT, 'test storage failure'); END");
+144 |     expect((await f.request()).status).toBe(502);
+145 |     const db = new Database(f.config.databasePath);
+146 |     try {
+147 |       expect(db.query("SELECT temporary_history_expected FROM sessions").get()).toEqual({ temporary_history_expected: 0 });
+                      ^
+SQLiteError: no such column: temporary_history_expected
+      errno: 1,
+ byteOffset: 7,
+       code: "SQLITE_ERROR"
+
+      at [prepareOwned] (bun:sqlite:330:37)
+      at query (bun:sqlite:347:31)
+      at <anonymous> (<BASELINE_CHECKOUT>/tests/qa-pool-history-expiry.test.ts:147:17)
+(fail) temporary completion persists history and expectation atomically [1.78ms]
+
+ 1 pass
+ 9 fail
+ 26 expect() calls
+Ran 10 tests across 1 file. [522.00ms]

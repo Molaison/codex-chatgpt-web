@@ -1,0 +1,113 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/prompt-history-metadata.test.ts:
+(pass) inline Web context preserves assistant phase and MCP namespace metadata [1.04ms]
+(pass) multipart Web context preserves the same history metadata [118.97ms]
+
+tests/qa-pool-history-expiry.test.ts:
+(pass) temporary history fails closed after request expiry, retries and restart [6.41ms]
+(pass) temporary history fails closed after restart expiry, retries and restart [2.54ms]
+(pass) temporary history fails closed after purged expiry, retries and restart [2.29ms]
+(pass) legacy retained history migrates before startup expiry purge [2.62ms]
+(pass) unexpired history survives restart and successful promotion clears its expectation [2.76ms]
+(pass) failed http promotion preserves history expectation [1.61ms]
+(pass) failed incomplete promotion preserves history expectation [1.48ms]
+(pass) failed stream promotion preserves history expectation [1.94ms]
+(pass) completed streamed promotion clears history expectation across restart [1.74ms]
+(pass) temporary completion persists history and expectation atomically [2.77ms]
+
+tests/qa-portable-sessions.test.ts:
+(pass) portable QA keys use account and own thread; fork lineage is not identity [4.62ms]
+[chatgpt-web] browser_settled {"traceId":"c98456e9fca9","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"b56e1cc4f588","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) the real QA adapter keeps its saved-chat key across deployment and model settings [8.34ms]
+[chatgpt-web] browser_settled {"traceId":"e14f3a9c340a","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"0caff2951ad7","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"d1db70c4398b","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"2cf2ca075c40","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) fork seeds supplied human history once and keeps parent and child prompts independent [10.47ms]
+[chatgpt-web] browser_settled {"traceId":"e0dcbdcc7aea","outcome":"error","compaction":false,"submission":"prepared","code":"fork_history_missing","retryable":false}
+[chatgpt-web] browser_settled {"traceId":"073e474b8893","outcome":"error","compaction":false,"submission":"prepared","code":"fork_history_missing","retryable":false}
+(pass) a cold fork cannot silently replace missing inherited history with runtime wrappers [2.97ms]
+[chatgpt-web] browser_settled {"traceId":"0e0836365470","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) a saved fork can restore with an incremental request and repeated fork metadata [1.53ms]
+[chatgpt-web] browser_settled {"traceId":"024c7f6d5179","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) an inherited assistant answer is valid fork context even when its earlier question is absent [1.52ms]
+[chatgpt-web] browser_settled {"traceId":"ceef36d7d3f2","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"d359201d6cc0","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) same account/thread still queues across mutable configuration changes [2.62ms]
+(pass) QA config defaults to saved chats while explicit Temporary Chat opt-out survives reload [1.72ms]
+(pass) manual configuration without a preference remains Temporary Chat [0.40ms]
+(pass) portable mapping directory resolves at the account home after relocation [0.40ms]
+(pass) saved-chat directory validation rejects invalid types, blanks and NULs [0.52ms]
+(pass) direct worker and provider agree on QA defaults, account-relative paths and explicit opt-out [0.18ms]
+
+tests/qa-sessions.test.ts:
+(pass) QA chat identity survives model, effort, family and context compaction changes [0.54ms]
+(pass) account IDs alone isolate execution namespaces [0.05ms]
+(pass) missing thread identity cannot share an anonymous retained chat [0.11ms]
+(pass) QA incremental requests can continue without assistant history [0.16ms]
+(pass) QA continuation ignores commentary and tool-only assistant messages as answer boundaries [0.39ms]
+(pass) queued canonical history omits the previous question even before its answer arrives [0.16ms]
+(pass) an intentional repeated question with a different message ID is still submitted [0.11ms]
+[chatgpt-web] browser_settled {"traceId":"43c98c57412f","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"ef66c452a957","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"0d48dfaa78d0","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) three QA rounds reuse one chat across model effort changes and submit incremental prompts [4.91ms]
+[chatgpt-web] browser_settled {"traceId":"3be6ea2adb1c","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"8a114adf5511","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) concurrent requests in one QA thread queue without aborting the first answer [2.97ms]
+[chatgpt-web] browser_settled {"traceId":"0b08ed9cd26c","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"2469c98f4e1f","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) same thread and turn IDs on different accounts never share browser execution or replies [2.50ms]
+[chatgpt-web] browser_settled {"traceId":"3589be5ed282","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) an exact request retry replays the completed answer without another browser submission [1.34ms]
+[chatgpt-web] browser_settled {"traceId":"7ac674b485e3","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) disconnecting an accepted QA response preserves it for reconnect [1.26ms]
+[chatgpt-web] browser_settled {"traceId":"f33e30a7cb6d","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) cancelling a queued QA request never submits it or cancels the active answer [1.29ms]
+[chatgpt-web] browser_settled {"traceId":"af430a64e5df","outcome":"error","compaction":false,"submission":"prepared","code":"test_capacity","retryable":true}
+[chatgpt-web] browser_settled {"traceId":"af430a64e5df","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) retryable pre-submission failure can retry the same QA execution [1.49ms]
+[chatgpt-web] browser_settled {"traceId":"a4f86b0ecdbb","outcome":"error","compaction":false,"submission":"accepted"}
+(pass) failure after accepted submission cannot duplicate the question on an exact retry [0.67ms]
+[chatgpt-web] browser_settled {"traceId":"5b5daa998900","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) explicit fresh-chat mode still disables retained QA conversations [1.01ms]
+[chatgpt-web] browser_settled {"traceId":"6395e8e75d8c","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"5444e011c2c8","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"1813e901bde7","outcome":"final","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"2104e2a3b503","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) QA adapter forwards only an explicit internal deferred-text flag [3.79ms]
+
+tests/subagent-environment-history.test.ts:
+(pass) fork-context child accepts its inherited parent visualization root [1.98ms]
+(pass) V2 parent instructions bind the current environment without changing native message roles [4.23ms]
+
+tests/qa-conversation-persistence.test.ts:
+(pass) saved-chat URL validation > keeps native project identity in saved URLs and requires the selected project [0.76ms]
+(pass) saved-chat URL validation > canonicalizes a saved URL without retaining query secrets [0.07ms]
+(pass) saved-chat URL validation > rejects unsafe route not-a-url [0.20ms]
+(pass) saved-chat URL validation > rejects unsafe route http://chatgpt.com/c/a [0.07ms]
+(pass) saved-chat URL validation > rejects unsafe route https://example.com/c/a [0.02ms]
+(pass) saved-chat URL validation > rejects unsafe route https://chatgpt.com.evil.test/c/a [0.01ms]
+(pass) saved-chat URL validation > rejects unsafe route https://credentials@chatgpt.com/c/a [0.02ms]
+(pass) saved-chat URL validation > rejects unsafe route https://chatgpt.com/ [0.02ms]
+(pass) saved-chat URL validation > rejects unsafe route https://chatgpt.com/share/a [0.01ms]
+(pass) saved-chat URL validation > rejects unsafe route https://chatgpt.com/g/g-a/c/b [0.01ms]
+(pass) saved-chat URL validation > rejects unsafe route https://chatgpt.com/c/a/more [0.11ms]
+(pass) saved-chat URL validation > rejects unsafe route https://chatgpt.com/c/%2F [0.02ms]
+(pass) saved-chat URL validation > rejects unsafe route https://chatgpt.com/c/11111111-1111-4111-8111-111111111111?temporary-chat=true [0.01ms]
+(pass) recreated stores restore bound chats and preserve arbitrarily old mappings [0.24ms]
+(pass) a saved temporary chat stays saved when its project move fails and resumes the same identity [0.52ms]
+(pass) accounts and new fork identities cannot inherit or overwrite another chat [0.36ms]
+(pass) interrupted first submission remains unresolved instead of opening a new chat [0.25ms]
+(pass) only the reservation owner can bind and the resulting URL is immutable [0.28ms]
+(pass) corrupt or mismatched mapping fails closed without replacing the file [0.31ms]
+(pass) private atomic files contain hashes and canonical URL without temporary leftovers [0.27ms]
+(pass) write failures are explicit nonretryable store errors [0.13ms]
+(pass) a proven pre-Send failure releases only the caller's still-pending reservation [0.35ms]
+
+ 65 pass
+ 0 fail
+ 292 expect() calls
+Ran 65 tests across 6 files. [735.00ms]

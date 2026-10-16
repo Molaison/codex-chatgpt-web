@@ -1,0 +1,18 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/qa-pool-history-expiry.test.ts:
+(pass) temporary history fails closed after request expiry, retries and restart [8.07ms]
+(pass) temporary history fails closed after restart expiry, retries and restart [3.04ms]
+(pass) temporary history fails closed after purged expiry, retries and restart [2.99ms]
+(pass) legacy retained history migrates before startup expiry purge [3.25ms]
+(pass) unexpired history survives restart and successful promotion clears its expectation [3.17ms]
+(pass) failed http promotion preserves history expectation [2.42ms]
+(pass) failed incomplete promotion preserves history expectation [1.52ms]
+(pass) failed stream promotion preserves history expectation [2.46ms]
+(pass) completed streamed promotion clears history expectation across restart [2.05ms]
+(pass) temporary completion persists history and expectation atomically [3.46ms]
+
+ 10 pass
+ 0 fail
+ 74 expect() calls
+Ran 10 tests across 1 file. [560.00ms]
