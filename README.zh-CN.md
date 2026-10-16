@@ -1,3 +1,5 @@
+当前 ywl 源码分支、上游版本与部署边界：[分支说明](docs/ywl-source-branches.md)。
+
 <p align="center">
   <img src="assets/readme/hero.svg" width="960" alt="切换到网页版模型，继续使用 Codex。你的 ChatGPT 订阅。你的工作流。充分发挥模型能力。">
 </p>
