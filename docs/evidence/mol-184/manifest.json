@@ -1,0 +1,40 @@
+{
+  "baseline_commit": "26bd5a9d94ddf82da8c5a3993b5b07aeda4bc4b1",
+  "candidate_source_sha256": "6ff51f3223f4bd5c06892c688277d3a484e2fda97113d67049e17711be90a071",
+  "candidate_test_sha256": "8b6c4a63f2f48ea4fe1e4a576e3408a8dac4ff8496ce297e58b428905a1386e7",
+  "evidence_type": "CPU/mock; no live upstream, browser, or GPU calls",
+  "runtime": "Bun 1.4.0",
+  "baseline_expiry": {
+    "exit": 1,
+    "pass": 1,
+    "fail": 9,
+    "assertions": 26
+  },
+  "candidate_expiry": {
+    "exit": 0,
+    "pass": 10,
+    "fail": 0,
+    "assertions": 74
+  },
+  "candidate_mapping": {
+    "exit": 0,
+    "pass": 65,
+    "fail": 0,
+    "assertions": 292
+  },
+  "redaction": "Replaced local checkout prefixes only; all test data synthetic",
+  "logs": [
+    {
+      "file": "baseline-expiry.log",
+      "sha256": "32721e52482e042824aa4336e075b5b1849624b205bc05afc6f42ea2de6e0c80"
+    },
+    {
+      "file": "candidate-expiry.log",
+      "sha256": "b254c16c07afc75dc5623d6c814137a86033d89617b1fe824e66abea2a77e18d"
+    },
+    {
+      "file": "candidate-mapping.log",
+      "sha256": "933995df696bf5beaabc797698a9f5668d3b78c006442772f5e7a03355f51573"
+    }
+  ]
+}
