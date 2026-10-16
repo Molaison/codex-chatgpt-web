@@ -1,0 +1,82 @@
+[
+  {
+    "scenario": "accepted-reconnect",
+    "route": "pool",
+    "status": 200,
+    "browserWorkerStarts": 2,
+    "upstreamFetches": 2,
+    "adapterRequests": 2,
+    "terminal": true,
+    "upstreamInputIds": [
+      [
+        "qa-message-4819f68f-d64c-4d7e-a092-5f4ea79690c3-0"
+      ],
+      [
+        "qa-message-6acd1359-48a3-42e0-9094-6d908a89bf05-0"
+      ]
+    ]
+  },
+  {
+    "scenario": "accepted-reconnect",
+    "route": "cpr+pool",
+    "status": 200,
+    "browserWorkerStarts": 2,
+    "upstreamFetches": 2,
+    "adapterRequests": 2,
+    "terminal": true,
+    "upstreamInputIds": [
+      [
+        "cpr-message-7c690aee-676d-4ffe-970c-ea85e89cc0bb-0"
+      ],
+      [
+        "cpr-message-46e87f50-982f-49c5-bc02-b2fc910cb8bd-0"
+      ]
+    ]
+  },
+  {
+    "scenario": "accepted-reconnect",
+    "route": "stable-id-control",
+    "status": 200,
+    "browserWorkerStarts": 1,
+    "upstreamFetches": 2,
+    "adapterRequests": 2,
+    "terminal": true,
+    "upstreamInputIds": [
+      [
+        "fixed-user-id"
+      ],
+      [
+        "fixed-user-id"
+      ]
+    ]
+  },
+  {
+    "scenario": "intentional-repeat-control",
+    "browserWorkerStarts": 2
+  },
+  {
+    "scenario": "terminal-loss-retry",
+    "status": 409,
+    "beforeResponse": "resp_c6f9af4b6e904895b1547b9382f0bdfc",
+    "droppedTerminal": true,
+    "savedAtDrop": {
+      "response_id": "resp_f5326f72cc524e90a06e989db5ef1091"
+    },
+    "browserWorkerStarts": 2,
+    "adapterRequests": 2,
+    "newTurnWithOldHeadStatus": 409,
+    "newTurnWithOldHeadError": "previous_response_identity_mismatch",
+    "error": "previous_response_identity_mismatch"
+  },
+  {
+    "scenario": "storage-failure-restart-next-turn",
+    "afterFailure": {
+      "temporary_history_expected": 0
+    },
+    "status": 200,
+    "browserWorkerStarts": 2,
+    "forwardedInputLength": 1,
+    "forwardedOldContext": false,
+    "terminal": true
+  }
+]

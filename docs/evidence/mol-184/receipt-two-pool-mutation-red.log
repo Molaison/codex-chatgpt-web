@@ -1,0 +1,23 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/qa-pool-request-receipts.test.ts:
+534 |     });
+535 |     const stale = await f.request(payload("stale", "FIRST_POOL_STALE_QUESTION", originalHead));
+536 |     hook.mockRestore(); hook = undefined;
+537 |     expect(injected).toBe(true); expect(concurrent.status).toBe(200); expect(concurrent.forwards).toBe(1);
+538 |     expect(concurrent.response.id).toBe("concurrent-head");
+539 |     expect(stale.status).toBe(409); expect((await stale.json()).error.code).toBe("temporary_history_changed");
+                               ^
+error: expect(received).toBe(expected)
+
+Expected: 409
+Received: 200
+
+      at <anonymous> (/workspace/shared/mol184-race-control/tests/qa-pool-request-receipts.test.ts:539:26)
+(fail) a second pool committing between history read and reservation prevents stale forwarding [549.58ms]
+
+ 0 pass
+ 29 filtered out
+ 1 fail
+ 6 expect() calls
+Ran 1 test across 1 file. [1272.00ms]

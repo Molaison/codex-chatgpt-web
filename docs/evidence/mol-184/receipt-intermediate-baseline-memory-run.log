@@ -1,0 +1,96 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/dot-cross-layer-recovery.test.ts:
+[chatgpt-web] browser_settled {"traceId":"d772c46d2869","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"79b1d9c80e81","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_REPRO {"scenario":"accepted-reconnect","route":"pool","status":200,"browserWorkerStarts":2,"upstreamFetches":2,"adapterRequests":2,"terminal":true,"upstreamInputIds":[["qa-message-4819f68f-d64c-4d7e-a092-5f4ea79690c3-0"],["qa-message-6acd1359-48a3-42e0-9094-6d908a89bf05-0"]]}
+144 |       const response = await replay, text = await response.text();
+145 |       evidence({ scenario: "accepted-reconnect", route, status: response.status, browserWorkerStarts: f.starts.length,
+146 |         upstreamFetches: f.upstreamFetchCount(), adapterRequests: f.executionKeys.length,
+147 |         terminal: text.includes('"type":"response.completed"'), upstreamInputIds: f.upstreamInputs.map((input: any) => input.map((item: any) => item.id)) });
+148 |       expect(response.status).toBe(200); expect(text).toContain('"type":"response.completed"');
+149 |       expect(f.starts).toHaveLength(1); expect(f.upstreamFetchCount()).toBe(1);
+                             ^
+error: expect(received).toHaveLength(expected)
+
+Expected length: 1
+Received length: 2
+
+      at <anonymous> (/workspace/shared/mol184-receipt-integration/tests/dot-cross-layer-recovery.test.ts:149:24)
+(fail) accepted disconnect/reconnect keeps one execution via pool [240.41ms]
+[chatgpt-web] browser_settled {"traceId":"ac7f878a2f0f","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"59f05d6c5276","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_REPRO {"scenario":"accepted-reconnect","route":"cpr+pool","status":200,"browserWorkerStarts":2,"upstreamFetches":2,"adapterRequests":2,"terminal":true,"upstreamInputIds":[["cpr-message-7c690aee-676d-4ffe-970c-ea85e89cc0bb-0"],["cpr-message-46e87f50-982f-49c5-bc02-b2fc910cb8bd-0"]]}
+144 |       const response = await replay, text = await response.text();
+145 |       evidence({ scenario: "accepted-reconnect", route, status: response.status, browserWorkerStarts: f.starts.length,
+146 |         upstreamFetches: f.upstreamFetchCount(), adapterRequests: f.executionKeys.length,
+147 |         terminal: text.includes('"type":"response.completed"'), upstreamInputIds: f.upstreamInputs.map((input: any) => input.map((item: any) => item.id)) });
+148 |       expect(response.status).toBe(200); expect(text).toContain('"type":"response.completed"');
+149 |       expect(f.starts).toHaveLength(1); expect(f.upstreamFetchCount()).toBe(1);
+                             ^
+error: expect(received).toHaveLength(expected)
+
+Expected length: 1
+Received length: 2
+
+      at <anonymous> (/workspace/shared/mol184-receipt-integration/tests/dot-cross-layer-recovery.test.ts:149:24)
+(fail) accepted disconnect/reconnect keeps one execution via cpr+pool [94.02ms]
+[chatgpt-web] browser_settled {"traceId":"8aeec7e9a847","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_REPRO {"scenario":"accepted-reconnect","route":"stable-id-control","status":200,"browserWorkerStarts":1,"upstreamFetches":2,"adapterRequests":2,"terminal":true,"upstreamInputIds":[["fixed-user-id"],["fixed-user-id"]]}
+144 |       const response = await replay, text = await response.text();
+145 |       evidence({ scenario: "accepted-reconnect", route, status: response.status, browserWorkerStarts: f.starts.length,
+146 |         upstreamFetches: f.upstreamFetchCount(), adapterRequests: f.executionKeys.length,
+147 |         terminal: text.includes('"type":"response.completed"'), upstreamInputIds: f.upstreamInputs.map((input: any) => input.map((item: any) => item.id)) });
+148 |       expect(response.status).toBe(200); expect(text).toContain('"type":"response.completed"');
+149 |       expect(f.starts).toHaveLength(1); expect(f.upstreamFetchCount()).toBe(1);
+                                                                             ^
+error: expect(received).toBe(expected)
+
+Expected: 1
+Received: 2
+
+      at <anonymous> (/workspace/shared/mol184-receipt-integration/tests/dot-cross-layer-recovery.test.ts:149:72)
+(fail) accepted disconnect/reconnect keeps one execution via stable-id-control [101.00ms]
+[chatgpt-web] browser_settled {"traceId":"c8e3c444da92","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"5b1edc94eb12","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_REPRO {"scenario":"intentional-repeat-control","browserWorkerStarts":2}
+(pass) intentional identical text under a new turn still executes twice [10.32ms]
+[chatgpt-web] browser_settled {"traceId":"9e3088f0b592","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"b81f938edec0","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_REPRO {"scenario":"terminal-loss-retry","status":409,"beforeResponse":"resp_c6f9af4b6e904895b1547b9382f0bdfc","droppedTerminal":true,"savedAtDrop":{"response_id":"resp_f5326f72cc524e90a06e989db5ef1091"},"browserWorkerStarts":2,"adapterRequests":2,"newTurnWithOldHeadStatus":409,"newTurnWithOldHeadError":"previous_response_identity_mismatch","error":"previous_response_identity_mismatch"}
+186 |     evidence({ scenario: "terminal-loss-retry", status: retry.status, beforeResponse: r1, ...f.dropEvidence(),
+187 |       browserWorkerStarts: f.starts.length, adapterRequests: f.executionKeys.length,
+188 |       newTurnWithOldHeadStatus: staleNewTurn.status, newTurnWithOldHeadError: staleNewTurn.ok ? undefined : JSON.parse(staleNewTurnText).error.code,
+189 |       error: retry.ok ? undefined : JSON.parse(text).error.code });
+190 |     expect(staleNewTurn.status).toBe(409);
+191 |     expect(retry.status).toBe(200); expect(text).toContain('"type":"response.completed"'); expect(f.starts).toHaveLength(2);
+                               ^
+error: expect(received).toBe(expected)
+
+Expected: 200
+Received: 409
+
+      at <anonymous> (/workspace/shared/mol184-receipt-integration/tests/dot-cross-layer-recovery.test.ts:191:26)
+(fail) terminal saved before downstream loss remains recoverable with original previous_response_id [7.94ms]
+[chatgpt-web] browser_settled {"traceId":"bb8347284d0f","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"e11578d0f87c","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_REPRO {"scenario":"storage-failure-restart-next-turn","afterFailure":{"temporary_history_expected":0},"status":200,"browserWorkerStarts":2,"forwardedInputLength":1,"forwardedOldContext":false,"terminal":true}
+205 |     evidence({ scenario: "storage-failure-restart-next-turn", afterFailure, status: next.status,
+206 |       browserWorkerStarts: f.starts.length, forwardedInputLength: (f.upstreamInputs.at(-1) as any[]).length,
+207 |       forwardedOldContext: JSON.stringify(f.upstreamInputs.at(-1)).includes("REMEMBER_OLD_CONTEXT"), terminal: text.includes('"status":"completed"') });
+208 |     const blockedBeforeNextStart = next.status >= 400 && f.starts.length === 1;
+209 |     const reconstructedBeforeNextStart = next.ok && JSON.stringify(f.upstreamInputs.at(-1)).includes("REMEMBER_OLD_CONTEXT");
+210 |     expect(blockedBeforeNextStart || reconstructedBeforeNextStart).toBe(true);
+                                                                         ^
+error: expect(received).toBe(expected)
+
+Expected: true
+Received: false
+
+      at <anonymous> (/workspace/shared/mol184-receipt-integration/tests/dot-cross-layer-recovery.test.ts:210:68)
+(fail) history commit failure followed by pool restart cannot send a context-free next turn [7.28ms]
+
+ 1 pass
+ 5 fail
+ 22 expect() calls
+Ran 6 tests across 1 file. [1083.00ms]

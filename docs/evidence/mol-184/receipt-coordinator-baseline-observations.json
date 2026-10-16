@@ -1,0 +1,79 @@
+[
+  {
+    "scenario": "accepted-reconnect",
+    "route": "pool",
+    "status": 200,
+    "browserWorkerStarts": 2,
+    "executionKeysEqual": false,
+    "terminal": true,
+    "upstreamInputIds": [
+      [
+        "qa-message-7bbc21b3-5b5d-4d77-a400-a79e28bec2a5-0"
+      ],
+      [
+        "qa-message-5ebd6e31-3cb6-44c0-9e56-fe1e9b868205-0"
+      ]
+    ]
+  },
+  {
+    "scenario": "accepted-reconnect",
+    "route": "cpr+pool",
+    "status": 200,
+    "browserWorkerStarts": 2,
+    "executionKeysEqual": false,
+    "terminal": true,
+    "upstreamInputIds": [
+      [
+        "cpr-message-9d0e6808-7168-4aa1-9cde-5016112e65db-0"
+      ],
+      [
+        "cpr-message-c4fc15f8-80ba-487c-978f-d997796c0e7f-0"
+      ]
+    ]
+  },
+  {
+    "scenario": "accepted-reconnect",
+    "route": "stable-id-control",
+    "status": 200,
+    "browserWorkerStarts": 1,
+    "executionKeysEqual": true,
+    "terminal": true,
+    "upstreamInputIds": [
+      [
+        "fixed-user-id"
+      ],
+      [
+        "fixed-user-id"
+      ]
+    ]
+  },
+  {
+    "scenario": "intentional-repeat-control",
+    "browserWorkerStarts": 2
+  },
+  {
+    "scenario": "terminal-loss-retry",
+    "status": 409,
+    "beforeResponse": "resp_75cfded17b674b1cbdc90bb7c659ad2b",
+    "droppedTerminal": true,
+    "savedAtDrop": {
+      "response_id": "resp_e6dcd36ca8204148b0dc2da2f9b0d803"
+    },
+    "browserWorkerStarts": 2,
+    "adapterRequests": 2,
+    "newTurnWithOldHeadStatus": 409,
+    "newTurnWithOldHeadError": "previous_response_identity_mismatch",
+    "error": "previous_response_identity_mismatch"
+  },
+  {
+    "scenario": "storage-failure-restart-next-turn",
+    "afterFailure": {
+      "temporary_history_expected": 0
+    },
+    "status": 200,
+    "browserWorkerStarts": 2,
+    "forwardedInputLength": 1,
+    "forwardedOldContext": false,
+    "terminal": true
+  }
+]

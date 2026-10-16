@@ -1,0 +1,41 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/dot-cross-layer-recovery.test.ts:
+[chatgpt-web] browser_settled {"traceId":"dde457d1c98b","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_REPRO {"scenario":"accepted-reconnect","route":"pool","status":200,"browserWorkerStarts":1,"upstreamFetches":1,"adapterRequests":1,"terminal":true,"upstreamInputIds":[["qa-message-456a4c85fe5d069723ea21b8e3048f93bbe3ffc7e4219a64a128f1ab21af4839-0"]]}
+(pass) accepted disconnect/reconnect keeps one execution via pool [264.71ms]
+DOT_REPRO {"scenario":"accepted-reconnect","route":"cpr+pool","status":409,"browserWorkerStarts":1,"upstreamFetches":1,"adapterRequests":1,"terminal":false,"upstreamInputIds":[["cpr-message-82f0fa2b-8a61-4ca4-83fe-cb17fdf16376-0"]]}
+[chatgpt-web] browser_settled {"traceId":"fdd08650b437","outcome":"final","compaction":false,"submission":"accepted"}
+143 |       await delay(40); f.releaseFirst.resolve();
+144 |       const response = await replay, text = await response.text();
+145 |       evidence({ scenario: "accepted-reconnect", route, status: response.status, browserWorkerStarts: f.starts.length,
+146 |         upstreamFetches: f.upstreamFetchCount(), adapterRequests: f.executionKeys.length,
+147 |         terminal: text.includes('"type":"response.completed"'), upstreamInputIds: f.upstreamInputs.map((input: any) => input.map((item: any) => item.id)) });
+148 |       expect(response.status).toBe(200); expect(text).toContain('"type":"response.completed"');
+                                    ^
+error: expect(received).toBe(expected)
+
+Expected: 200
+Received: 409
+
+      at <anonymous> (/workspace/shared/mol184-receipt-integration/tests/dot-cross-layer-recovery.test.ts:148:31)
+(fail) accepted disconnect/reconnect keeps one execution via cpr+pool [90.07ms]
+[chatgpt-web] browser_settled {"traceId":"ce5a3b341735","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_REPRO {"scenario":"accepted-reconnect","route":"stable-id-control","status":200,"browserWorkerStarts":1,"upstreamFetches":1,"adapterRequests":1,"terminal":true,"upstreamInputIds":[["fixed-user-id"]]}
+(pass) accepted disconnect/reconnect keeps one execution via stable-id-control [106.83ms]
+[chatgpt-web] browser_settled {"traceId":"0101b36adb54","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"b9f76641c01c","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_REPRO {"scenario":"intentional-repeat-control","browserWorkerStarts":2}
+(pass) intentional identical text under a new turn still executes twice [12.33ms]
+[chatgpt-web] browser_settled {"traceId":"ae7ac43e25ad","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"3bbec50c4998","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_REPRO {"scenario":"terminal-loss-retry","status":200,"beforeResponse":"resp_67711ed330e3494f8bf090c6ee5f3278","droppedTerminal":true,"savedAtDrop":{"response_id":"resp_0ffad9cd505c49cfa1e57c1796cd6d17"},"browserWorkerStarts":2,"adapterRequests":2,"newTurnWithOldHeadStatus":409,"newTurnWithOldHeadError":"previous_response_identity_mismatch"}
+(pass) terminal saved before downstream loss remains recoverable with original previous_response_id [10.68ms]
+[chatgpt-web] browser_settled {"traceId":"37c8053c6706","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_REPRO {"scenario":"storage-failure-restart-next-turn","afterFailure":{"temporary_history_expected":0},"status":409,"browserWorkerStarts":1,"forwardedInputLength":1,"forwardedOldContext":true,"terminal":false}
+(pass) history commit failure followed by pool restart cannot send a context-free next turn [7.52ms]
+
+ 5 pass
+ 1 fail
+ 35 expect() calls
+Ran 6 tests across 1 file. [1128.00ms]
