@@ -1,0 +1,46 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/mol185-submission-retry.test.ts:
+[chatgpt-web] browser_settled {"traceId":"bd74657732e3","outcome":"error","compaction":false,"submission":"prepared","code":"upstream_server_error","retryable":true}
+[chatgpt-web] browser_settled {"traceId":"bd74657732e3","outcome":"error","compaction":false,"submission":"prepared","code":"upstream_server_error","retryable":true}
+MOL185_SUBMISSION_RETRY {"phase":"prepared","browserStarts":2,"sendActivations":0,"acceptedSubmissions":0,"outcomes":[{"type":"error","message":"Injected transient transport failure","status":502,"errorType":"server_error","code":"upstream_server_error","retryable":true},{"type":"error","message":"Injected transient transport failure","status":502,"errorType":"server_error","code":"upstream_server_error","retryable":true}]}
+(pass) typed transient failure cannot authorize a second send after prepared [19.42ms]
+[chatgpt-web] browser_settled {"traceId":"1d181d732b13","outcome":"error","compaction":false,"submission":"send_activated","code":"upstream_server_error","retryable":true}
+[chatgpt-web] browser_settled {"traceId":"1d181d732b13","outcome":"error","compaction":false,"submission":"send_activated","code":"upstream_server_error","retryable":true}
+MOL185_SUBMISSION_RETRY {"phase":"send_activated","browserStarts":2,"sendActivations":2,"acceptedSubmissions":0,"outcomes":[{"type":"error","message":"Injected transient transport failure","status":502,"errorType":"server_error","code":"upstream_server_error","retryable":true},{"type":"error","message":"Injected transient transport failure","status":502,"errorType":"server_error","code":"upstream_server_error","retryable":true}]}
+87 |         expect(sendActivations).toBe(0);
+88 |         for (const outcome of outcomes) expect(outcome).toMatchObject({ type: "error", retryable: true, code: "upstream_server_error" });
+89 |       } else {
+90 |         // An exact native reconnect must replay the original non-retryable
+91 |         // failure, never start another possibly side-effectful submission.
+92 |         expect(browserStarts).toBe(1);
+                                   ^
+error: expect(received).toBe(expected)
+
+Expected: 1
+Received: 2
+
+      at <anonymous> (/workspace/shared/codex-chatgpt-web-bop/tests/mol185-submission-retry.test.ts:92:31)
+(fail) typed transient failure cannot authorize a second send after send_activated [1.70ms]
+[chatgpt-web] browser_settled {"traceId":"28680f353ed2","outcome":"error","compaction":false,"submission":"accepted","code":"upstream_server_error","retryable":true}
+[chatgpt-web] browser_settled {"traceId":"28680f353ed2","outcome":"error","compaction":false,"submission":"accepted","code":"upstream_server_error","retryable":true}
+MOL185_SUBMISSION_RETRY {"phase":"accepted","browserStarts":2,"sendActivations":2,"acceptedSubmissions":2,"outcomes":[{"type":"error","message":"Injected transient transport failure","status":502,"errorType":"server_error","code":"upstream_server_error","retryable":true},{"type":"error","message":"Injected transient transport failure","status":502,"errorType":"server_error","code":"upstream_server_error","retryable":true}]}
+87 |         expect(sendActivations).toBe(0);
+88 |         for (const outcome of outcomes) expect(outcome).toMatchObject({ type: "error", retryable: true, code: "upstream_server_error" });
+89 |       } else {
+90 |         // An exact native reconnect must replay the original non-retryable
+91 |         // failure, never start another possibly side-effectful submission.
+92 |         expect(browserStarts).toBe(1);
+                                   ^
+error: expect(received).toBe(expected)
+
+Expected: 1
+Received: 2
+
+      at <anonymous> (/workspace/shared/codex-chatgpt-web-bop/tests/mol185-submission-retry.test.ts:92:31)
+(fail) typed transient failure cannot authorize a second send after accepted [1.20ms]
+
+ 1 pass
+ 2 fail
+ 6 expect() calls
+Ran 3 tests across 1 file. [645.00ms]

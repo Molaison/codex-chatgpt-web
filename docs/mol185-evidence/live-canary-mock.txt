@@ -1,0 +1,14 @@
+✔ mock-only canary json: completed (88.93364ms)
+✔ mock-only canary sse: completed (73.548726ms)
+✔ mock-only canary sse: eof_partial_frame (76.45056ms)
+✔ mock-only canary sse: contradictory_terminal_status (82.667076ms)
+✔ mock-only canary sse: completed_but_marker_mismatch (76.907397ms)
+✔ mock-only canary sse-disconnect: client_disconnected_upstream_state_unknown (76.253403ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 553.924965

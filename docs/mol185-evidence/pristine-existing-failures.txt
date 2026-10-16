@@ -1,0 +1,144 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/chatgpt-session.test.ts:
+(pass) saved chats start empty and cannot reuse an arbitrary conversation or a Temporary Chat [1.31ms]
+(pass) composer and effort selectors exclude unrelated editable fields and menu buttons [15.13ms]
+190 | export async function activateChatGptEffortMenu(
+191 |   page: Page,
+192 |   control: Locator,
+193 |   options: { settleMs?: number } = {},
+194 | ): Promise<ChatGptEffortActivation> {
+195 |   const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+                                    ^
+TypeError: page.evaluate is not a function. (In 'page.evaluate(() => ({ width: innerWidth, height: innerHeight }))', 'page.evaluate' is undefined)
+      at activateChatGptEffortMenu (/workspace/shared/mol185-pristine/src/chatgpt-session.ts:195:31)
+      at <anonymous> (/workspace/shared/mol185-pristine/tests/chatgpt-session.test.ts:87:28)
+(fail) effort activation binds the owned menu after the control opens [0.62ms]
+190 | export async function activateChatGptEffortMenu(
+191 |   page: Page,
+192 |   control: Locator,
+193 |   options: { settleMs?: number } = {},
+194 | ): Promise<ChatGptEffortActivation> {
+195 |   const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+                                    ^
+TypeError: page.evaluate is not a function. (In 'page.evaluate(() => ({ width: innerWidth, height: innerHeight }))', 'page.evaluate' is undefined)
+      at activateChatGptEffortMenu (/workspace/shared/mol185-pristine/src/chatgpt-session.ts:195:31)
+      at <anonymous> (/workspace/shared/mol185-pristine/tests/chatgpt-session.test.ts:108:28)
+(fail) effort activation does not bind a closing menu (aria-expanded) [0.19ms]
+190 | export async function activateChatGptEffortMenu(
+191 |   page: Page,
+192 |   control: Locator,
+193 |   options: { settleMs?: number } = {},
+194 | ): Promise<ChatGptEffortActivation> {
+195 |   const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+                                    ^
+TypeError: page.evaluate is not a function. (In 'page.evaluate(() => ({ width: innerWidth, height: innerHeight }))', 'page.evaluate' is undefined)
+      at activateChatGptEffortMenu (/workspace/shared/mol185-pristine/src/chatgpt-session.ts:195:31)
+      at <anonymous> (/workspace/shared/mol185-pristine/tests/chatgpt-session.test.ts:108:28)
+(fail) effort activation does not bind a closing menu (data-state) [0.03ms]
+190 | export async function activateChatGptEffortMenu(
+191 |   page: Page,
+192 |   control: Locator,
+193 |   options: { settleMs?: number } = {},
+194 | ): Promise<ChatGptEffortActivation> {
+195 |   const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+                                    ^
+TypeError: page.evaluate is not a function. (In 'page.evaluate(() => ({ width: innerWidth, height: innerHeight }))', 'page.evaluate' is undefined)
+      at activateChatGptEffortMenu (/workspace/shared/mol185-pristine/src/chatgpt-session.ts:195:31)
+      at <anonymous> (/workspace/shared/mol185-pristine/tests/chatgpt-session.test.ts:154:28)
+(fail) effort activation retries one ghost click with a primary pointerdown [0.17ms]
+177 |     locator: () => hiddenSurface,
+178 |     keyboard: { press: async () => {} },
+179 |   };
+180 | 
+181 |   await expect(activateChatGptEffortMenu(page as never, control as never, { settleMs: 0 }))
+182 |     .rejects.toThrow("did not expose its owned menu or structural slider");
+                   ^
+error: expect(received).toThrow(expected)
+
+Expected substring: "did not expose its owned menu or structural slider"
+Received message: "page.evaluate is not a function. (In 'page.evaluate(() => ({ width: innerWidth, height: innerHeight }))', 'page.evaluate' is undefined)"
+
+      at <anonymous> (/workspace/shared/mol185-pristine/tests/chatgpt-session.test.ts:182:14)
+(fail) effort activation fails closed when neither event exposes a structural surface [0.15ms]
+(pass) a complete authenticated composer with no effort selector is Luna-only [100.76ms]
+(pass) a transient effort control does not turn a Luna-only account into Sol [100.54ms]
+(pass) a late model control within the inspection budget is not recorded as Luna-only [306.42ms]
+(pass) an effort-control observation failure cannot become a Luna-only detection [0.11ms]
+(pass) capabilities wait for the visible container and read its hidden semantic input (delay=%s) [101.67ms]
+(pass) capabilities wait for the visible container and read its hidden semantic input (delay=%s) [151.50ms]
+(pass) an absent effort slider cannot turn three model rows into a saved non-Pro capability [100.61ms]
+(pass) the authoritative three-step range is non-Pro; a malformed range fails closed [201.95ms]
+(pass) the four-step browser range keeps Extra High available when Pro is unavailable [101.19ms]
+(pass) capabilities read range and ticks together instead of combining different renders [101.36ms]
+(pass) effort confirmation tolerates disappearing Pro only while the requested effort remains selected and unlocked [1776.84ms]
+(pass) effort confirmation rejects a newly locked selection even when the range and value are unchanged [756.20ms]
+(pass) capabilities exclude the observed locked Plus upsell and reject unknown lock state [1522.10ms]
+(pass) power picker omission of lock attributes requires its enabled structural owner and complete ticks [1624.96ms]
+(pass) stale saved capabilities cannot activate a locked effort; High remains selectable [1257.09ms]
+(pass) Pro selection verifies the persisted hidden slider through its visible owner, never model rows [1863.73ms]
+
+tests/server-predictions.test.ts:
+[chatgpt-web] composer_prediction model=chatgpt-web/gpt-6-sol effort=medium
+40 |   const before = structuredClone(config);
+41 |   for (const model of ["chatgpt-web/gpt-6-pro", "chatgpt-web/gpt-5.6-sol"]) {
+42 |     const body = { ...base, model, tools: [{ type: "function", name: "exec_command", parameters: { type: "object" } }],
+43 |       input: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "The requested patch is ready." }] }, ...base.input] };
+44 |     const { response, text, observed } = await send(body, config);
+45 |     expect(response.status).toBe(200);
+                                 ^
+error: expect(received).toBe(expected)
+
+Expected: 200
+Received: 400
+
+      at <anonymous> (/workspace/shared/mol185-pristine/tests/server-predictions.test.ts:45:29)
+(fail) prediction policy uses Sol 6 Medium, keeps history/schema, and never exposes tools or alters saved preferences [122.35ms]
+[chatgpt-web] composer_prediction model=chatgpt-web/gpt-6-sol effort=medium
+54 |   }
+55 | });
+56 | 
+57 | test("the prediction response also reaches Codex through the normal SSE completion", async () => {
+58 |   const { response, text } = await send({ ...base, stream: true });
+59 |   expect(response.status).toBe(200);
+                               ^
+error: expect(received).toBe(expected)
+
+Expected: 200
+Received: 400
+
+      at <anonymous> (/workspace/shared/mol185-pristine/tests/server-predictions.test.ts:59:27)
+(fail) the prediction response also reaches Codex through the normal SSE completion [3.17ms]
+(pass) disabled, Free, and manual-mode predictions stop before constructing an adapter [0.82ms]
+(pass) oversized predictions skip rather than opening a tab, staging, or silently shortening history [752.15ms]
+(pass) excess image context skips predictions rather than omitting images [1.49ms]
+ 98 |   for (const client_metadata of [undefined, { "x-codex-turn-metadata": "not-json" },
+ 99 |     { "x-codex-turn-metadata": JSON.stringify({ ...metadata, turn_trigger: "user" }) }]) {
+100 |     const { response, observed } = await send({ ...base, client_metadata });
+101 |     expect(response.status).toBe(200);
+102 |     expect(observed!.parsed).toMatchObject({ _chatgptModelFamily: "6", options: { reasoning: "max" } });
+103 |     expect(observed!.provider.chatgptWeb!.localToolsEnabled).toBe(true);
+                                                                   ^
+error: expect(received).toBe(expected)
+
+Expected: true
+Received: false
+
+      at <anonymous> (/workspace/shared/mol185-pristine/tests/server-predictions.test.ts:103:62)
+(fail) prompt wording and inherited thread source do not reclassify real user turns [1.86ms]
+(pass) missing continuation state cannot produce a prediction from incomplete context [0.46ms]
+
+8 tests failed:
+(fail) effort activation binds the owned menu after the control opens [0.62ms]
+(fail) effort activation does not bind a closing menu (aria-expanded) [0.19ms]
+(fail) effort activation does not bind a closing menu (data-state) [0.03ms]
+(fail) effort activation retries one ghost click with a primary pointerdown [0.17ms]
+(fail) effort activation fails closed when neither event exposes a structural surface [0.15ms]
+(fail) prediction policy uses Sol 6 Medium, keeps history/schema, and never exposes tools or alters saved preferences [122.35ms]
+(fail) the prediction response also reaches Codex through the normal SSE completion [3.17ms]
+(fail) prompt wording and inherited thread source do not reclassify real user turns [1.86ms]
+
+ 22 pass
+ 8 fail
+ 133 expect() calls
+Ran 30 tests across 2 files. [11.62s]

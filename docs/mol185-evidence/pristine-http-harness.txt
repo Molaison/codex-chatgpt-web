@@ -1,0 +1,43 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/external-http-full-harness.test.ts:
+[chatgpt-web-mcp-http] {"stage":"initialize","status":200}
+[chatgpt-web-mcp-http] {"stage":"notifications/initialized","status":202}
+[chatgpt-web-mcp-http] {"stage":"tools/list","status":200}
+[chatgpt-web] trusted environment unavailable (thread_id=present, turn_id=present, previous_response_id=none, replay_prefix_items=0, context_messages=1)
+173 |       const environment = claim.environment;
+174 |       if (environment.sandboxPolicy.type !== "dangerFullAccess" && !claim.statesNetworkAccess) {
+175 |         // Modern envelopes state filesystem access only. Resolve the current native policy on
+176 |         // the first round too: absence of a network statement is not a disabled-network grant.
+177 |         initialClaim = claim;
+178 |         throw new MissingTrustedCodexEnvironmentError("network access");
+                    ^
+MissingTrustedCodexEnvironmentError: ChatGPT web turn is missing network access in trusted Codex environment context
+      at resolve (/workspace/shared/mol185-pristine/src/adapters/chatgpt-web/thread-environment.ts:178:15)
+      at <anonymous> (/workspace/shared/mol185-pristine/src/adapters/chatgpt-web/index.ts:964:44)
+      at runTurn (/workspace/shared/mol185-pristine/src/adapters/chatgpt-web/index.ts:1619:15)
+      at <anonymous> (/workspace/shared/mol185-pristine/tests/external-http-full-harness.test.ts:82:19)
+      at <anonymous> (/workspace/shared/mol185-pristine/tests/external-http-full-harness.test.ts:156:23)
+(fail) automatic Full completes two HTTP tool rounds and replays without manual handoffs [48.78ms]
+[chatgpt-web-mcp-http] {"stage":"initialize","status":200}
+[chatgpt-web-mcp-http] {"stage":"notifications/initialized","status":202}
+[chatgpt-web] trusted environment unavailable (thread_id=present, turn_id=present, previous_response_id=none, replay_prefix_items=0, context_messages=1)
+173 |       const environment = claim.environment;
+174 |       if (environment.sandboxPolicy.type !== "dangerFullAccess" && !claim.statesNetworkAccess) {
+175 |         // Modern envelopes state filesystem access only. Resolve the current native policy on
+176 |         // the first round too: absence of a network statement is not a disabled-network grant.
+177 |         initialClaim = claim;
+178 |         throw new MissingTrustedCodexEnvironmentError("network access");
+                    ^
+MissingTrustedCodexEnvironmentError: ChatGPT web turn is missing network access in trusted Codex environment context
+      at resolve (/workspace/shared/mol185-pristine/src/adapters/chatgpt-web/thread-environment.ts:178:15)
+      at <anonymous> (/workspace/shared/mol185-pristine/src/adapters/chatgpt-web/index.ts:964:44)
+      at runTurn (/workspace/shared/mol185-pristine/src/adapters/chatgpt-web/index.ts:1619:15)
+      at <anonymous> (/workspace/shared/mol185-pristine/tests/external-http-full-harness.test.ts:82:19)
+      at <anonymous> (/workspace/shared/mol185-pristine/tests/external-http-full-harness.test.ts:208:21)
+(fail) MCP cancellation retires automatic Full's pending tool and token [16.04ms]
+
+ 0 pass
+ 2 fail
+ 3 expect() calls
+Ran 2 tests across 1 file. [699.00ms]

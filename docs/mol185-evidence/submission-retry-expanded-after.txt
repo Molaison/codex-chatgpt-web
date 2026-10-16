@@ -1,0 +1,24 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/mol185-submission-retry.test.ts:
+[chatgpt-web] browser_settled {"traceId":"915307dd0a5e","outcome":"error","compaction":false,"submission":"prepared","code":"upstream_server_error","retryable":true}
+[chatgpt-web] browser_settled {"traceId":"915307dd0a5e","outcome":"error","compaction":false,"submission":"prepared","code":"upstream_server_error","retryable":true}
+MOL185_SUBMISSION_RETRY {"phase":"prepared","injectedCode":"upstream_server_error","browserStarts":2,"sendActivations":0,"acceptedSubmissions":0,"outcomes":[{"type":"error","message":"Injected transient transport failure","status":502,"errorType":"server_error","code":"upstream_server_error","retryable":true},{"type":"error","message":"Injected transient transport failure","status":502,"errorType":"server_error","code":"upstream_server_error","retryable":true}]}
+(pass) submission phase prepared safely handles typed upstream_server_error (retryable=%s) [14.63ms]
+[chatgpt-web] browser_settled {"traceId":"02ec776e46bd","outcome":"error","compaction":false,"submission":"send_activated","code":"upstream_server_error","retryable":true}
+MOL185_SUBMISSION_RETRY {"phase":"send_activated","injectedCode":"upstream_server_error","browserStarts":1,"sendActivations":1,"acceptedSubmissions":0,"outcomes":[{"type":"error","message":"ChatGPT did not confirm that the prompt was sent. Check the ChatGPT tab before continuing.","status":502,"errorType":"server_error","code":"chatgpt_submission_ambiguous","retryable":false},{"type":"error","message":"ChatGPT did not confirm that the prompt was sent. Check the ChatGPT tab before continuing.","status":502,"errorType":"server_error","code":"chatgpt_submission_ambiguous","retryable":false}]}
+(pass) submission phase send_activated safely handles typed upstream_server_error (retryable=%s) [0.90ms]
+[chatgpt-web] browser_settled {"traceId":"b3eb822ed96c","outcome":"error","compaction":false,"submission":"accepted","code":"upstream_server_error","retryable":true}
+MOL185_SUBMISSION_RETRY {"phase":"accepted","injectedCode":"upstream_server_error","browserStarts":1,"sendActivations":1,"acceptedSubmissions":1,"outcomes":[{"type":"error","message":"ChatGPT stopped responding after the task started. Check the ChatGPT tab before continuing.","status":502,"errorType":"server_error","code":"chatgpt_submitted_turn_failed","retryable":false},{"type":"error","message":"ChatGPT stopped responding after the task started. Check the ChatGPT tab before continuing.","status":502,"errorType":"server_error","code":"chatgpt_submitted_turn_failed","retryable":false}]}
+(pass) submission phase accepted safely handles typed upstream_server_error (retryable=%s) [0.63ms]
+[chatgpt-web] browser_settled {"traceId":"bd5aa02fc165","outcome":"error","compaction":false,"submission":"accepted","code":"client_cancelled","retryable":false}
+MOL185_SUBMISSION_RETRY {"phase":"accepted","injectedCode":"client_cancelled","browserStarts":1,"sendActivations":1,"acceptedSubmissions":1,"outcomes":[{"type":"error","message":"Injected transient transport failure","status":499,"errorType":"client_closed_request","code":"client_cancelled","retryable":false},{"type":"error","message":"Injected transient transport failure","status":499,"errorType":"client_closed_request","code":"client_cancelled","retryable":false}]}
+(pass) submission phase accepted safely handles typed client_cancelled (retryable=%s) [0.56ms]
+[chatgpt-web] browser_settled {"traceId":"949fd55e6423","outcome":"error","compaction":false,"submission":"accepted","code":"invalid_api_key","retryable":false}
+MOL185_SUBMISSION_RETRY {"phase":"accepted","injectedCode":"invalid_api_key","browserStarts":1,"sendActivations":1,"acceptedSubmissions":1,"outcomes":[{"type":"error","message":"Injected transient transport failure","status":401,"errorType":"authentication_error","code":"invalid_api_key","retryable":false},{"type":"error","message":"Injected transient transport failure","status":401,"errorType":"authentication_error","code":"invalid_api_key","retryable":false}]}
+(pass) submission phase accepted safely handles typed invalid_api_key (retryable=%s) [0.79ms]
+
+ 5 pass
+ 0 fail
+ 24 expect() calls
+Ran 5 tests across 1 file. [585.00ms]

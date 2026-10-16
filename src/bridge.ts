@@ -872,6 +872,7 @@ export function buildResponseJSON(
   let usage: CodexUsage | undefined;
   let errorEvent: Extract<AdapterEvent, { type: "error" }> | undefined;
   let incompleteEvent: Extract<AdapterEvent, { type: "incomplete" }> | undefined;
+  let receivedDone = false;
   let endTurn: boolean | undefined;
   let stopReason: string | undefined;
   let compactionText = "";
@@ -1039,6 +1040,7 @@ export function buildResponseJSON(
         if (e.providerState) options?.onProviderState?.(e.providerState);
         break;
       case "done":
+        receivedDone = true;
         usage = e.usage;
         endTurn = e.endTurn;
         if (e.providerState) options?.onProviderState?.(e.providerState);
@@ -1050,6 +1052,11 @@ export function buildResponseJSON(
   flushSummaryReasoning();
   flushRawReasoning();
   flushToolCall();
+  // Match the streaming bridge: adapter EOF is not proof that the turn completed.
+  // In particular, never promote a partial compaction into replacement history.
+  if (!receivedDone && !errorEvent && !incompleteEvent) {
+    incompleteEvent = { type: "incomplete", reason: "adapter_eof" };
+  }
   // A truncated turn must never become replacement history. Emit a compaction item only after
   // authoritative turn completion.
   if (options?.compaction && !errorEvent && !incompleteEvent && stopReason !== "max_tokens") {

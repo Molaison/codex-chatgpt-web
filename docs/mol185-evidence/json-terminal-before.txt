@@ -1,0 +1,157 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/mol185-json-terminal.test.ts:
+ 8 |   ["empty", []],
+ 9 |   ["heartbeat only", [{ type: "heartbeat" }]],
+10 |   ["partial text", [{ type: "text_delta", text: "unfinished answer" }]],
+11 | ] as const)("MOL-185 nonstream %s EOF requires an authoritative terminal", (_name, input) => {
+12 |   const response = buildResponseJSON([...input] as AdapterEvent[], model);
+13 |   expect(response).toMatchObject({
+                        ^
+error: expect(received).toMatchObject(expected)
+
+  {
+-   "incomplete_details": {
+-     "reason": "adapter_eof",
++   "created_at": 1792165929,
++   "id": "resp_68eab6b4a28c43e584cc6fc279943eba",
++   "model": "chatgpt-web/mol185-offline",
++   "object": "response",
++   "output": [],
++   "status": "completed",
++   "usage": {
++     "input_tokens": 0,
++     "output_tokens": 0,
++     "total_tokens": 0,
+    },
+-   "status": "incomplete",
+  }
+
+- Expected  - 3
++ Received  + 10
+
+      at <anonymous> (/tmp/mol185-json-baseline-KBrLga/tests/mol185-json-terminal.test.ts:13:20)
+(fail) MOL-185 nonstream empty EOF requires an authoritative terminal [1.02ms]
+ 8 |   ["empty", []],
+ 9 |   ["heartbeat only", [{ type: "heartbeat" }]],
+10 |   ["partial text", [{ type: "text_delta", text: "unfinished answer" }]],
+11 | ] as const)("MOL-185 nonstream %s EOF requires an authoritative terminal", (_name, input) => {
+12 |   const response = buildResponseJSON([...input] as AdapterEvent[], model);
+13 |   expect(response).toMatchObject({
+                        ^
+error: expect(received).toMatchObject(expected)
+
+  {
+-   "incomplete_details": {
+-     "reason": "adapter_eof",
++   "created_at": 1792165929,
++   "id": "resp_9206b047a7ba4bf6a24fdd9af68bb6ca",
++   "model": "chatgpt-web/mol185-offline",
++   "object": "response",
++   "output": [],
++   "status": "completed",
++   "usage": {
++     "input_tokens": 0,
++     "output_tokens": 0,
++     "total_tokens": 0,
+    },
+-   "status": "incomplete",
+  }
+
+- Expected  - 3
++ Received  + 10
+
+      at <anonymous> (/tmp/mol185-json-baseline-KBrLga/tests/mol185-json-terminal.test.ts:13:20)
+(fail) MOL-185 nonstream heartbeat only EOF requires an authoritative terminal [0.23ms]
+ 8 |   ["empty", []],
+ 9 |   ["heartbeat only", [{ type: "heartbeat" }]],
+10 |   ["partial text", [{ type: "text_delta", text: "unfinished answer" }]],
+11 | ] as const)("MOL-185 nonstream %s EOF requires an authoritative terminal", (_name, input) => {
+12 |   const response = buildResponseJSON([...input] as AdapterEvent[], model);
+13 |   expect(response).toMatchObject({
+                        ^
+error: expect(received).toMatchObject(expected)
+
+  {
+-   "incomplete_details": {
+-     "reason": "adapter_eof",
++   "created_at": 1792165929,
++   "id": "resp_0cc3d40092804e7abb6cf7069aa1b5fe",
++   "model": "chatgpt-web/mol185-offline",
++   "object": "response",
++   "output": [
++     {
++       "content": [
++         {
++           "annotations": [],
++           "text": "unfinished answer",
++           "type": "output_text",
++         },
++       ],
++       "id": "msg_b068775e161e4fb68d2bedde72d2d9cc",
++       "role": "assistant",
++       "status": "completed",
++       "type": "message",
++     },
++   ],
++   "status": "completed",
++   "usage": {
++     "input_tokens": 0,
++     "output_tokens": 0,
++     "total_tokens": 0,
+    },
+-   "status": "incomplete",
+  }
+
+- Expected  - 3
++ Received  + 24
+
+      at <anonymous> (/tmp/mol185-json-baseline-KBrLga/tests/mol185-json-terminal.test.ts:13:20)
+(fail) MOL-185 nonstream partial text EOF requires an authoritative terminal [0.06ms]
+18 | 
+19 | test("MOL-185 compaction EOF never fabricates replacement history", () => {
+20 |   const response = buildResponseJSON([
+21 |     { type: "text_delta", text: "unfinished checkpoint" },
+22 |   ], model, { compaction: true });
+23 |   expect(response).toMatchObject({
+                        ^
+error: expect(received).toMatchObject(expected)
+
+  {
+-   "incomplete_details": {
+-     "reason": "adapter_eof",
++   "created_at": 1792165929,
++   "id": "resp_17a289d237984185b922aa88ecab81fd",
++   "model": "chatgpt-web/mol185-offline",
++   "object": "response",
++   "output": [
++     {
++       "encrypted_content": "ocx1:dW5maW5pc2hlZCBjaGVja3BvaW50",
++       "id": "cmp_656ebbb5561d4b4e87814a89e27486cf",
++       "type": "compaction",
++     },
++   ],
++   "status": "completed",
++   "usage": {
++     "input_tokens": 0,
++     "output_tokens": 0,
++     "total_tokens": 0,
+    },
+-   "status": "incomplete",
+  }
+
+- Expected  - 3
++ Received  + 16
+
+      at <anonymous> (/tmp/mol185-json-baseline-KBrLga/tests/mol185-json-terminal.test.ts:23:20)
+(fail) MOL-185 compaction EOF never fabricates replacement history [0.30ms]
+(pass) MOL-185 explicit done still completes ordinary and compaction responses [0.10ms]
+(pass) MOL-185 streaming EOF already reports incomplete [1.99ms]
+(pass) MOL-185 explicit failure remains failed instead of becoming EOF [0.43ms]
+(pass) MOL-185 explicit incomplete preserves its reason and usage [0.06ms]
+(pass) MOL-185 max-token done preserves truncation and cannot compact [0.03ms]
+
+ 5 pass
+ 4 fail
+ 17 expect() calls
+Ran 9 tests across 1 file. [11.00ms]
