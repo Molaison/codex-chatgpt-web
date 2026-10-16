@@ -1,0 +1,224 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/mol185-event-replay-identity.test.ts:
+[chatgpt-web] browser_settled {"traceId":"609402b6adfa","outcome":"final","compaction":false,"submission":"accepted"}
+MOL185_ROUND_REPLAY {"mutation":"identical","settlement":"in-flight","starts":1,"sends":1,"text":"Retained prefix. Recovered suffix.","recoveryMs":130.261665}
+(pass) MOL-185 identical SSE reconnect recovers the complete in-flight response [146.65ms]
+[chatgpt-web] browser_settled {"traceId":"326c4457b1c9","outcome":"final","compaction":false,"submission":"accepted"}
+MOL185_ROUND_REPLAY {"mutation":"identical","settlement":"offline-completed","starts":1,"sends":1,"text":"Retained prefix. Recovered suffix.","recoveryMs":2.653940999999918}
+(pass) MOL-185 identical SSE reconnect recovers the complete offline-completed response [4.63ms]
+[chatgpt-web] browser_settled {"traceId":"e142d8986c80","outcome":"final","compaction":false,"submission":"accepted"}
+MOL185_ROUND_REPLAY {"mutation":"message-property-order","settlement":"in-flight","starts":1,"sends":1,"text":"Retained prefix. Recovered suffix.","recoveryMs":5.947614000000044}
+(pass) MOL-185 message-property-order SSE reconnect recovers the complete in-flight response [7.93ms]
+[chatgpt-web] browser_settled {"traceId":"156d7ece5a91","outcome":"final","compaction":false,"submission":"accepted"}
+MOL185_ROUND_REPLAY {"mutation":"message-property-order","settlement":"offline-completed","starts":1,"sends":1,"text":"Retained prefix. Recovered suffix.","recoveryMs":3.0939930000000686}
+(pass) MOL-185 message-property-order SSE reconnect recovers the complete offline-completed response [4.87ms]
+(pass) MOL-185 round identity treats JSON object properties as unordered without mutating input [4.28ms]
+(pass) MOL-185 round identity retains array order, exact strings, values, and native identity [2.13ms]
+
+tests/mol185-response-observation-recovery.test.ts:
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=01-browser-page-acquired path=/tmp/mol185-observation-proof-g0nFBB/mol185_observation_proof-f62a9245
+[chatgpt-web] browser turn mol185_observation_proof opened (transport=inline, maxMessageChars=17, estimatedInputTokens=8194, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=02-effort-selection-complete path=/tmp/mol185-observation-proof-g0nFBB/mol185_observation_proof-f62a9245
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=03-prompt-attachment-complete path=/tmp/mol185-observation-proof-g0nFBB/mol185_observation_proof-f62a9245
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=04-file-attachment-complete path=/tmp/mol185-observation-proof-g0nFBB/mol185_observation_proof-f62a9245
+[chatgpt-web] browser turn mol185_observation_proof submission accepted evidence=assistant_turn
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=05-send-accepted path=/tmp/mol185-observation-proof-g0nFBB/mol185_observation_proof-f62a9245
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=06-response-visible path=/tmp/mol185-observation-proof-g0nFBB/mol185_observation_proof-f62a9245
+[chatgpt-web] browser turn mol185_observation_proof is rebinding its existing launcher page after a stalled DOM probe: ChatGPT browser DOM observation did not respond within 2000ms
+[chatgpt-web] browser turn mol185_observation_proof rebound its existing launcher page after a stalled DOM probe
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=07-response-page-rebound path=/tmp/mol185-observation-proof-g0nFBB/mol185_observation_proof-f62a9245
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=08-turn-completed path=/tmp/mol185-observation-proof-g0nFBB/mol185_observation_proof-f62a9245
+[chatgpt-web] browser turn mol185_observation_proof completed (markdownChars=24, domFullScans=13, domCacheHits=0)
+MOL185_RESPONSE_OBSERVATION_PROOF {"scenario":"recovered","outcome":{"answer":"Prefix\n\nRecovered answer"},"sends":1,"submitted":1,"snapshotReads":14,"failedReads":1,"countReads":1,"rebinds":1,"released":true,"stages":["browser_page","temporary_chat_preparation","effort_selection","prompt_attachment","file_attachment","send","response_page_rebind_1"],"totalMs":3046,"faultToTerminalMs":2019,"faultToRebindMs":4}
+(pass) MOL185 accepted-response read recovery preserves one Send: recovered [3047.51ms]
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=01-browser-page-acquired path=/tmp/mol185-observation-proof-DQxlpL/mol185_observation_proof-60f8c28d
+[chatgpt-web] browser turn mol185_observation_proof opened (transport=inline, maxMessageChars=17, estimatedInputTokens=8194, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=02-effort-selection-complete path=/tmp/mol185-observation-proof-DQxlpL/mol185_observation_proof-60f8c28d
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=03-prompt-attachment-complete path=/tmp/mol185-observation-proof-DQxlpL/mol185_observation_proof-60f8c28d
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=04-file-attachment-complete path=/tmp/mol185-observation-proof-DQxlpL/mol185_observation_proof-60f8c28d
+[chatgpt-web] browser turn mol185_observation_proof submission accepted evidence=assistant_turn
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=05-send-accepted path=/tmp/mol185-observation-proof-DQxlpL/mol185_observation_proof-60f8c28d
+[chatgpt-web] browser turn mol185_observation_proof is rebinding its existing launcher page after a stalled DOM probe: ChatGPT browser DOM observation did not respond within 2000ms
+[chatgpt-web] browser turn mol185_observation_proof rebound its existing launcher page after a stalled DOM probe
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=06-response-page-rebound path=/tmp/mol185-observation-proof-DQxlpL/mol185_observation_proof-60f8c28d
+[chatgpt-web] browser turn mol185_observation_proof is rebinding its existing launcher page after a stalled DOM probe: ChatGPT browser DOM observation did not respond within 2000ms
+[chatgpt-web] browser turn mol185_observation_proof rebound its existing launcher page after a stalled DOM probe
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=07-response-page-rebound path=/tmp/mol185-observation-proof-DQxlpL/mol185_observation_proof-60f8c28d
+[chatgpt-web] browser turn mol185_observation_proof failed: ChatGPT browser DOM remained unresponsive after 2 same-page rebinds
+[chatgpt-web] response_structure {"traceId":"mol185_observation_proof","checkpoint":"08-turn-failed","turnIndex":0,"turnCount":0,"columns":["parent","tag","rendered","assistant","user","searchUnit","markdown","streamingStatus","activityStart","completionControl"],"turns":[]}
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=08-turn-failed path=/tmp/mol185-observation-proof-DQxlpL/mol185_observation_proof-60f8c28d
+MOL185_RESPONSE_OBSERVATION_PROOF {"scenario":"exhausted","outcome":{"error":"ChatGPT browser DOM remained unresponsive after 2 same-page rebinds","name":"Error"},"sends":1,"submitted":1,"snapshotReads":3,"failedReads":3,"countReads":3,"rebinds":2,"released":true,"stages":["browser_page","temporary_chat_preparation","effort_selection","prompt_attachment","file_attachment","send","response_page_rebind_1","response_page_rebind_2"],"totalMs":3,"faultToTerminalMs":2,"faultToRebindMs":1}
+(pass) MOL185 accepted-response read recovery preserves one Send: exhausted [3.28ms]
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=01-browser-page-acquired path=/tmp/mol185-observation-proof-dqDzBQ/mol185_observation_proof-215ea3e8
+[chatgpt-web] browser turn mol185_observation_proof opened (transport=inline, maxMessageChars=17, estimatedInputTokens=8194, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=02-effort-selection-complete path=/tmp/mol185-observation-proof-dqDzBQ/mol185_observation_proof-215ea3e8
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=03-prompt-attachment-complete path=/tmp/mol185-observation-proof-dqDzBQ/mol185_observation_proof-215ea3e8
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=04-file-attachment-complete path=/tmp/mol185-observation-proof-dqDzBQ/mol185_observation_proof-215ea3e8
+[chatgpt-web] browser turn mol185_observation_proof submission accepted evidence=assistant_turn
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=05-send-accepted path=/tmp/mol185-observation-proof-dqDzBQ/mol185_observation_proof-215ea3e8
+[chatgpt-web] browser turn mol185_observation_proof failed: ChatGPT web turn aborted
+[chatgpt-web] response_structure {"traceId":"mol185_observation_proof","checkpoint":"06-turn-failed","turnIndex":0,"turnCount":0,"columns":["parent","tag","rendered","assistant","user","searchUnit","markdown","streamingStatus","activityStart","completionControl"],"turns":[]}
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=06-turn-failed path=/tmp/mol185-observation-proof-dqDzBQ/mol185_observation_proof-215ea3e8
+MOL185_RESPONSE_OBSERVATION_PROOF {"scenario":"cancelled","outcome":{"error":"ChatGPT web turn aborted","name":"AbortError"},"sends":1,"submitted":1,"snapshotReads":1,"failedReads":1,"countReads":0,"rebinds":0,"released":true,"stages":["browser_page","temporary_chat_preparation","effort_selection","prompt_attachment","file_attachment","send"],"totalMs":2,"faultToTerminalMs":0}
+(pass) MOL185 accepted-response read recovery preserves one Send: cancelled [1.69ms]
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=01-browser-page-acquired path=/tmp/mol185-observation-proof-MIFnSe/mol185_observation_proof-ae034360
+[chatgpt-web] browser turn mol185_observation_proof opened (transport=inline, maxMessageChars=17, estimatedInputTokens=8194, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=02-effort-selection-complete path=/tmp/mol185-observation-proof-MIFnSe/mol185_observation_proof-ae034360
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=03-prompt-attachment-complete path=/tmp/mol185-observation-proof-MIFnSe/mol185_observation_proof-ae034360
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=04-file-attachment-complete path=/tmp/mol185-observation-proof-MIFnSe/mol185_observation_proof-ae034360
+[chatgpt-web] browser turn mol185_observation_proof submission accepted evidence=assistant_turn
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=05-send-accepted path=/tmp/mol185-observation-proof-MIFnSe/mol185_observation_proof-ae034360
+[chatgpt-web] browser turn mol185_observation_proof failed: ChatGPT exposed 2 DOM nodes for the bound assistant turn
+[chatgpt-web] response_structure {"traceId":"mol185_observation_proof","checkpoint":"06-turn-failed","turnIndex":0,"turnCount":0,"columns":["parent","tag","rendered","assistant","user","searchUnit","markdown","streamingStatus","activityStart","completionControl"],"turns":[]}
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=06-turn-failed path=/tmp/mol185-observation-proof-MIFnSe/mol185_observation_proof-ae034360
+MOL185_RESPONSE_OBSERVATION_PROOF {"scenario":"ambiguous","outcome":{"error":"ChatGPT exposed 2 DOM nodes for the bound assistant turn","name":"Error"},"sends":1,"submitted":1,"snapshotReads":1,"failedReads":1,"countReads":1,"rebinds":0,"released":true,"stages":["browser_page","temporary_chat_preparation","effort_selection","prompt_attachment","file_attachment","send"],"totalMs":1,"faultToTerminalMs":0}
+(pass) MOL185 accepted-response read recovery preserves one Send: ambiguous [1.22ms]
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=01-browser-page-acquired path=/tmp/mol185-observation-proof-gS08O4/mol185_observation_proof-224a67a8
+[chatgpt-web] browser turn mol185_observation_proof opened (transport=inline, maxMessageChars=17, estimatedInputTokens=8194, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=02-effort-selection-complete path=/tmp/mol185-observation-proof-gS08O4/mol185_observation_proof-224a67a8
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=03-prompt-attachment-complete path=/tmp/mol185-observation-proof-gS08O4/mol185_observation_proof-224a67a8
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=04-file-attachment-complete path=/tmp/mol185-observation-proof-gS08O4/mol185_observation_proof-224a67a8
+[chatgpt-web] browser turn mol185_observation_proof submission accepted evidence=assistant_turn
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=05-send-accepted path=/tmp/mol185-observation-proof-gS08O4/mol185_observation_proof-224a67a8
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=06-response-visible path=/tmp/mol185-observation-proof-gS08O4/mol185_observation_proof-224a67a8
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=07-turn-completed path=/tmp/mol185-observation-proof-gS08O4/mol185_observation_proof-224a67a8
+[chatgpt-web] browser turn mol185_observation_proof completed (markdownChars=24, domFullScans=9, domCacheHits=0)
+MOL185_RESPONSE_OBSERVATION_PROOF {"scenario":"missing","outcome":{"answer":"Prefix\n\nRecovered answer"},"sends":1,"submitted":1,"snapshotReads":10,"failedReads":1,"countReads":2,"rebinds":0,"released":true,"stages":["browser_page","temporary_chat_preparation","effort_selection","prompt_attachment","file_attachment","send"],"totalMs":2267,"faultToTerminalMs":2266}
+(pass) MOL185 accepted-response read recovery preserves one Send: missing [2267.20ms]
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=01-browser-page-acquired path=/tmp/mol185-observation-proof-vJaxIf/mol185_observation_proof-88c39f06
+[chatgpt-web] browser turn mol185_observation_proof opened (transport=inline, maxMessageChars=17, estimatedInputTokens=8194, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=02-effort-selection-complete path=/tmp/mol185-observation-proof-vJaxIf/mol185_observation_proof-88c39f06
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=03-prompt-attachment-complete path=/tmp/mol185-observation-proof-vJaxIf/mol185_observation_proof-88c39f06
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=04-file-attachment-complete path=/tmp/mol185-observation-proof-vJaxIf/mol185_observation_proof-88c39f06
+[chatgpt-web] browser turn mol185_observation_proof submission accepted evidence=assistant_turn
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=05-send-accepted path=/tmp/mol185-observation-proof-vJaxIf/mol185_observation_proof-88c39f06
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=06-response-visible path=/tmp/mol185-observation-proof-vJaxIf/mol185_observation_proof-88c39f06
+[chatgpt-web] browser turn mol185_observation_proof is rebinding its existing launcher page after a stalled DOM probe: ChatGPT browser DOM observation did not respond within 2000ms
+[chatgpt-web] browser turn mol185_observation_proof rebound its existing launcher page after a stalled DOM probe
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=07-response-page-rebound path=/tmp/mol185-observation-proof-vJaxIf/mol185_observation_proof-88c39f06
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=08-turn-completed path=/tmp/mol185-observation-proof-vJaxIf/mol185_observation_proof-88c39f06
+[chatgpt-web] browser turn mol185_observation_proof completed (markdownChars=24, domFullScans=13, domCacheHits=0)
+MOL185_RESPONSE_OBSERVATION_PROOF {"scenario":"pending","outcome":{"answer":"Prefix\n\nRecovered answer"},"sends":1,"submitted":1,"snapshotReads":14,"failedReads":1,"countReads":1,"rebinds":1,"released":true,"stages":["browser_page","temporary_chat_preparation","effort_selection","prompt_attachment","file_attachment","send","response_page_rebind_1"],"totalMs":5024,"faultToTerminalMs":4016,"faultToRebindMs":2003}
+(pass) MOL185 accepted-response read recovery preserves one Send: pending [5024.47ms]
+
+tests/mol185-tool-ack-recovery.test.ts:
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=f9adbae69e67
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=f9adbae69e67, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_YQDgiBOy2euE tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_YQDgiBOy2euE path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_YQDgiBOy2euE pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: an exact completion replay after a lost ACK is accepted only once [3.74ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=8cdacc0ebe04
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=8cdacc0ebe04, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_XKD0Y6H7SxIQ tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_XKD0Y6H7SxIQ path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_XKD0Y6H7SxIQ pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: an accepted completion does not authorize conflicting result replays [0.77ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=6d0c56e66179
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=6d0c56e66179, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_CXngY8QpxQQ- tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_CXngY8QpxQQ- path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_CXngY8QpxQQ- pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: an accepted completion receipt cannot survive turn revocation [0.47ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=800fd98e5ac2
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=800fd98e5ac2, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_iPZTgCzzc7Fc tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_iPZTgCzzc7Fc path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_iPZTgCzzc7Fc pending=0 isError=false
+MOL185_TOOL_ACK_RECOVERY {"recoveryElapsedMs":875.89,"simulatedToolInvocations":1,"acceptedResultResolutions":1,"completionAcknowledgements":2,"resultSerializations":1}
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: remote completion recovers a dropped ACK without re-executing the tool [879.70ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=99839d72ee0e
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=99839d72ee0e, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_GZZaXTToozf- tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_GZZaXTToozf- path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_GZZaXTToozf- pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: remote completion rejects malformed success ACKs [3.63ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=0553fe4c997f
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=0553fe4c997f, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_vwY53kgx5NZI tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_vwY53kgx5NZI path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_vwY53kgx5NZI pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: repeated lost completion ACKs stop after one safe replay [123.15ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=515b9c287460
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=515b9c287460, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_wn9B40O5lnwq tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_wn9B40O5lnwq path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_wn9B40O5lnwq pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: a definitive negative completion frame does not retry while FIN is withheld ({"completed":false}, %s) [3.14ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=af29ddc6587a
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=af29ddc6587a, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_6y6Jyzyt05b2 tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_6y6Jyzyt05b2 path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_6y6Jyzyt05b2 pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: a definitive negative completion frame does not retry while FIN is withheld (, fixture completion rejected) [2.23ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=05a32f3d6678
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=05a32f3d6678, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_NiLwwOUYIALn tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_NiLwwOUYIALn path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_NiLwwOUYIALn pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: unsupported or malformed replay capability fails closed ({"protocolVersion":5,"acceptingExternalOwners":true}) [866.72ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=42fefc76355b
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=42fefc76355b, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_LZOqPcNom9_N tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_LZOqPcNom9_N path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_LZOqPcNom9_N pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: unsupported or malformed replay capability fails closed ({"protocolVersion":5,"toolCompletionReplay":"true"}) [101.84ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=b8b86d02adbc
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=b8b86d02adbc, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_tRzkHeucC50I tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_tRzkHeucC50I path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_tRzkHeucC50I pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: unsupported or malformed replay capability fails closed ({"protocolVersion":4,"toolCompletionReplay":true}) [30.25ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=f6c0cd44d55b
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=f6c0cd44d55b, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_nz3Y2-w1Al7M tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_nz3Y2-w1Al7M path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_nz3Y2-w1Al7M pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: unsupported or malformed replay capability fails closed (null) [869.17ms]
+
+tests/mol185-submission-retry.test.ts:
+[chatgpt-web] browser_settled {"traceId":"696468c39b4b","outcome":"error","compaction":false,"submission":"prepared","code":"upstream_server_error","retryable":true}
+[chatgpt-web] browser_settled {"traceId":"696468c39b4b","outcome":"error","compaction":false,"submission":"prepared","code":"upstream_server_error","retryable":true}
+MOL185_SUBMISSION_RETRY {"phase":"prepared","injectedCode":"upstream_server_error","browserStarts":2,"sendActivations":0,"acceptedSubmissions":0,"outcomes":[{"type":"error","message":"Injected transient transport failure","status":502,"errorType":"server_error","code":"upstream_server_error","retryable":true},{"type":"error","message":"Injected transient transport failure","status":502,"errorType":"server_error","code":"upstream_server_error","retryable":true}]}
+(pass) submission phase prepared safely handles typed upstream_server_error (retryable=%s) [2.75ms]
+[chatgpt-web] browser_settled {"traceId":"688b7dfa5f1b","outcome":"error","compaction":false,"submission":"send_activated","code":"upstream_server_error","retryable":true}
+MOL185_SUBMISSION_RETRY {"phase":"send_activated","injectedCode":"upstream_server_error","browserStarts":1,"sendActivations":1,"acceptedSubmissions":0,"outcomes":[{"type":"error","message":"ChatGPT did not confirm that the prompt was sent. Check the ChatGPT tab before continuing.","status":502,"errorType":"server_error","code":"chatgpt_submission_ambiguous","retryable":false},{"type":"error","message":"ChatGPT did not confirm that the prompt was sent. Check the ChatGPT tab before continuing.","status":502,"errorType":"server_error","code":"chatgpt_submission_ambiguous","retryable":false}]}
+(pass) submission phase send_activated safely handles typed upstream_server_error (retryable=%s) [0.62ms]
+[chatgpt-web] browser_settled {"traceId":"427a5cad7418","outcome":"error","compaction":false,"submission":"accepted","code":"upstream_server_error","retryable":true}
+MOL185_SUBMISSION_RETRY {"phase":"accepted","injectedCode":"upstream_server_error","browserStarts":1,"sendActivations":1,"acceptedSubmissions":1,"outcomes":[{"type":"error","message":"ChatGPT stopped responding after the task started. Check the ChatGPT tab before continuing.","status":502,"errorType":"server_error","code":"chatgpt_submitted_turn_failed","retryable":false},{"type":"error","message":"ChatGPT stopped responding after the task started. Check the ChatGPT tab before continuing.","status":502,"errorType":"server_error","code":"chatgpt_submitted_turn_failed","retryable":false}]}
+(pass) submission phase accepted safely handles typed upstream_server_error (retryable=%s) [0.47ms]
+[chatgpt-web] browser_settled {"traceId":"4af250eeb985","outcome":"error","compaction":false,"submission":"accepted","code":"client_cancelled","retryable":false}
+MOL185_SUBMISSION_RETRY {"phase":"accepted","injectedCode":"client_cancelled","browserStarts":1,"sendActivations":1,"acceptedSubmissions":1,"outcomes":[{"type":"error","message":"Injected transient transport failure","status":499,"errorType":"client_closed_request","code":"client_cancelled","retryable":false},{"type":"error","message":"Injected transient transport failure","status":499,"errorType":"client_closed_request","code":"client_cancelled","retryable":false}]}
+(pass) submission phase accepted safely handles typed client_cancelled (retryable=%s) [0.57ms]
+[chatgpt-web] browser_settled {"traceId":"fb960fe97d67","outcome":"error","compaction":false,"submission":"accepted","code":"invalid_api_key","retryable":false}
+MOL185_SUBMISSION_RETRY {"phase":"accepted","injectedCode":"invalid_api_key","browserStarts":1,"sendActivations":1,"acceptedSubmissions":1,"outcomes":[{"type":"error","message":"Injected transient transport failure","status":401,"errorType":"authentication_error","code":"invalid_api_key","retryable":false},{"type":"error","message":"Injected transient transport failure","status":401,"errorType":"authentication_error","code":"invalid_api_key","retryable":false}]}
+(pass) submission phase accepted safely handles typed invalid_api_key (retryable=%s) [0.92ms]
+
+tests/mol185-json-terminal.test.ts:
+(pass) MOL-185 nonstream empty EOF requires an authoritative terminal [0.45ms]
+(pass) MOL-185 nonstream heartbeat only EOF requires an authoritative terminal [0.01ms]
+(pass) MOL-185 nonstream partial text EOF requires an authoritative terminal [0.01ms]
+(pass) MOL-185 compaction EOF never fabricates replacement history [0.04ms]
+(pass) MOL-185 explicit done still completes ordinary and compaction responses [0.21ms]
+(pass) MOL-185 streaming EOF already reports incomplete [0.50ms]
+(pass) MOL-185 explicit failure remains failed instead of becoming EOF [0.73ms]
+(pass) MOL-185 explicit incomplete preserves its reason and usage [0.05ms]
+(pass) MOL-185 max-token done preserves truncation and cannot compact [0.03ms]
+
+ 38 pass
+ 0 fail
+ 176 expect() calls
+Ran 38 tests across 5 files. [14.03s]

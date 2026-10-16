@@ -1,0 +1,116 @@
+Baseline: 51a3bd8, isolated source archive with final regression file. Bun 1.4.0.
+Command: bun test tests/mol185-response-observation-recovery.test.ts -t 'Send: (recovered|exhausted|cancelled|ambiguous|missing)$'
+The added pending-evaluate candidate watchdog control is filtered out here.
+
+bun test v1.4.0 (34cbb9a40)
+
+tests/mol185-response-observation-recovery.test.ts:
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof opened (transport=inline, maxMessageChars=17, estimatedInputTokens=8194, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=03-prompt-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=04-file-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof submission accepted evidence=assistant_turn
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=05-send-accepted path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=06-response-visible path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof failed: fixture stopped after four unreadable-response probes without recovery
+[chatgpt-web] response_structure {"traceId":"mol185_observation_proof","checkpoint":"07-turn-failed","turnIndex":0,"turnCount":0,"columns":["parent","tag","rendered","assistant","user","searchUnit","markdown","streamingStatus","activityStart","completionControl"],"turns":[]}
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=07-turn-failed path=<test-owned-temporary-path>
+MOL185_RESPONSE_OBSERVATION_PROOF {"scenario":"recovered","outcome":{"error":"fixture stopped after four unreadable-response probes without recovery","name":"Error"},"sends":1,"submitted":1,"snapshotReads":8,"failedReads":4,"countReads":4,"rebinds":0,"released":true,"stages":["browser_page","temporary_chat_preparation","effort_selection","prompt_attachment","file_attachment","send"],"totalMs":1933,"faultToTerminalMs":758}
+125 |       totalMs: Math.round(finishedAt - startedAt),
+126 |       ...(failureAt === undefined ? {} : { faultToTerminalMs: Math.round(finishedAt - failureAt) }),
+127 |       ...(failureAt === undefined || reboundAt === undefined ? {} : { faultToRebindMs: Math.round(reboundAt - failureAt) }),
+128 |     }));
+129 |     if (scenario === "recovered" || scenario === "missing" || scenario === "pending") {
+130 |       expect(outcome).toEqual({ answer: "Prefix\n\nRecovered answer" });
+                            ^
+error: expect(received).toEqual(expected)
+
+  {
+-   "answer": 
+- "Prefix
+- 
+- Recovered answer"
+- ,
++   "error": "fixture stopped after four unreadable-response probes without recovery",
++   "name": "Error",
+  }
+
+- Expected  - 5
++ Received  + 2
+
+      at <anonymous> (<test-owned-temporary-path>/tests/mol185-response-observation-recovery.test.ts:130:23)
+(fail) MOL185 accepted-response read recovery preserves one Send: recovered [1933.87ms]
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof opened (transport=inline, maxMessageChars=17, estimatedInputTokens=8194, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=03-prompt-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=04-file-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof submission accepted evidence=assistant_turn
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=05-send-accepted path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof failed: fixture stopped after four unreadable-response probes without recovery
+[chatgpt-web] response_structure {"traceId":"mol185_observation_proof","checkpoint":"06-turn-failed","turnIndex":0,"turnCount":0,"columns":["parent","tag","rendered","assistant","user","searchUnit","markdown","streamingStatus","activityStart","completionControl"],"turns":[]}
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=06-turn-failed path=<test-owned-temporary-path>
+MOL185_RESPONSE_OBSERVATION_PROOF {"scenario":"exhausted","outcome":{"error":"fixture stopped after four unreadable-response probes without recovery","name":"Error"},"sends":1,"submitted":1,"snapshotReads":4,"failedReads":4,"countReads":4,"rebinds":0,"released":true,"stages":["browser_page","temporary_chat_preparation","effort_selection","prompt_attachment","file_attachment","send"],"totalMs":756,"faultToTerminalMs":755}
+129 |     if (scenario === "recovered" || scenario === "missing" || scenario === "pending") {
+130 |       expect(outcome).toEqual({ answer: "Prefix\n\nRecovered answer" });
+131 |       expect(deltas.join("")).toBe("Prefix\n\nRecovered answer");
+132 |       expect(rebinds).toBe(scenario === "missing" ? 0 : 1);
+133 |     } else if (scenario === "exhausted") {
+134 |       expect(outcome).toMatchObject({ error: "ChatGPT browser DOM remained unresponsive after 2 same-page rebinds" });
+                            ^
+error: expect(received).toMatchObject(expected)
+
+  {
+-   "error": "ChatGPT browser DOM remained unresponsive after 2 same-page rebinds",
++   "error": "fixture stopped after four unreadable-response probes without recovery",
++   "name": "Error",
+  }
+
+- Expected  - 1
++ Received  + 2
+
+      at <anonymous> (<test-owned-temporary-path>/tests/mol185-response-observation-recovery.test.ts:134:23)
+(fail) MOL185 accepted-response read recovery preserves one Send: exhausted [756.69ms]
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof opened (transport=inline, maxMessageChars=17, estimatedInputTokens=8194, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=03-prompt-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=04-file-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof submission accepted evidence=assistant_turn
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=05-send-accepted path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof failed: ChatGPT web turn aborted
+[chatgpt-web] response_structure {"traceId":"mol185_observation_proof","checkpoint":"06-turn-failed","turnIndex":0,"turnCount":0,"columns":["parent","tag","rendered","assistant","user","searchUnit","markdown","streamingStatus","activityStart","completionControl"],"turns":[]}
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=06-turn-failed path=<test-owned-temporary-path>
+MOL185_RESPONSE_OBSERVATION_PROOF {"scenario":"cancelled","outcome":{"error":"ChatGPT web turn aborted","name":"AbortError"},"sends":1,"submitted":1,"snapshotReads":1,"failedReads":1,"countReads":1,"rebinds":0,"released":true,"stages":["browser_page","temporary_chat_preparation","effort_selection","prompt_attachment","file_attachment","send"],"totalMs":2,"faultToTerminalMs":0}
+(pass) MOL185 accepted-response read recovery preserves one Send: cancelled [1.91ms]
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof opened (transport=inline, maxMessageChars=17, estimatedInputTokens=8194, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=03-prompt-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=04-file-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof submission accepted evidence=assistant_turn
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=05-send-accepted path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof failed: ChatGPT exposed 2 DOM nodes for the bound assistant turn
+[chatgpt-web] response_structure {"traceId":"mol185_observation_proof","checkpoint":"06-turn-failed","turnIndex":0,"turnCount":0,"columns":["parent","tag","rendered","assistant","user","searchUnit","markdown","streamingStatus","activityStart","completionControl"],"turns":[]}
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=06-turn-failed path=<test-owned-temporary-path>
+MOL185_RESPONSE_OBSERVATION_PROOF {"scenario":"ambiguous","outcome":{"error":"ChatGPT exposed 2 DOM nodes for the bound assistant turn","name":"Error"},"sends":1,"submitted":1,"snapshotReads":1,"failedReads":1,"countReads":1,"rebinds":0,"released":true,"stages":["browser_page","temporary_chat_preparation","effort_selection","prompt_attachment","file_attachment","send"],"totalMs":3,"faultToTerminalMs":1}
+(pass) MOL185 accepted-response read recovery preserves one Send: ambiguous [3.24ms]
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof opened (transport=inline, maxMessageChars=17, estimatedInputTokens=8194, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=03-prompt-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=04-file-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof submission accepted evidence=assistant_turn
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=05-send-accepted path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=06-response-visible path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=07-turn-completed path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof completed (markdownChars=24, domFullScans=9, domCacheHits=0)
+MOL185_RESPONSE_OBSERVATION_PROOF {"scenario":"missing","outcome":{"answer":"Prefix\n\nRecovered answer"},"sends":1,"submitted":1,"snapshotReads":10,"failedReads":1,"countReads":1,"rebinds":0,"released":true,"stages":["browser_page","temporary_chat_preparation","effort_selection","prompt_attachment","file_attachment","send"],"totalMs":2265,"faultToTerminalMs":2264}
+(pass) MOL185 accepted-response read recovery preserves one Send: missing [2265.40ms]
+
+ 3 pass
+ 1 filtered out
+ 2 fail
+ 18 expect() calls
+Ran 5 tests across 1 file. [5.49s]

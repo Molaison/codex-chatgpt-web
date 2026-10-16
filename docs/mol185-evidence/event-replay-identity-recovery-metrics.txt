@@ -1,0 +1,21 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/mol185-event-replay-identity.test.ts:
+[chatgpt-web] browser_settled {"traceId":"fddf5584312b","outcome":"final","compaction":false,"submission":"accepted"}
+MOL185_ROUND_REPLAY {"mutation":"identical","settlement":"in-flight","starts":1,"sends":1,"text":"Retained prefix. Recovered suffix.","recoveryMs":125.35334999999998}
+(pass) MOL-185 identical SSE reconnect recovers the complete in-flight response [148.15ms]
+[chatgpt-web] browser_settled {"traceId":"06986828cafb","outcome":"final","compaction":false,"submission":"accepted"}
+MOL185_ROUND_REPLAY {"mutation":"identical","settlement":"offline-completed","starts":1,"sends":1,"text":"Retained prefix. Recovered suffix.","recoveryMs":2.828834000000029}
+(pass) MOL-185 identical SSE reconnect recovers the complete offline-completed response [5.08ms]
+[chatgpt-web] browser_settled {"traceId":"98b0868ee228","outcome":"final","compaction":false,"submission":"accepted"}
+MOL185_ROUND_REPLAY {"mutation":"message-property-order","settlement":"in-flight","starts":1,"sends":1,"text":"Retained prefix. Recovered suffix.","recoveryMs":6.190981000000079}
+(pass) MOL-185 message-property-order SSE reconnect recovers the complete in-flight response [8.01ms]
+[chatgpt-web] browser_settled {"traceId":"889e075b86c4","outcome":"final","compaction":false,"submission":"accepted"}
+MOL185_ROUND_REPLAY {"mutation":"message-property-order","settlement":"offline-completed","starts":1,"sends":1,"text":"Retained prefix. Recovered suffix.","recoveryMs":2.469634000000042}
+(pass) MOL-185 message-property-order SSE reconnect recovers the complete offline-completed response [4.42ms]
+
+ 4 pass
+ 2 filtered out
+ 0 fail
+ 36 expect() calls
+Ran 4 tests across 1 file. [774.00ms]

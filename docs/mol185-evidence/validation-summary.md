@@ -31,3 +31,17 @@ Full raw logs were retained by the execution worker instead of duplicating rough
 - `final-verify.log`: SHA-256 `5461078009e76ddebf5fed23072e02121a2dc40e5ee10294468cbef34b2f41b6`.
 
 The [focused paired matrix](comparison.md) and [real-execution package](../mol185-network-validation.md) separate synthetic regression success from live acceptance. The included live-client script was syntax-checked, its missing-authorization fail-closed path tested, and [six mock-only loopback parser/client cases](live-canary-mock.txt) passed. It has made **zero live requests**.
+
+## Stage-one CI follow-up (2026-10-16)
+
+Candidate [`51a3bd8`](https://github.com/Molaison/codex-chatgpt-web/actions/runs/38928747390) reached a failed terminal state: Ubuntu 1,188 pass / 97 skip / 10 fail; macOS 1,189 / 96 / 10; Windows 1,178 / 106 / 11. The submission and JSON-terminal regressions passed on all three platforms. Provider disconnect cases passed on Linux/macOS through the default Unix entry point; Windows explicitly skips those cases. Packaging/smoke stages were not reached after verify failed.
+
+Later inspection of the pristine [`26bd5a9` baseline run](https://github.com/Molaison/codex-chatgpt-web/actions/runs/38925334283) established that its Windows job 117055299266 and candidate job 117066965836 have the same 11 failing test names. In particular, `paper-recovery.test.ts`'s “unverified native evidence leaves the actual SQLite row and event log unchanged” timed out in both (baseline 8,220.95 ms; candidate 11,965.83 ms; limit 5,000 ms). This corrects the earlier lack of a Windows baseline reproduction; it does **not** establish the timeout's underlying cause or make CI green. No rerun, timeout increase, or skipped check was used to obtain this classification. CI remains distinct from real deployed-system acceptance.
+
+## Stage-two integrated candidate
+
+The [safe-recovery report](../mol185-safe-recovery.md) defines the actual paired recovery cohort and remaining boundaries. An independent single Bun invocation ran all three new stage-two files together with the stage-one submission/JSON-terminal files: **38 pass, 0 fail, 176 assertions** ([raw result](stage2-combined-independent.txt)). Focused existing controls also passed: replay/session 18, browser observer 6, browser/compaction adjacent 19 with 2 real-browser skips, and feasible broker lifecycle 7. These subsets are not a new full-suite result. Root TypeScript passed after the production changes ([log](stage2-typecheck.txt)); source review found no remaining blocker after correcting a negative-ACK/withheld-FIN classification issue.
+
+The first runtime build failed while packaging a generated dependency-cache directory symlink ([failure](stage2-runtime-build.txt)). Repeating with the existing writable external Bun cache and an isolated output succeeded ([command/result](stage2-runtime-build-isolated.txt)); no source/build-script changes or disabled checks were used. Launcher source was unchanged; its earlier build is historical evidence, not a fresh stage-two run.
+
+The known socket/Electron-blocked full suite was not repeated locally. Final-commit CI status must be read from the accompanying PR/Linear update; the older CI above is not the new commit's result. No live browser, model, deployed endpoint, remote host or GPU validation has occurred. Neither stage is accepted as Done.

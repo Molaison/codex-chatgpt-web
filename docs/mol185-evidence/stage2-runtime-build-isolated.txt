@@ -1,0 +1,6 @@
+Command: BUN_INSTALL_CACHE_DIR=/tmp/mol185-bun-cache bun run scripts/build-runtime-bundle.ts <isolated-stage2-output>
+Bun: 1.4.0
+Result: exit 0
+Source: integrated stage-two candidate; exact final SHA supplied by PR/Linear handoff.
+Note: default cache location failed on a generated dependency-cache directory symlink; original failure retained in stage2-runtime-build.txt. Explicit writable external cache avoids including that install cache in the packaged app; no source/build-script changes or checks disabled.
+/workspace/shared/mol185-evidence/stage2-runtime

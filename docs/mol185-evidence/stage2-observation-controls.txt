@@ -1,0 +1,17 @@
+Command: bun test tests/browser-worker-contract.test.ts -t 'stalled DOM observation|submission observation recovery|accepted turn rebinds|internal observation faults|assistant tracking rebinds|missing-assistant expiry'
+
+bun test v1.4.0 (34cbb9a40)
+
+tests/browser-worker-contract.test.ts:
+(pass) assistant tracking rebinds only one proven replacement after React detaches its node [0.16ms]
+(pass) a stalled DOM observation fails within its probe budget [5.75ms]
+(pass) submission observation recovery resumes with rebound locators and is strictly bounded [0.96ms]
+(pass) an accepted turn rebinds the missing assistant observation and acknowledges a tool batch that arrives during recovery [1.66ms]
+(pass) missing-assistant expiry checks fresh DOM after a delayed wake while preserving the turn deadline [0.75ms]
+(pass) an accepted turn survives internal observation faults instead of being torn down [0.69ms]
+
+ 6 pass
+ 144 filtered out
+ 0 fail
+ 39 expect() calls
+Ran 6 tests across 1 file. [555.00ms]

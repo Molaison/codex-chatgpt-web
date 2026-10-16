@@ -2,6 +2,8 @@
 
 Status: three focused fixes reproduced and tested offline; real validation and final integrated results remain separate gates. No live calls or remote execution were performed while preparing this document. Do not interpret proposed limits as approval.
 
+**Stage-two supplement:** [safe-recovery boundaries, measured scenarios and handoff delta](mol185-safe-recovery.md) extends this package with retained-event replay, same-page observation recovery and tool-result ACK recovery. Read both against the exact commit in the accompanying issue handoff. The stage-one evidence below remains historical; it does not certify the later candidate or deployed system.
+
 ## Scope and source
 
 - Original work: [MOL-185](https://linear.app/molaison/issue/MOL-185), coordinated with [MOL-184](https://linear.app/molaison/issue/MOL-184).
