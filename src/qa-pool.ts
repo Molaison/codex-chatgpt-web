@@ -124,9 +124,25 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
   db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000;");
   db.exec("CREATE TABLE IF NOT EXISTS sessions (session_hash TEXT PRIMARY KEY, account_id TEXT NOT NULL, created_at TEXT NOT NULL);");
   db.exec("CREATE TABLE IF NOT EXISTS temporary_history (session_hash TEXT PRIMARY KEY, input_json TEXT NOT NULL, response_id TEXT NOT NULL, expires_at INTEGER NOT NULL)");
+  db.transaction(() => {
+    if (!(db.query("PRAGMA table_info(sessions)").all() as Array<{ name: string }>).some(column => column.name === "temporary_history_expected")) {
+      db.exec("ALTER TABLE sessions ADD COLUMN temporary_history_expected INTEGER NOT NULL DEFAULT 0");
+    }
+    // Preserve the existence of private context before any content expiry deletes it.
+    db.exec("UPDATE sessions SET temporary_history_expected=1 WHERE session_hash IN (SELECT session_hash FROM temporary_history)");
+  })();
   const history = db.query<{ input_json: string; response_id: string; expires_at: number }, [string]>("SELECT input_json, response_id, expires_at FROM temporary_history WHERE session_hash=?");
   const putHistory = db.query("INSERT OR REPLACE INTO temporary_history VALUES (?, ?, ?, ?)");
   const deleteHistory = db.query("DELETE FROM temporary_history WHERE session_hash=?");
+  const expectHistory = db.query("UPDATE sessions SET temporary_history_expected=? WHERE session_hash=?");
+  const saveHistory = db.transaction((hash: string, input: string, responseId: string) => {
+    expectHistory.run(1, hash);
+    putHistory.run(hash, input, responseId, Date.now() + 48 * 60 * 60 * 1000);
+  });
+  const promoteHistory = db.transaction((hash: string) => {
+    deleteHistory.run(hash);
+    expectHistory.run(0, hash);
+  });
   const purgeHistory = db.query("DELETE FROM temporary_history WHERE expires_at<=?");
   purgeHistory.run(Date.now());
   const sweep = setInterval(() => purgeHistory.run(Date.now()), 60_000);
@@ -139,7 +155,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
   const paperRecoveries = new Map<string, Promise<unknown>>();
   const activePaperReads = new Set<string>();
   const readPaperHistory = options.paperHistoryReader ?? readLauncherPaperHistory;
-  const find = db.query<{ account_id: string; project_id: string | null; project_name: string | null }, [string]>("SELECT account_id, project_id, project_name FROM sessions WHERE session_hash = ?");
+  const find = db.query<{ account_id: string; project_id: string | null; project_name: string | null; temporary_history_expected: number }, [string]>("SELECT account_id, project_id, project_name, temporary_history_expected FROM sessions WHERE session_hash = ?");
   const insert = db.query("INSERT OR IGNORE INTO sessions (session_hash, account_id, created_at, project_id, project_name) VALUES (?, ?, ?, ?, ?)");
   const count = db.query<{ account_id: string; n: number }, []>("SELECT account_id, COUNT(*) AS n FROM sessions GROUP BY account_id");
   const clients = config.clients.map(client => {
@@ -301,9 +317,9 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
     if (selection.explicit && !account.sessionModes) return failure(400, "session_modes_unavailable", "This account does not enable temporary/persistent effort selection");
     if (selection.explicit) normalized.payload.reasoning = { ...reasoning, effort: selection.effort };
     const cached = account.sessionModes ? history.get(hash) : undefined;
-    if (cached && cached.expires_at <= Date.now()) {
-      deleteHistory.run(hash);
-      return failure(409, "temporary_history_expired", "Temporary context expired after 48 idle hours; start a new thread or supply its full history");
+    if ((cached && cached.expires_at <= Date.now()) || (owner.temporary_history_expected && !cached)) {
+      if (cached) deleteHistory.run(hash);
+      return failure(409, "temporary_history_expired", "Temporary context expired or is unavailable; start a new thread seeded with the history you want to retain");
     }
     const retainHistory = account.sessionModes && (selection.mode === "temporary" || cached !== null && cached !== undefined);
     if (retainHistory && activeHistories.has(hash)) return failure(409, "temporary_turn_in_progress", "Wait for this conversation's current turn to finish");
@@ -353,9 +369,9 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
       const response = record(value);
       if (response.status !== "completed" || typeof response.id !== "string" || !Array.isArray(response.output)) return;
       if (paper && !paperCompleted) { papers.complete(paper.id,paper.scope); paperCompleted = true; }
-      if (selection.mode !== "temporary") { deleteHistory.run(hash); return; }
+      if (selection.mode !== "temporary") { promoteHistory(hash); return; }
       const messages = response.output.filter(item => record(item).type === "message" && record(item).role === "assistant");
-      putHistory.run(hash, JSON.stringify([...(Array.isArray(normalized.payload.input) ? normalized.payload.input : []), ...messages]), response.id, Date.now() + 48 * 60 * 60 * 1000);
+      saveHistory(hash, JSON.stringify([...(Array.isArray(normalized.payload.input) ? normalized.payload.input : []), ...messages]), response.id);
     };
     if (paper) papers.begin(paper.id);
     if (retainHistory) activeHistories.add(hash);
