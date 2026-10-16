@@ -1,3 +1,5 @@
+Current ywl source variants and upstream checkpoint: [branch guide](docs/ywl-source-branches.md).
+
 ## Molaison QA and Full tools
 
 Plain QA models use ChatGPT for ordinary questions and answers. Public `-tools` models

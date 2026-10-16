@@ -1,3 +1,5 @@
+当前 ywl 源码分支、上游版本与部署边界：[分支说明](docs/ywl-source-branches.md)。
+
 ## Molaison 纯问答与 Full 工具
 
 普通 QA 模型仅向 ChatGPT 提交问答，不导入 Codex 运行时提示词，也不调用本地工具。
