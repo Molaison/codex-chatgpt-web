@@ -67,6 +67,11 @@
     "receipt-related.log": {
       "sha256": "3316f445e122247e16981286ac810c16d50c8066e882847d274506c4fb5be52e",
       "source": "/tmp/mol184-receipt-related.log"
+    },
+    "receipt-memory-integration.test.ts.txt": {
+      "sha256": "7cb4f7091fb55154027013e64d1a65cf5370052625b46d8369081da408d1fe57",
+      "source": "integration/tests/dot-cross-layer-recovery.test.ts",
+      "usage": "Copy into an isolated checkout matching receipt-intermediate-candidate-composite.json; not a default CI suite."
     }
   },
   "candidate": {
