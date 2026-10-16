@@ -250,7 +250,7 @@ test("more than 256 intentional turns continue normally with only one latest rec
     expect(latest.status).toBe(200); expect((await latest.json()).id).toBe("receipt-response-270");
     expect(f.calls).toHaveLength(270);
   } finally { f.close(); }
-});
+}, 30_000);
 
 test("distinct tool rounds and explicit Steer message IDs in one native turn are not collapsed", async () => {
   const f = fixture();

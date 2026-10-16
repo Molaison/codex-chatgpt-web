@@ -1,0 +1,64 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/qa-pool-history-expiry.test.ts:
+(pass) temporary history fails closed after request expiry, retries and restart [8.39ms]
+(pass) temporary history fails closed after restart expiry, retries and restart [2.96ms]
+(pass) temporary history fails closed after purged expiry, retries and restart [3.32ms]
+(pass) legacy retained history migrates before startup expiry purge [2.89ms]
+(pass) unexpired history survives restart and successful promotion clears its expectation [3.50ms]
+(pass) failed http promotion preserves history expectation [2.33ms]
+(pass) failed incomplete promotion preserves history expectation [1.93ms]
+(pass) failed stream promotion preserves history expectation [2.82ms]
+(pass) completed streamed promotion clears history expectation across restart [2.73ms]
+(pass) failed temporary history commit preserves a durable uncertain-turn barrier [3.45ms]
+
+tests/qa-pool.test.ts:
+(pass) project route pins only new threads, preserves legacy owners and strips forged project metadata [17.78ms]
+(pass) pool preserves account and isolated branch ownership across age, restart, key rotation and failures [9.90ms]
+(pass) normalizer preserves native child identity and assigns independent anonymous sessions [0.22ms]
+(pass) temporary effort keeps private history across pool restart and promotes without a partial previous-response alias [7.54ms]
+(pass) trusted client identity reuses legacy project sessions and rejects missing or forged identities [5.67ms]
+
+tests/qa-pool-request-receipts.test.ts:
+(pass) missing message IDs are stable for a native turn and distinct for a new turn [0.22ms]
+(pass) completed JSON receipt replays original previous head after restart [3.78ms]
+(pass) completed stream receipt replays original previous head after restart [2.52ms]
+(pass) history write failure leaves a durable barrier to a context-free next turn [3.19ms]
+(pass) same native turn retries replay while intentional identical text in a new turn forwards [2.37ms]
+(pass) reusing a native turn with changed input rejects rather than replaying or forwarding [1.60ms]
+(pass) identical thread and turn across authenticated client scopes do not share receipts [1.95ms]
+(pass) failure to persist the pending barrier prevents any backend forward [1.55ms]
+(pass) a same-process observer reconnect joins the accepted request and receives its complete wire [12.77ms]
+(pass) unknown upstream outcome remains blocked after restart [2.67ms]
+(pass) a malformed stream without a saved terminal cannot unlock the next temporary turn [2.56ms]
+(pass) a eof stream without a saved terminal cannot unlock the next temporary turn [1.93ms]
+(pass) a cancel stream without a saved terminal cannot unlock the next temporary turn [1.68ms]
+(pass) legacy temporary requests without a stable turn still retain the uncertainty barrier [1.83ms]
+(pass) expired latest receipt removes cached content and cannot replay stale output [2.48ms]
+(pass) more than 256 intentional turns continue normally with only one latest receipt [185.15ms]
+(pass) distinct tool rounds and explicit Steer message IDs in one native turn are not collapsed [2.26ms]
+(pass) successful promotion removes cached responses and blocks duplicate promotion [2.71ms]
+(pass) pure persistent turns do not introduce a durable response cache [1.67ms]
+(pass) an explicit pre-Send attachment rejection releases the request for a safe retry [2.58ms]
+(pass) stream replay preserves incremental consumer text and structured output events [2.58ms]
+(pass) replayed LF terminal retains a split frame delimiter [2.56ms]
+(pass) replayed CRLF terminal retains a split frame delimiter [1.76ms]
+(pass) oversized JSON response delivers normally without a replay cache [11.95ms]
+(pass) oversized stream response delivers normally without a replay cache [23.48ms]
+(pass) compact success does not leave a pending marker that blocks ordinary continuation [2.49ms]
+(pass) new completion rolls latest receipt and history expiry together while replay does not extend either [8.54ms]
+(pass) pool shutdown settles an attached replay without claiming completion or losing uncertainty [17.04ms]
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+(pass) real admission rejection before worker start permits recovery and the next temporary question [15.94ms]
+(pass) a second pool committing between history read and reservation prevents stale forwarding [618.59ms]
+
+ 45 pass
+ 0 fail
+ 595 expect() calls
+Ran 45 tests across 3 files. [1.65s]

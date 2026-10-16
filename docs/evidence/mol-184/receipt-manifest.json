@@ -72,6 +72,22 @@
       "sha256": "7cb4f7091fb55154027013e64d1a65cf5370052625b46d8369081da408d1fe57",
       "source": "integration/tests/dot-cross-layer-recovery.test.ts",
       "usage": "Copy into an isolated checkout matching receipt-intermediate-candidate-composite.json; not a default CI suite."
+    },
+    "receipt-budget-single.log": {
+      "sha256": "b361170ffce9a29b17bf04c17166cb10d2d69035428b8da91c5367297bc15614",
+      "source": "/tmp/mol184-windows-budget-single.log"
+    },
+    "receipt-budget-focused.log": {
+      "sha256": "0e13531f11a3c5a4cee2baea49fc85c2b3cdacc36447865d80745eef75b16da8",
+      "source": "/tmp/mol184-windows-budget-focused.log"
+    },
+    "receipt-budget-types.log": {
+      "sha256": "e576e4d30f5392d9dec436980fdafe8b9b900832b6fe6adc3043841047674093",
+      "source": "/tmp/mol184-windows-budget-types.log"
+    },
+    "receipt-ci-first-run.json": {
+      "sha256": "ab459f5b728a0c2d07d8a0e7d3bb8819f618f76341f9482a588b53cbdf96cf48",
+      "source": "https://github.com/Molaison/codex-chatgpt-web/actions/runs/38942373166"
     }
   },
   "candidate": {
@@ -102,7 +118,7 @@
       "exitCode": 1
     },
     "runtime": "Bun 1.4.0",
-    "publishedHead": "record in PR delivery after publication",
+    "publishedHead": "5d80f8aaab4a2b1a12b660cfccaa0cca3d32c875",
     "related": {
       "command": "bun test tests/qa-portable-sessions.test.ts tests/qa-sessions.test.ts tests/paper-history.test.ts tests/paper-registry.test.ts tests/paper-recovery.test.ts tests/paper-recovery-reader.test.ts",
       "result": "52 pass / 2 existing skips / 0 fail / 473 assertions",
@@ -110,7 +126,11 @@
     }
   },
   "independentReview": "see exact-head PR review decision; no approval asserted by document author",
-  "exactHeadCI": "not run at document freeze",
+  "exactHeadCI": {
+    "firstRun": "receipt-ci-first-run.json",
+    "conclusion": "failure",
+    "afterTestBudgetCorrection": "pending"
+  },
   "realBrowser": "not run; no execution authorization added",
   "intermediateIntegration": {
     "result": "5 pass / 1 fail, 35 assertions",
@@ -119,5 +139,14 @@
     "scope": "in-memory HTTP dispatch; production CPR/pool/SQLite/response handler/adapter/registry; mocked browser worker",
     "unresolved": "PR7 CPR random message IDs cause retry 409 rather than complete replay",
     "finalCandidateEvidence": false
+  },
+  "testBudgetCorrection": {
+    "scope": "270-turn test timeout only: 5000ms default to 30000ms; production source and all assertions unchanged",
+    "testSha256": "8aaea1d0046db547f61b8d30c78723dc7a1bb9557c4de379a3495d16c11fe1d1",
+    "localSingle": "1 pass / 275 assertions / exit 0",
+    "localFocused": "45 pass / 595 assertions / exit 0",
+    "localTypecheck": "pass / exit 0",
+    "windowsAfterCorrection": "not run",
+    "nextHeadCI": "pending"
   }
 }
