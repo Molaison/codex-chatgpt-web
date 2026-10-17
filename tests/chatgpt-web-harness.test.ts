@@ -4470,21 +4470,41 @@ describe("adapter liveness covers every path through a turn", () => {
     };
     const worker = ChatGptBrowserWorker.forProvider(provider);
     const originalRun = worker.run.bind(worker);
-    (worker as unknown as { run: (turn: BrowserTurn) => Promise<string> }).run = () => new Promise<string>(() => {});
+    const releases: Array<() => void> = [];
+    const executions: Promise<void>[] = [];
+    const executionKeys = new Set<string>();
+    let stop: (() => void) | undefined;
+    (worker as unknown as { run: (turn: BrowserTurn) => Promise<string> }).run = () => new Promise<string>(resolve => {
+      releases.push(() => resolve("liveness fixture cleanup"));
+    });
     try {
       const run = async (
         request: CodexParsedRequest,
         emit: (event: AdapterEvent) => void,
         signal: AbortSignal,
       ) => {
-        await createChatGptWebAdapter(provider).runTurn!(request, { headers: new Headers(), abortSignal: signal }, emit);
+        executionKeys.add(`${chatGptWebExecutionNamespace(provider)}:${chatGptTurnExecutionKey(request)}`);
+        const execution = createChatGptWebAdapter(provider).runTurn!(request, { headers: new Headers(), abortSignal: signal }, emit);
+        executions.push(execution);
+        await execution;
       };
-      const { heartbeats, stop } = await drive(provider, run);
+      const observed = await drive(provider, run);
+      stop = observed.stop;
       await Bun.sleep(observeMs);
-      stop();
-      return heartbeats;
+      return observed.heartbeats;
     } finally {
-      (worker as unknown as { run: (turn: BrowserTurn) => Promise<string> }).run = originalRun;
+      try {
+        stop?.();
+        // HTTP abort detaches its observer; the fake helper must still exit explicitly.
+        for (const release of releases) release();
+        await Promise.allSettled(executions);
+        for (const key of executionKeys) {
+          await chatGptTurnSessions.retireAndWait(key);
+          expect(chatGptTurnSessions.find(key)).toBeUndefined();
+        }
+      } finally {
+        (worker as unknown as { run: (turn: BrowserTurn) => Promise<string> }).run = originalRun;
+      }
     }
   }
 
