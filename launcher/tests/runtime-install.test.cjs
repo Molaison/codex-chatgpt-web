@@ -261,6 +261,32 @@ test("packaged runtime source wait fails closed when materialization exceeds its
   }
 });
 
+test("packaged runtime repairs same-size corruption in an installed dependency", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "codex-web-gpt-runtime-cached-corrupt-"));
+  const resourcesPath = runtimeFixture(root);
+  const coreHome = path.join(root, "core-home");
+  const app = { isPackaged: true, getVersion: () => "0.2.0" };
+  try {
+    const installed = ensurePackagedRuntime({ app, coreHome, resourcesPath });
+    const dependency = path.join(installed, "app", "node_modules", "zod", "v4", "index.js");
+    const originalContent = fs.readFileSync(dependency);
+    fs.writeFileSync(dependency, "bad-v4");
+    assert.equal(fs.statSync(dependency).size, originalContent.byteLength);
+
+    assert.equal(ensurePackagedRuntime({ app, coreHome, resourcesPath }), installed);
+    assert.deepEqual(fs.readFileSync(dependency), originalContent);
+    assert.equal(validateRuntimeBundle(installed, {
+      version: "0.2.0", platform: process.platform, arch: process.arch,
+    }), installed);
+    assert.deepEqual(
+      fs.readdirSync(path.dirname(installed)).filter(name => name.includes(".previous-") || name.includes(".tmp-")),
+      [],
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("packaged runtime transactionally repairs an incomplete installed bundle", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "codex-web-gpt-runtime-repair-"));
   const resourcesPath = runtimeFixture(root);
@@ -330,6 +356,53 @@ test("failed candidate validation preserves the previous validated runtime", () 
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+for (const hasPrevious of [false, true]) {
+  test(`invalid promoted runtime ${hasPrevious ? "restores the previous runtime" : "leaves no installed runtime"}`, () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "codex-web-gpt-runtime-promoted-"));
+    const resourcesPath = runtimeFixture(root);
+    const coreHome = path.join(root, "core-home");
+    const app = { isPackaged: true, getVersion: () => "0.2.0" };
+    const destination = path.join(coreHome, "versions", `0.2.0-${process.platform}-${process.arch}`);
+    const originalRename = fs.renameSync;
+    let candidatePromoted = false;
+    try {
+      if (hasPrevious) ensurePackagedRuntime({ app, coreHome, resourcesPath });
+      const source = path.join(resourcesPath, "runtime");
+      fs.writeFileSync(path.join(source, "app", "cli.js"), "new cli");
+      writeRuntimeManifest(source);
+
+      fs.renameSync = (from, to) => {
+        originalRename(from, to);
+        if (from.startsWith(`${destination}.tmp-`) && to === destination) {
+          candidatePromoted = true;
+          // Corrupt only the promoted copy, after temporary-bundle validation succeeded.
+          fs.writeFileSync(path.join(destination, "app", "cli.js"), "bad cli");
+        }
+      };
+      assert.throws(
+        () => ensurePackagedRuntime({ app, coreHome, resourcesPath }),
+        /checksum mismatch/,
+      );
+      assert.equal(candidatePromoted, true);
+      if (hasPrevious) {
+        assert.equal(fs.readFileSync(path.join(destination, "app", "cli.js"), "utf8"), "cli");
+        assert.equal(validateRuntimeBundle(destination, {
+          version: "0.2.0", platform: process.platform, arch: process.arch,
+        }), destination);
+      } else {
+        assert.equal(fs.existsSync(destination), false);
+      }
+      assert.deepEqual(
+        fs.readdirSync(path.dirname(destination)).filter(name => name.includes(".previous-") || name.includes(".tmp-")),
+        [],
+      );
+    } finally {
+      fs.renameSync = originalRename;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
 
 test("packaged runtime replaces stale files when a release is refreshed under the same version", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "codex-web-gpt-runtime-refresh-"));
