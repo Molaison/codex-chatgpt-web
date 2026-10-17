@@ -1,0 +1,69 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/qa-pool-admission-observer.test.ts:
+[chatgpt-web] browser_settled {"traceId":"0d85fbcace2b","outcome":"final","compaction":false,"submission":"accepted"}
+198 |   };
+199 |   try {
+200 |     const firstBody = identify(f.body("same-turn", "SAME", undefined, stream), "request-one");
+201 |     const first = await f.request(firstBody); expect(first.status).toBe(200); const result = await completed(first);
+202 |     const nextBody = identify(f.body("same-turn", "SAME", undefined, stream), "request-two"); nextBody.previous_response_id = result.id;
+203 |     const second = await f.request(nextBody); expect(second.status).toBe(409);
+                                                                          ^
+error: expect(received).toBe(expected)
+
+Expected: 409
+Received: 200
+
+      at <anonymous> (/workspace/shared/mol184-oct17-review-red/tests/qa-pool-admission-observer.test.ts:203:69)
+(fail) direct pool rejects ambiguous same-turn delta before adapter, stream=false [194.65ms]
+[chatgpt-web] browser_settled {"traceId":"1d150f50b270","outcome":"final","compaction":false,"submission":"accepted"}
+198 |   };
+199 |   try {
+200 |     const firstBody = identify(f.body("same-turn", "SAME", undefined, stream), "request-one");
+201 |     const first = await f.request(firstBody); expect(first.status).toBe(200); const result = await completed(first);
+202 |     const nextBody = identify(f.body("same-turn", "SAME", undefined, stream), "request-two"); nextBody.previous_response_id = result.id;
+203 |     const second = await f.request(nextBody); expect(second.status).toBe(409);
+                                                                          ^
+error: expect(received).toBe(expected)
+
+Expected: 409
+Received: 200
+
+      at <anonymous> (/workspace/shared/mol184-oct17-review-red/tests/qa-pool-admission-observer.test.ts:203:69)
+(fail) direct pool rejects ambiguous same-turn delta before adapter, stream=true [41.07ms]
+
+tests/qa-pool-request-receipts.test.ts:
+674 |     if (stringInput) firstBody.input = "RECEIPT_CANARY";
+675 |     const first = await f.request(firstBody), result = await first.json(); expect(first.status).toBe(200);
+676 |     const before = f.rows("SELECT * FROM temporary_history"), receipts = f.rows("SELECT * FROM qa_request_receipts");
+677 |     const ambiguous = { ...explicitRequest(payload("same", "RECEIPT_CANARY", result.id), "second"), input: firstBody.input };
+678 |     const denied = await f.request(ambiguous), error = await denied.json();
+679 |     expect(denied.status).toBe(409); expect(error.error.code).toBe("instruction_identity_required");
+                                ^
+error: expect(received).toBe(expected)
+
+Expected: 409
+Received: 200
+
+      at <anonymous> (/workspace/shared/mol184-oct17-review-red/tests/qa-pool-request-receipts.test.ts:679:27)
+(fail) ambiguous generated instruction fails before reservation and preserves replay, string=false [3.65ms]
+674 |     if (stringInput) firstBody.input = "RECEIPT_CANARY";
+675 |     const first = await f.request(firstBody), result = await first.json(); expect(first.status).toBe(200);
+676 |     const before = f.rows("SELECT * FROM temporary_history"), receipts = f.rows("SELECT * FROM qa_request_receipts");
+677 |     const ambiguous = { ...explicitRequest(payload("same", "RECEIPT_CANARY", result.id), "second"), input: firstBody.input };
+678 |     const denied = await f.request(ambiguous), error = await denied.json();
+679 |     expect(denied.status).toBe(409); expect(error.error.code).toBe("instruction_identity_required");
+                                ^
+error: expect(received).toBe(expected)
+
+Expected: 409
+Received: 200
+
+      at <anonymous> (/workspace/shared/mol184-oct17-review-red/tests/qa-pool-request-receipts.test.ts:679:27)
+(fail) ambiguous generated instruction fails before reservation and preserves replay, string=true [2.61ms]
+
+ 0 pass
+ 64 filtered out
+ 4 fail
+ 8 expect() calls
+Ran 4 tests across 2 files. [867.00ms]

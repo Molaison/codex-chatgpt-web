@@ -34,7 +34,7 @@ function observe(value: unknown) { observations.push(value); console.log("DOT_AD
 // Real HTTP -> production CPR normalizer -> pool/SQLite -> real startServer
 // admission -> production Responses handler/adapter/registry. Only browser/model
 // execution is replaced. The Node Unix-socket provider wrapper is tested separately.
-function fixture(options: { holdFirst?: boolean; holdFirstHeaders?: boolean; afterAcceptedError?: object; afterAcceptedStatus?: number } = {}) {
+function fixture(options: { holdFirst?: boolean; holdFirstHeaders?: boolean; afterAcceptedError?: object; afterAcceptedStatus?: number; directPool?: boolean } = {}) {
   const root = mkdtempSync(join(tmpdir(), "dot-cpr-admission-"));
   const oldHome = process.env.CODEX_CHATGPT_WEB_HOME; process.env.CODEX_CHATGPT_WEB_HOME = root;
   const signals = { SIGINT: process.listeners("SIGINT"), SIGTERM: process.listeners("SIGTERM") };
@@ -70,7 +70,8 @@ function fixture(options: { holdFirst?: boolean; holdFirstHeaders?: boolean; aft
   const observerSignals: AbortSignal[] = [];
   let firstIngress = true;
   const ingress=Bun.serve({hostname:"127.0.0.1",port:0,async fetch(req) {
-    const payload=normalizeCprRequest(await req.json(),Object.fromEntries(req.headers));
+    const raw = await req.json();
+    const payload=options.directPool ? raw : normalizeCprRequest(raw,Object.fromEntries(req.headers));
     const forward=new Request(req.url,{method:"POST",headers:req.headers,body:JSON.stringify(payload),signal:req.signal});
     observerSignals.push(forward.signal);
     const holdHeaders = options.holdFirstHeaders && firstIngress; firstIngress = false;
@@ -180,3 +181,33 @@ for(const [field,value,status] of [
  } finally {await f.close();}
 });
 
+
+
+for (const stream of [false, true]) test(`direct pool rejects ambiguous same-turn delta before adapter, stream=${stream}`, async () => {
+  const f = fixture({ directPool: true });
+  const identify = (body: any, requestId: string) => {
+    const native = JSON.parse(body.client_metadata["x-codex-turn-metadata"]);
+    body.client_metadata["x-codex-turn-metadata"] = JSON.stringify({ ...native, request_id: requestId });
+    return body;
+  };
+  const completed = async (response: Response): Promise<any> => {
+    const text = await response.text();
+    if (!stream) return JSON.parse(text);
+    return text.split("\n").filter(line => line.startsWith("data: ") && line !== "data: [DONE]")
+      .map(line => JSON.parse(line.slice(6))).find(event => event.type === "response.completed").response;
+  };
+  try {
+    const firstBody = identify(f.body("same-turn", "SAME", undefined, stream), "request-one");
+    const first = await f.request(firstBody); expect(first.status).toBe(200); const result = await completed(first);
+    const nextBody = identify(f.body("same-turn", "SAME", undefined, stream), "request-two"); nextBody.previous_response_id = result.id;
+    const second = await f.request(nextBody); expect(second.status).toBe(409);
+    expect((await second.json()).error.code).toBe("instruction_identity_required");
+    expect(f.starts).toHaveLength(1); expect(f.execution).toHaveLength(1); expect(f.input).toHaveLength(1);
+    f.restart();
+    const retry = await f.request(firstBody); expect(retry.status).toBe(200); expect((await completed(retry)).id).toBe(result.id);
+    nextBody.input[0].id = "new-instruction";
+    const resumed = await f.request(nextBody); expect(resumed.status).toBe(200); await completed(resumed);
+    expect(f.starts).toHaveLength(2); expect(f.execution).toHaveLength(2); expect(f.execution[0]).not.toBe(f.execution[1]);
+    observe({ case: "ambiguous-delta-rejected", stream, workerStarts: f.starts.length, adapterCalls: f.execution.length });
+  } finally { await f.close(); }
+});

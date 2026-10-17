@@ -1,0 +1,148 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/qa-pool-admission-observer.test.ts:
+[chatgpt-web] browser_settled {"traceId":"bda2515ca98e","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"cpr-accepted-reconnect","point":"before-headers","explicitId":true,"status":200,"workerStarts":1,"adapterCalls":1,"terminalCount":1}
+[chatgpt-web] browser_settled {"traceId":"33479480a94c","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) CPR before-headers accepted disconnect reconnect, caller ID [254.69ms]
+[chatgpt-web] browser_settled {"traceId":"33a5923f275b","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"cpr-accepted-reconnect","point":"after-headers","explicitId":true,"status":200,"workerStarts":1,"adapterCalls":1,"terminalCount":1}
+[chatgpt-web] browser_settled {"traceId":"3f7d4e65f96b","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) CPR after-headers accepted disconnect reconnect, caller ID [72.88ms]
+[chatgpt-web] browser_settled {"traceId":"387a7e482e94","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"35dde51d34ab","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"runtime-drain-recovery","stream":false,"error":{"error":{"message":"codex-chatgpt-web is draining for a requested service operation","type":"server_error","code":"server_draining","retryable":true,"submission_state":"not_submitted","phase":"admission"}},"pending":{"pending":0},"retry":200,"next":200,"workerStarts":2,"adapterCalls":2}
+(pass) real runtime draining JSON rejects before admission then retry and next turn succeed [39.19ms]
+[chatgpt-web] browser_settled {"traceId":"921004d1d920","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"b1e7fc453783","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"runtime-drain-recovery","stream":true,"error":{"error":{"message":"codex-chatgpt-web is draining for a requested service operation","type":"server_error","code":"server_draining","retryable":true,"submission_state":"not_submitted","phase":"admission"}},"pending":{"pending":0},"retry":200,"next":200,"workerStarts":2,"adapterCalls":2}
+(pass) real runtime draining SSE rejects before admission then retry and next turn succeed [38.70ms]
+(pass) draining compact is explicitly unadmitted while the model catalog does not claim submission state [27.30ms]
+[chatgpt-web] browser_settled {"traceId":"5e8edef17aa7","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"accepted-503-blocked","code":"generic","retry":409,"next":409,"workerStarts":1}
+(pass) accepted 503 is not retried blindly: generic [31.21ms]
+[chatgpt-web] browser_settled {"traceId":"78a0bc3ddcaa","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"accepted-503-blocked","code":"server_draining","retry":409,"next":409,"workerStarts":1}
+(pass) accepted 503 is not retried blindly: server_draining [31.63ms]
+[chatgpt-web] browser_settled {"traceId":"ab8d82abfc9c","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"accepted-503-blocked","code":"other_failure","retry":409,"next":409,"workerStarts":1}
+(pass) accepted 503 is not retried blindly: other_failure [31.09ms]
+[chatgpt-web] browser_settled {"traceId":"bf3161d0d6c0","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"type","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: type [31.06ms]
+[chatgpt-web] browser_settled {"traceId":"1eb93d22f0d9","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"code","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: code [30.07ms]
+[chatgpt-web] browser_settled {"traceId":"f14785f7bd43","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"retryable","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: retryable [30.57ms]
+[chatgpt-web] browser_settled {"traceId":"dd601a886470","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"submission_state","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: submission_state [30.19ms]
+[chatgpt-web] browser_settled {"traceId":"026652cc7b62","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"phase","status":503,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: phase [29.84ms]
+[chatgpt-web] browser_settled {"traceId":"660ed494b217","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"independent-proof-field-mismatch","field":"status","status":500,"retry":409,"next":409,"workerStarts":1}
+(pass) independent late-error single-field mismatch: status [32.45ms]
+[chatgpt-web] browser_settled {"traceId":"cebe7524023c","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"f20a2b736c5b","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"ambiguous-delta-rejected","stream":false,"workerStarts":2,"adapterCalls":2}
+(pass) direct pool rejects ambiguous same-turn delta before adapter, stream=false [34.78ms]
+[chatgpt-web] browser_settled {"traceId":"0f5305d3538d","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"d3ffeec05878","outcome":"final","compaction":false,"submission":"accepted"}
+DOT_ADMISSION {"case":"ambiguous-delta-rejected","stream":true,"workerStarts":2,"adapterCalls":2}
+(pass) direct pool rejects ambiguous same-turn delta before adapter, stream=true [34.55ms]
+
+tests/qa-pool-history-expiry.test.ts:
+(pass) temporary history fails closed after request expiry, retries and restart [3.58ms]
+(pass) temporary history fails closed after restart expiry, retries and restart [2.95ms]
+(pass) temporary history fails closed after purged expiry, retries and restart [2.40ms]
+(pass) legacy retained history migrates before startup expiry purge [2.83ms]
+(pass) unexpired history survives restart and successful promotion clears its expectation [3.19ms]
+(pass) failed http promotion preserves history expectation [2.10ms]
+(pass) failed incomplete promotion preserves history expectation [2.10ms]
+(pass) failed stream promotion preserves history expectation [2.03ms]
+(pass) completed streamed promotion clears history expectation across restart [1.97ms]
+(pass) failed temporary history commit preserves a durable uncertain-turn barrier [2.89ms]
+
+tests/qa-pool.test.ts:
+(pass) project route pins only new threads, preserves legacy owners and strips forged project metadata [8.98ms]
+(pass) pool preserves account and isolated branch ownership across age, restart, key rotation and failures [6.98ms]
+(pass) normalizer preserves native child identity and assigns independent anonymous sessions [0.10ms]
+(pass) temporary effort keeps private history across pool restart and promotes without a partial previous-response alias [5.91ms]
+(pass) trusted client identity reuses legacy project sessions and rejects missing or forged identities [4.86ms]
+
+tests/qa-pool-request-receipts.test.ts:
+(pass) missing message IDs are stable for a native turn and distinct for a new turn [0.17ms]
+(pass) completed JSON receipt replays original previous head after restart [2.81ms]
+(pass) completed stream receipt replays original previous head after restart [2.06ms]
+(pass) history write failure leaves a durable barrier to a context-free next turn [2.46ms]
+(pass) same native turn retries replay while intentional identical text in a new turn forwards [2.52ms]
+(pass) reusing a native turn with changed input rejects rather than replaying or forwarding [1.34ms]
+(pass) identical thread and turn across authenticated client scopes do not share receipts [1.83ms]
+(pass) failure to persist the pending barrier prevents any backend forward [1.41ms]
+(pass) a same-process observer reconnect joins the accepted request and receives its complete wire [11.83ms]
+(pass) unknown upstream outcome remains blocked after restart [2.04ms]
+(pass) a malformed stream without a saved terminal cannot unlock the next temporary turn [2.03ms]
+(pass) a eof stream without a saved terminal cannot unlock the next temporary turn [1.60ms]
+(pass) a cancel stream without a saved terminal cannot unlock the next temporary turn [1.77ms]
+(pass) legacy temporary requests without a stable turn still retain the uncertainty barrier [1.68ms]
+(pass) expired latest receipt removes cached content and cannot replay stale output [2.40ms]
+(pass) more than 256 intentional turns continue normally with only one latest receipt [139.69ms]
+(pass) distinct tool rounds and explicit Steer message IDs in one native turn are not collapsed [1.87ms]
+(pass) successful promotion removes cached responses and blocks duplicate promotion [2.02ms]
+(pass) pure persistent turns do not introduce a durable response cache [1.31ms]
+(pass) an explicit pre-Send attachment rejection releases the request for a safe retry [2.12ms]
+(pass) stream replay preserves incremental consumer text and structured output events [2.25ms]
+(pass) replayed LF terminal retains a split frame delimiter [2.05ms]
+(pass) replayed CRLF terminal retains a split frame delimiter [1.72ms]
+(pass) oversized JSON response delivers normally without a replay cache [11.25ms]
+(pass) oversized stream response delivers normally without a replay cache [7.48ms]
+(pass) compact success does not leave a pending marker that blocks ordinary continuation [1.99ms]
+(pass) new completion rolls latest receipt and history expiry together while replay does not extend either [7.09ms]
+(pass) pool shutdown settles an attached replay without claiming completion or losing uncertainty [12.31ms]
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+(pass) real admission rejection before worker start permits recovery and the next temporary question [5.04ms]
+(pass) a second pool committing between history read and reservation prevents stale forwarding [450.22ms]
+(pass) connection refusal is safely retryable while an unknown connection reset stays blocked [4.05ms]
+(pass) SQLite space pressure degrades optional cache but retains uncertainty when required history cannot fit [6.43ms]
+(pass) a legitimate same-turn trigger compaction does not collide with a normal request [2.06ms]
+(pass) a legitimate same-turn memento compaction does not collide with a normal request [1.65ms]
+(pass) a completed legacy ordinary receipt survives an upgrade without another forward [2.19ms]
+(pass) ambiguous generated instruction fails before reservation and preserves replay, string=false [2.62ms]
+(pass) ambiguous generated instruction fails before reservation and preserves replay, string=true [2.45ms]
+(pass) instruction guard scope: changed-content [1.48ms]
+(pass) instruction guard scope: new-turn [1.27ms]
+(pass) instruction guard scope: caller-id [1.22ms]
+(pass) instruction guard scope: tool-output [1.24ms]
+(pass) instruction guard scope: full-history [1.28ms]
+(pass) instruction guard scope: multiple-users [1.22ms]
+(pass) instruction guard scope: non-message [1.68ms]
+(pass) instruction guard scope: compaction [1.38ms]
+(pass) instruction guard scope: changed-attachment [1.23ms]
+(pass) instruction guard scope: same-attachment [1.37ms]
+(pass) instruction guard scope: promotion [1.21ms]
+(pass) instruction guard precedes runtime in browser-only, stream=false [2.88ms]
+(pass) instruction guard precedes runtime in browser-only, stream=true [2.98ms]
+(pass) instruction guard precedes runtime in full, stream=false [2.24ms]
+(pass) instruction guard precedes runtime in full, stream=true [2.54ms]
+
+tests/qa-pool-observer-cleanup.test.ts:
+(pass) observer listener is removed after completion with a live request signal [3.81ms]
+(pass) observer listener is removed after completion with an already-aborted request signal [2.53ms]
+(pass) abort wakes a parked observer, saves accepted work, and removes the listener [4.88ms]
+(pass) upstream read failure removes the observer listener and preserves uncertainty [1.37ms]
+(pass) timeout removes a parked observer listener and cancels its upstream reader [2.55ms]
+(pass) shutdown removes a parked observer listener and cancels its upstream reader [2.14ms]
+
+ 89 pass
+ 0 fail
+ 907 expect() calls
+Ran 89 tests across 5 files. [2.16s]

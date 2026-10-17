@@ -1,0 +1,127 @@
+{
+  "base": "4548a557ba9b4cb71fb513806fb96bfbbc05d566",
+  "pr7": "f1fde6f726112fff41a256ef4688712e7858293e",
+  "frozen": {
+    "src/qa-pool.ts": "99580cf74b96ffec8a06b44bc50ea0a858c8ca864f22aa39c33bf3ac7f48c990",
+    "tests/qa-pool-request-receipts.test.ts": "5ffc05d5213f4ec58164a80fb9e3438453bb7aefb54f75a34fd36776df1e1b44",
+    "tests/qa-pool-admission-observer.test.ts": "c4b353516827f347c1886f5280d09ba4af348e0f9e9b54af9acacf37b9c5498b"
+  },
+  "independentReviewer": "review_mol184_admission_patch",
+  "productionEditsByReviewer": false,
+  "runs": {
+    "pr6-focused": {
+      "exit": 0,
+      "log": "/tmp/mol184-oct17-independent/guard-pr6-focused.log",
+      "sha256": "5527dba054e6969b47a96d5770e5b01c7fb7e6bd139bb6e29c9391feefc6e452"
+    },
+    "pr6-eleven": {
+      "exit": 1,
+      "log": "/tmp/mol184-oct17-independent/guard-pr6-eleven.log",
+      "sha256": "fcfe7220d7b5fdf6a905e49c02b9c170f05ae0ff9e5507b76ca211bd506382ae"
+    },
+    "pr6-proof": {
+      "exit": 0,
+      "log": "/tmp/mol184-oct17-independent/guard-pr6-proof.log",
+      "sha256": "27e1863be358b09fdccc99f82990a3f4055d5b089e7e80949c7646efdaafc0e3"
+    },
+    "pr6-risk": {
+      "exit": 0,
+      "log": "/tmp/mol184-oct17-independent/guard-pr6-risk.log",
+      "sha256": "1e5317f4e3d6f9be0e059050c960933cb03b475db90945c36cbb63455d9d4a04"
+    },
+    "pr6-capacity": {
+      "exit": 0,
+      "log": "/tmp/mol184-oct17-independent/guard-pr6-capacity.log",
+      "sha256": "944741443fef3ae38ee49df6d4bd0b4eb20c94381e78148a683647dc7cf76e23"
+    },
+    "pr6-steer": {
+      "exit": 0,
+      "log": "/tmp/mol184-oct17-independent/guard-pr6-steer.log",
+      "sha256": "911e2cf3fc64ec940f20c902da417ebe9b4abeb9bec4ab16570a8a6ee0c9111e"
+    },
+    "pr6-targets": {
+      "exit": 0,
+      "log": "/tmp/mol184-oct17-independent/guard-pr6-targets.log",
+      "sha256": "746da8502dc3b1dae45729e32cc6e15d2bc916bcebb41407c583f5056740d14d"
+    },
+    "pr6-typecheck": {
+      "exit": 0,
+      "log": "/tmp/mol184-oct17-independent/guard-pr6-typecheck.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "combined-focused": {
+      "exit": 0,
+      "log": "/tmp/mol184-oct17-independent/guard-combined-focused.log",
+      "sha256": "e4515a830813608a9b898348590dcd59c0812857b26530f25dc532baf42aa3ff"
+    },
+    "combined-eleven": {
+      "exit": 1,
+      "log": "/tmp/mol184-oct17-independent/guard-combined-eleven.log",
+      "sha256": "a4fc681efccacaa62ff784f60d97e2f19fa91d02e61365583ee9b909185b3359"
+    },
+    "combined-proof": {
+      "exit": 0,
+      "log": "/tmp/mol184-oct17-independent/guard-combined-proof.log",
+      "sha256": "48aa2dd84170953c50448a884da2b76095d06104521bc0f0f1bb8167def14d76"
+    },
+    "combined-risk": {
+      "exit": 0,
+      "log": "/tmp/mol184-oct17-independent/guard-combined-risk.log",
+      "sha256": "1e5317f4e3d6f9be0e059050c960933cb03b475db90945c36cbb63455d9d4a04"
+    },
+    "combined-capacity": {
+      "exit": 0,
+      "log": "/tmp/mol184-oct17-independent/guard-combined-capacity.log",
+      "sha256": "944741443fef3ae38ee49df6d4bd0b4eb20c94381e78148a683647dc7cf76e23"
+    },
+    "combined-steer": {
+      "exit": 0,
+      "log": "/tmp/mol184-oct17-independent/guard-combined-steer.log",
+      "sha256": "c5308b340fe09a0d4d11649f04c93645c8bc7bfca91a50e9d663f9845f406a29"
+    },
+    "combined-targets": {
+      "exit": 0,
+      "log": "/tmp/mol184-oct17-independent/guard-combined-targets.log",
+      "sha256": "36ec462decfc3d84ebfa1e6528dbb17111de3e1ddbd981b8fb3d4d288ae4eb45"
+    },
+    "combined-typecheck": {
+      "exit": 0,
+      "log": "/tmp/mol184-oct17-independent/guard-combined-typecheck.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "red": {
+      "exit": 1,
+      "result": "0 pass / 4 fail / 8 assertions; expected409 received200",
+      "log": "/tmp/mol184-oct17-independent/guard-red.log",
+      "sha256": "a86b37c0041b721da1f66f9d5718937049cb1615d5983f1acc837f7544631ed4"
+    }
+  },
+  "checks": {
+    "pr6": {
+      "sourceMismatches": [],
+      "root": "/workspace/shared/mol184-oct17-review-pr6",
+      "pr7Overlays": []
+    },
+    "combined": {
+      "sourceMismatches": [],
+      "root": "/workspace/shared/mol184-oct17-review-combined",
+      "pr7Overlays": [
+        "deploy/cpr-provider.mjs",
+        "src/adapters/chatgpt-web/browser-worker.ts",
+        "src/adapters/chatgpt-web/index.ts",
+        "src/adapters/chatgpt-web/turn-broker.ts",
+        "src/adapters/chatgpt-web/turn-execution.ts",
+        "src/bridge.ts"
+      ]
+    }
+  },
+  "summary": {
+    "focused": "89 pass / 0 fail / 907 assertions",
+    "eleven": "8 pass / 3 known missing-ID failures / 77 assertions",
+    "proof": "6 pass / 36 assertions",
+    "steer": "2 pass / 6 assertions",
+    "targets": "3 pass / 14 assertions",
+    "typecheck": "exit0; only added nontracked diagnostic fixtures/probes excluded, canonical repository sources/tests/scripts included",
+    "storage": "91-page optional cache preservesR2 completecontext andnext200;40-page requiredhistory stayspending retry409; compaction androllback200"
+  }
+}

@@ -373,8 +373,28 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
       const previous = nonempty(normalized.payload.previous_response_id);
       if (previous && previous !== cached.response_id) return failure(409, "previous_response_identity_mismatch", "The previous response does not belong to this temporary conversation head");
       const incoming = Array.isArray(normalized.payload.input) ? normalized.payload.input : [];
+      const retainedInput: unknown[] = JSON.parse(cached.input_json);
+      // A pool-generated id is not authority for a new identical instruction. Keep
+      // receipt replay above this guard; never reserve a receipt or discard history
+      // for an ambiguous delta. Tool rounds and full histories are outside its scope.
+      const rawInput = typeof payload.input === "string"
+        ? [{ type: "message", role: "user", content: payload.input }] : payload.input;
+      const rawUser = Array.isArray(rawInput) && rawInput.length === 1 ? record(rawInput[0]) : {};
+      const user = incoming.length === 1 ? record(incoming[0]) : {};
+      if (!paper && !compactionRequest && rawUser.role === "user"
+        && (rawUser.type === undefined || rawUser.type === "message") && !rawUser.id
+        && user.type === "message" && typeof user.id === "string"
+        && retainedInput.some(item => {
+          const prior = record(item);
+          // The adapter's instruction revision is the raw content, including
+          // attachments; its execution key serializes it with JSON.stringify.
+          return prior.type === "message" && prior.role === "user" && prior.id === user.id
+            && JSON.stringify(prior.content) === JSON.stringify(user.content);
+        })) {
+        return failure(409, "instruction_identity_required", "This delta has an ambiguous user instruction identity; no new message was sent. For a new instruction, provide a stable, distinct user item id and retain it with the same request_id on retries. For an earlier attempt, retry its original payload with the same request_id; reconcile uncertain work before submitting a new instruction.");
+      }
       if (!incoming.some(item => record(item).role === "assistant")) {
-        normalized.payload.input = [...JSON.parse(cached.input_json), ...incoming];
+        normalized.payload.input = [...retainedInput, ...incoming];
       }
       // The pool proves account/key/thread ownership and supplies the complete private history.
       delete normalized.payload.previous_response_id;

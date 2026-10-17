@@ -661,3 +661,75 @@ test("a completed legacy ordinary receipt survives an upgrade without another fo
     } finally { f.close(); }
   }
 });
+
+function explicitRequest(body: ReturnType<typeof payload>, id: string): any {
+  const native = JSON.parse(body.client_metadata["x-codex-turn-metadata"]);
+  return { ...body, client_metadata: { "x-codex-turn-metadata": JSON.stringify({ ...native, request_id: id }) } };
+}
+
+for (const stringInput of [false, true]) test(`ambiguous generated instruction fails before reservation and preserves replay, string=${stringInput}`, async () => {
+  const f = fixture();
+  try {
+    const firstBody = explicitRequest(payload("same"), "first");
+    if (stringInput) firstBody.input = "RECEIPT_CANARY";
+    const first = await f.request(firstBody), result = await first.json(); expect(first.status).toBe(200);
+    const before = f.rows("SELECT * FROM temporary_history"), receipts = f.rows("SELECT * FROM qa_request_receipts");
+    const ambiguous = { ...explicitRequest(payload("same", "RECEIPT_CANARY", result.id), "second"), input: firstBody.input };
+    const denied = await f.request(ambiguous), error = await denied.json();
+    expect(denied.status).toBe(409); expect(error.error.code).toBe("instruction_identity_required");
+    expect(error.error.message).toContain("no new message was sent");
+    expect(f.calls).toHaveLength(1);
+    expect(f.rows("SELECT * FROM temporary_history")).toEqual(before);
+    expect(f.rows("SELECT * FROM qa_request_receipts")).toEqual(receipts);
+    expect(f.rows("SELECT pending_history_turn FROM sessions")).toEqual([{ pending_history_turn: null }]);
+    f.restart();
+    const replay = await f.request(firstBody); expect(replay.status).toBe(200); expect((await replay.json()).id).toBe(result.id);
+    const fixed = explicitRequest(payload("same", "RECEIPT_CANARY", result.id), "second"); fixed.input[0].id = "new-instruction";
+    const next = await f.request(fixed); expect(next.status).toBe(200); await next.text(); expect(f.calls).toHaveLength(2);
+  } finally { f.close(); }
+});
+
+for (const kind of ["changed-content", "new-turn", "caller-id", "tool-output", "full-history", "multiple-users", "non-message", "compaction", "changed-attachment", "same-attachment", "promotion"] as const) {
+  test(`instruction guard scope: ${kind}`, async () => {
+    const f = fixture();
+    try {
+      const firstBody = explicitRequest(payload("same"), "first");
+      if (kind.includes("attachment")) firstBody.input[0].content.push({ type: "input_image", image_url: "data:image/png;base64,AAAA" });
+      const first = await f.request(firstBody), result = await first.json(); expect(first.status).toBe(200);
+      const next = explicitRequest(payload(kind === "new-turn" ? "next" : "same", kind === "changed-content" ? "CHANGED" : "RECEIPT_CANARY", result.id), "second");
+      if (kind === "caller-id") next.input[0].id = "caller-new";
+      if (kind === "promotion") next.reasoning.effort = "high-persistent";
+      if (kind === "tool-output") next.input = [{ type: "function_call_output", call_id: "call-one", output: "ok" }];
+      if (kind === "full-history") next.input = [...f.calls[0].input, ...result.output];
+      if (kind === "multiple-users") next.input.push({ type: "message", role: "user", content: "another" });
+      if (kind === "non-message") next.input.push({ type: "function_call", call_id: "call-one", name: "tool", arguments: "{}" });
+      if (kind.includes("attachment")) next.input[0].content.push({ type: "input_image", image_url: kind === "same-attachment" ? "data:image/png;base64,AAAA" : "data:image/png;base64,BBBB" });
+      const response = await f.request(next, false, kind === "compaction" ? "/v1/responses/compact" : "/v1/responses");
+      expect(response.status).toBe(kind === "same-attachment" || kind === "promotion" ? 409 : 200); await response.text();
+      expect(f.calls).toHaveLength(kind === "same-attachment" || kind === "promotion" ? 1 : 2);
+    } finally { f.close(); }
+  });
+}
+
+for (const mode of ["browser-only", "full"] as const) for (const stream of [false, true]) {
+  test(`instruction guard precedes runtime in ${mode}, stream=${stream}`, async () => {
+    const f = fixture(); let runs = 0;
+    try {
+      f.respond(body => responseRequest(new Request("http://backend/v1/responses", {
+        method: "POST", body: JSON.stringify({ ...body, model: "chatgpt-web/high" }),
+      }), defaultConfig(mode), () => ({ name: "identity-guard-test",
+        async runTurn(_parsed, _incoming, emit) {
+          runs++; emit({ type: "text_delta", text: "ANSWER", phase: "final_answer" });
+          emit({ type: "done", stopReason: "stop", endTurn: true });
+        },
+      }), { rememberState: false }));
+      const first = explicitRequest(payload("same", "QUESTION", undefined, stream), "first");
+      const response = await f.request(first); expect(response.status).toBe(200); await response.text();
+      const next = explicitRequest(payload("same", "QUESTION", undefined, stream), "second");
+      const denied = await f.request(next); expect(denied.status).toBe(409);
+      expect((await denied.json()).error.code).toBe("instruction_identity_required"); expect(runs).toBe(1);
+      next.input[0].id = "new-user-instruction";
+      const resumed = await f.request(next); expect(resumed.status).toBe(200); await resumed.text(); expect(runs).toBe(2);
+    } finally { f.close(); }
+  });
+}
