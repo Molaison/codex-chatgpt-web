@@ -1,0 +1,217 @@
+import { expect, spyOn, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { normalizeCprRequest } from "../deploy/cpr-session.mjs";
+import { createQaPool } from "../src/qa-pool";
+import { defaultConfig, providerConfig } from "../src/config";
+import { responseRequest } from "../src/server";
+import { createChatGptWebAdapter } from "../src/adapters/chatgpt-web/index";
+import { ChatGptBrowserWorker, type BrowserTurn } from "../src/adapters/chatgpt-web/browser-worker";
+import { chatGptTurnExecutionKey } from "../src/adapters/chatgpt-web/turn-execution";
+import { TurnBroker } from "../src/adapters/chatgpt-web/turn-broker";
+import { flushResponseState } from "../src/responses/state";
+
+// Production normalizers, pool/SQLite, in-memory Request dispatch, Responses handler, adapter and
+// execution registry are untouched. Only the external browser/model boundary is
+// replaced. Counts below are mocked worker starts, never claimed live Sends.
+const MODEL = "chatgpt-web/gpt-5.6-sol-instant";
+function deferred<T>() { let resolve!: (v: T) => void; const promise = new Promise<T>(r => resolve = r); return { promise, resolve }; }
+const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+async function bounded<T>(p: Promise<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  try { return await Promise.race([p, new Promise<never>((_, reject) => timer = setTimeout(() => reject(new Error(label + " timed out")), 3000))]); }
+  finally { clearTimeout(timer!); }
+}
+const observations: object[] = [];
+function evidence(value: object) { observations.push(value); console.log("DOT_REPRO " + JSON.stringify(value)); if (process.env.DOT_EVIDENCE_PATH) writeFileSync(process.env.DOT_EVIDENCE_PATH, JSON.stringify(observations, null, 2) + "\n"); }
+
+function fixture(holdFirst = false) {
+  const root = mkdtempSync(join(tmpdir(), "dot-recovery-"));
+  const previousHome = process.env.CODEX_CHATGPT_WEB_HOME;
+  process.env.CODEX_CHATGPT_WEB_HOME = root;
+  const account = "account-" + randomUUID(), thread = "thread-" + randomUUID();
+  const key = "a".repeat(32); writeFileSync(join(root, "key"), key);
+  const config = { ...defaultConfig(), accountId: account, browserHost: "launcher" as const,
+    browserHostDescriptorPath: join(root, "not-used.json"), useSavedChats: false,
+    conversationStoreDirectory: join(root, "conversations"), brokerSocketPath: join(root, "broker.sock") };
+  const worker = ChatGptBrowserWorker.forProvider(providerConfig(config));
+  const accepted = deferred<void>(), releaseFirst = deferred<void>(), backendAborted = deferred<void>();
+  const starts: Array<{ prompt: string; answer: string }> = [];
+  const executionKeys: string[] = [], upstreamInputs: unknown[] = [];
+  const run = spyOn(worker, "run").mockImplementation(async (turn: BrowserTurn) => {
+    const prepared = await turn.prepare();
+    const index = starts.length, answer = "ANSWER_" + (index + 1);
+    starts.push({ prompt: prepared.text, answer });
+    prepared.release();
+    await turn.onSendActivated?.(); await turn.onSubmitted?.();
+    if (index === 0) { accepted.resolve(); if (holdFirst) await releaseFirst.promise; }
+    turn.onTextDelta(answer);
+    return answer;
+  });
+  const originalFetch = globalThis.fetch;
+  let upstreamFetches = 0;
+  globalThis.fetch = (async (input: any, init?: RequestInit) => {
+    const req = new Request(input, init);
+    if (!req.url.startsWith("http://127.0.0.1:19991/")) throw new Error("Unexpected network request");
+    upstreamFetches++;
+    upstreamInputs.push((await req.clone().json()).input);
+    req.signal.addEventListener("abort", () => backendAborted.resolve(), { once: true });
+    return responseRequest(req, config, provider => {
+      const adapter = createChatGptWebAdapter(provider);
+      return { ...adapter, async runTurn(parsed, incoming, emit) {
+        executionKeys.push(chatGptTurnExecutionKey(parsed));
+        return adapter.runTurn!(parsed, incoming, emit);
+      } };
+    });
+  }) as typeof fetch;
+  const poolConfig = { host: "127.0.0.1", port: 0, databasePath: join(root, "pool.sqlite"),
+    clients: [{ id: "test", keyFile: join(root, "key") }],
+    accounts: [{ id: account, origin: "http://127.0.0.1:19991", models: [MODEL], sessionModes: true }] };
+  let pool = createQaPool(poolConfig), dropNextTerminal = false, droppedTerminal = false;
+  let savedAtDrop: unknown;
+  const sql = <T = unknown>(query: string): T => { const db = new Database(poolConfig.databasePath); try { return db.query(query).get() as T; } finally { db.close(); } };
+  const exec = (query: string) => { const db = new Database(poolConfig.databasePath); try { db.exec(query); } finally { db.close(); } };
+  const ingress = async (req: Request) => {
+    const response = await pool.fetch(req);
+    if (!dropNextTerminal || !response.body || !response.ok) return response;
+    dropNextTerminal = false;
+    const reader = response.body.getReader();
+    return new Response(new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const chunk = await reader.read();
+        if (chunk.done) { controller.close(); return; }
+        if (new TextDecoder().decode(chunk.value).includes('"type":"response.completed"')) {
+          droppedTerminal = true;
+          savedAtDrop = sql("SELECT response_id FROM temporary_history");
+          await reader.cancel("injected downstream terminal loss");
+          controller.error(new Error("injected downstream terminal loss"));
+          return;
+        }
+        controller.enqueue(chunk.value);
+      }, async cancel(reason) { await reader.cancel(reason); },
+    }), { status: response.status, headers: response.headers });
+  };
+  const payload = (turn: string, text: string, id?: string, previous?: string, stream = true) => ({
+    model: MODEL, stream, reasoning: { effort: "low-temporary" },
+    input: [{ type: "message", role: "user", ...(id ? { id } : {}), content: [{ type: "input_text", text }] }],
+    ...(previous ? { previous_response_id: previous } : {}),
+    client_metadata: { "x-codex-turn-metadata": JSON.stringify({ thread_id: thread, turn_id: turn }) },
+  });
+  const request = async (body: unknown, signal?: AbortSignal, cpr = false) => {
+    const response = await ingress(new Request("http://mol184-ingress.invalid/v1/responses", {
+      method: "POST", headers: { authorization: "Bearer " + key, "content-type": "application/json" },
+      body: JSON.stringify(cpr ? normalizeCprRequest(body, {}) : body), signal,
+    }));
+    if (!signal || !response.body) return response;
+    const reader = response.body.getReader();
+    const bodyStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const abort = () => { void reader.cancel(signal.reason); controller.error(signal.reason); };
+        if (signal.aborted) abort(); else signal.addEventListener("abort", abort, { once: true });
+      },
+      async pull(controller) { try { const item = await reader.read(); if (item.done) controller.close(); else controller.enqueue(item.value); } catch (error) { try { controller.error(error); } catch {} } },
+      cancel(reason) { return reader.cancel(reason); },
+    });
+    return new Response(bodyStream, { status: response.status, headers: response.headers });
+  };
+  return { upstreamFetchCount: () => upstreamFetches, root, starts, executionKeys, upstreamInputs, accepted, releaseFirst, backendAborted, payload, request, sql, exec,
+    dropTerminal: () => { dropNextTerminal = true; },
+    dropEvidence: () => ({ droppedTerminal, savedAtDrop }),
+    restartPool: () => { pool.close(); pool = createQaPool(poolConfig); },
+    async close() {
+      releaseFirst.resolve(); pool.close(); run.mockRestore(); globalThis.fetch = originalFetch;
+      await TurnBroker.forSocket(config.brokerSocketPath).close(); flushResponseState();
+      if (previousHome === undefined) delete process.env.CODEX_CHATGPT_WEB_HOME; else process.env.CODEX_CHATGPT_WEB_HOME = previousHome;
+      rmSync(root, { recursive: true, force: true });
+    },
+  };
+}
+
+for (const route of ["pool", "cpr+pool", "stable-id-control"] as const) {
+  test(`accepted disconnect/reconnect keeps one execution via ${route}`, async () => {
+    const f = fixture(true), abort = new AbortController();
+    const body = f.payload("same-turn", "REPLAY_CANARY", route === "stable-id-control" ? "fixed-user-id" : undefined);
+    let first: Promise<unknown> | undefined, replay: Promise<Response> | undefined;
+    try {
+      first = f.request(body, abort.signal, route === "cpr+pool").then(r => r.text()).catch(() => undefined);
+      await bounded(f.accepted.promise, "first browser acceptance");
+      abort.abort(); await first; await delay(40);
+      replay = f.request(body, undefined, route === "cpr+pool");
+      await delay(40); f.releaseFirst.resolve();
+      const response = await replay, text = await response.text();
+      evidence({ scenario: "accepted-reconnect", route, status: response.status, browserWorkerStarts: f.starts.length,
+        upstreamFetches: f.upstreamFetchCount(), adapterRequests: f.executionKeys.length,
+        terminal: text.includes('"type":"response.completed"'), upstreamInputIds: f.upstreamInputs.map((input: any) => input.map((item: any) => item.id)) });
+      expect(response.status).toBe(200); expect(text).toContain('"type":"response.completed"');
+      expect(f.starts).toHaveLength(1); expect(f.upstreamFetchCount()).toBe(1);
+      const events = text.split("\n").filter(line => line.startsWith("data: ")).map(line => JSON.parse(line.slice(6)));
+      const completed = events.filter(e => e.type === "response.completed");
+      expect(completed).toHaveLength(1);
+      expect(JSON.stringify(completed[0])).toContain("ANSWER_1");
+      const again = await f.request(body, undefined, route === "cpr+pool");
+      const againText = await again.text();
+      expect(againText).toBe(text); expect(f.upstreamFetchCount()).toBe(1);
+    } finally { f.releaseFirst.resolve(); await Promise.allSettled([first, replay]); await f.close(); }
+  }, 10000);
+}
+
+test("intentional identical text under a new turn still executes twice", async () => {
+  const f = fixture();
+  try {
+    for (const turn of ["intentional-one", "intentional-two"]) {
+      const response = await f.request(f.payload(turn, "INTENTIONAL_REPEAT"));
+      expect(response.status).toBe(200); expect(await response.text()).toContain('"type":"response.completed"');
+    }
+    evidence({ scenario: "intentional-repeat-control", browserWorkerStarts: f.starts.length });
+    expect(f.starts).toHaveLength(2);
+  } finally { await f.close(); }
+});
+
+test("terminal saved before downstream loss remains recoverable with original previous_response_id", async () => {
+  const f = fixture();
+  try {
+    const seed = await f.request(f.payload("seed-turn", "SEED_CONTEXT", "seed-id", undefined, false));
+    expect(seed.status).toBe(200); const r1 = (await seed.json()).id;
+    const second = f.payload("second-turn", "SECOND_QUESTION", "second-id", r1);
+    f.dropTerminal();
+    await f.request(second).then(r => r.text()).catch(() => undefined);
+    expect(f.dropEvidence().droppedTerminal).toBe(true);
+    expect((f.dropEvidence().savedAtDrop as any)?.response_id).not.toBe(r1);
+    const retry = await f.request(second), text = await retry.text();
+    const staleNewTurn = await f.request(f.payload("unrelated-third-turn", "STALE_NEW_TURN", "third-id", r1));
+    const staleNewTurnText = await staleNewTurn.text();
+    evidence({ scenario: "terminal-loss-retry", status: retry.status, beforeResponse: r1, ...f.dropEvidence(),
+      browserWorkerStarts: f.starts.length, adapterRequests: f.executionKeys.length,
+      newTurnWithOldHeadStatus: staleNewTurn.status, newTurnWithOldHeadError: staleNewTurn.ok ? undefined : JSON.parse(staleNewTurnText).error.code,
+      error: retry.ok ? undefined : JSON.parse(text).error.code });
+    expect(staleNewTurn.status).toBe(409);
+    expect(retry.status).toBe(200); expect(text).toContain('"type":"response.completed"'); expect(f.starts).toHaveLength(2);
+    const terminalEvents = text.split("\n").filter(line => line.startsWith("data: ")).map(line => JSON.parse(line.slice(6))).filter(event => event.type === "response.completed");
+    expect(terminalEvents).toHaveLength(1);
+    expect(terminalEvents[0].response.id).toBe((f.dropEvidence().savedAtDrop as any).response_id);
+    expect(JSON.stringify(terminalEvents[0])).toContain("ANSWER_2");
+    expect(f.upstreamFetchCount()).toBe(2);
+  } finally { await f.close(); }
+});
+
+test("history commit failure followed by pool restart cannot send a context-free next turn", async () => {
+  const f = fixture();
+  try {
+    f.exec("CREATE TRIGGER reject_history BEFORE INSERT ON temporary_history BEGIN SELECT RAISE(ABORT, 'injected storage failure'); END");
+    const failed = await f.request(f.payload("first-turn", "REMEMBER_OLD_CONTEXT", "first-id", undefined, false));
+    expect(failed.status).toBe(502); await failed.text();
+    const afterFailure = f.sql("SELECT temporary_history_expected FROM sessions");
+    f.exec("DROP TRIGGER reject_history"); f.restartPool();
+    const next = await f.request(f.payload("next-turn", "WHAT_WAS_OLD_CONTEXT", "next-id", undefined, false));
+    const text = await next.text();
+    evidence({ scenario: "storage-failure-restart-next-turn", afterFailure, status: next.status,
+      browserWorkerStarts: f.starts.length, forwardedInputLength: (f.upstreamInputs.at(-1) as any[]).length,
+      forwardedOldContext: JSON.stringify(f.upstreamInputs.at(-1)).includes("REMEMBER_OLD_CONTEXT"), terminal: text.includes('"status":"completed"') });
+    const blockedBeforeNextStart = next.status >= 400 && f.starts.length === 1;
+    const reconstructedBeforeNextStart = next.ok && JSON.stringify(f.upstreamInputs.at(-1)).includes("REMEMBER_OLD_CONTEXT");
+    expect(blockedBeforeNextStart || reconstructedBeforeNextStart).toBe(true);
+  } finally { await f.close(); }
+});

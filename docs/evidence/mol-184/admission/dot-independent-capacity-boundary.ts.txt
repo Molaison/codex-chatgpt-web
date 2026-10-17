@@ -1,0 +1,52 @@
+import assert from 'node:assert/strict';
+import { Database } from 'bun:sqlite';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { createQaPool as candidate } from '../src/qa-pool';
+import { createQaPool as baseline } from '/workspace/shared/mol184-admission-baseline/src/qa-pool';
+import { createReceiptStore } from '../src/qa-pool-receipts';
+
+const findings: unknown[]=[];
+function evidence(x:unknown){findings.push(x);console.log(JSON.stringify(x));}
+function fixture(factory: typeof candidate) {
+ const root=mkdtempSync(join(tmpdir(),'dot-pob-review-')), key='a'.repeat(32);writeFileSync(join(root,'key'),key);
+ const inputs: unknown[]=[]; let calls=0,size=10,poolDb!:Database,pool:ReturnType<typeof candidate>;
+ const handler=async(req:Request)=>{inputs.push((await req.json()).input);return Response.json({id:'r'+ ++calls,status:'completed',output:[{type:'message',id:'assistant-'+calls,role:'assistant',content:[{type:'output_text',text:'a'.repeat(size)}]}]})};
+ let backend=Bun.serve({hostname:'127.0.0.1',port:0,fetch:handler});const port=backend.port!;
+ const cfg={host:'127.0.0.1',port:0,databasePath:join(root,'db'),clients:[{id:'test',keyFile:join(root,'key')}],accounts:[{id:'account',origin:backend.url.origin,models:['m'],sessionModes:true}]};
+ const setPool=(create:typeof candidate)=>{pool?.close();const original=Database.prototype.exec;Database.prototype.exec=function(...args:any[]){poolDb=this;return original.apply(this,args as any)};try{pool=create(cfg)}finally{Database.prototype.exec=original}};setPool(factory);
+ const body=(turn:string,previous?:string)=>({model:'m',stream:false,input:[{type:'message',id:'user-'+turn,role:'user',content:[{type:'input_text',text:'question'}]}],reasoning:{effort:'low-temporary'},...(previous?{previous_response_id:previous}:{}),client_metadata:{'x-codex-turn-metadata':JSON.stringify({thread_id:'thread',turn_id:turn})}});
+ const request=(b:unknown)=>pool.fetch(new Request('http://pool/v1/responses',{method:'POST',headers:{authorization:'Bearer '+key,'content-type':'application/json'},body:JSON.stringify(b)}));
+ return {inputs,body,request,setPool,setSize:(n:number)=>{size=n},limit:(n:number)=>poolDb.exec('PRAGMA max_page_count='+n),q:(q:string)=>poolDb.query(q).get(),calls:()=>calls,stopBackend:()=>backend.stop(true),startBackend:()=>{backend=Bun.serve({hostname:'127.0.0.1',port,fetch:handler})},close:()=>{pool.close();backend.stop(true);rmSync(root,{recursive:true,force:true})}};
+}
+
+for (const pages of [91,40]) {
+ const f=fixture(candidate);
+ try {
+  f.limit(pages);
+  const actualPageLimit=f.q('PRAGMA max_page_count');
+  const seed=await f.request(f.body('seed')); assert.equal(seed.status,200); await seed.text();
+  f.setSize(200*1024);
+  const largeBody=f.body('large','r1');
+  const second=await f.request(largeBody); const result=await second.json();
+  const afterSecond={head:f.q('SELECT response_id FROM temporary_history'),pending:f.q('SELECT pending_history_turn IS NOT NULL AS present FROM sessions'),receipt:f.q('SELECT state, response_json IS NULL AS noCache FROM qa_request_receipts')};
+  assert.equal(second.status,pages===91?200:502);
+  assert.deepEqual(afterSecond.head,{response_id:pages===91?'r2':'r1'});
+  assert.deepEqual(afterSecond.pending,{present:pages===91?0:1});
+  if(pages===91) assert.deepEqual(afterSecond.receipt,{state:'completed_unretained',noCache:1});
+  assert.equal(f.calls(),2);
+  f.setPool(candidate);
+  const retry=await f.request(largeBody); const retryBody=await retry.json();
+  assert.equal(retry.status,409); assert.equal(f.calls(),2);
+  assert.equal(retryBody.error.code,pages===91?'request_completed_unretained':'temporary_turn_uncertain');
+  f.setSize(10);
+  const next=await f.request(f.body('next',pages===91?'r2':'r1')); const nextBody=await next.json();
+  assert.equal(next.status,pages===91?200:409);
+  assert.equal(f.calls(),pages===91?3:2);
+  const contextPreserved=pages===91?JSON.stringify(f.inputs[2]).includes('a'.repeat(200*1024)):null;
+  if(pages===91) assert.equal(contextPreserved,true);
+  evidence({case:'required-history-boundary',pages,actualPageLimit,secondStatus:second.status,secondId:result.id,afterSecond,retryAfterRestart:retry.status,retryCode:retryBody.error.code,nextAfterRestart:next.status,nextId:nextBody.id,backendForwards:f.calls(),contextPreserved});
+ } finally {f.close()}
+}
+writeFileSync(new URL('../evidence/dot-independent-capacity-boundary.json',import.meta.url),JSON.stringify(findings,null,2)+'\n');

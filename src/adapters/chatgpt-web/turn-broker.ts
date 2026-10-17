@@ -105,6 +105,8 @@ interface TurnChannel {
   queuedCallIds: string[];
   deliveredCallIds: Set<string>;
   invocations: Map<string, PendingInvocation>;
+  /** Content-free receipts permit exact result ACK recovery only while this turn is active. */
+  completedToolResults: Map<string, string>;
   waiters: Set<ToolWaiter>;
   compactionRequested: boolean;
   compactionResult?: BrokerToolResult;
@@ -179,6 +181,7 @@ interface BrokerResponse {
 const brokers = new Map<string, TurnBroker>();
 const MAX_BROKER_LINE_CHARS = 67_108_864;
 const MAX_RETIRED_TURN_HANDLES = 64;
+const MAX_COMPLETED_TOOL_RECEIPTS = 1_024;
 const MAX_PENDING_CALL_DIAGNOSTICS = 16;
 
 function retirementDiagnostics(channel: TurnChannel): BrokerRetirementDiagnostics {
@@ -368,6 +371,7 @@ export class TurnBroker implements TurnBrokerOwner {
       queuedCallIds: [],
       deliveredCallIds: new Set(),
       invocations: new Map(),
+      completedToolResults: new Map(),
       waiters: new Set(),
       compactionRequested: false,
       compactionDeliveryCount: 0,
@@ -498,12 +502,28 @@ export class TurnBroker implements TurnBrokerOwner {
     const channel = this.channels.get(token);
     if (!channel) throw new Error("turn token is invalid or expired");
     this.assertSafeHarnessRunning(channel, true);
+    if (channel.completionCommitted) throw new Error("Codex turn completion is already committed");
     const invocation = channel.invocations.get(callId);
-    if (!invocation) throw new Error(`tool call is not pending: ${callId}`);
-    if (!channel.deliveredCallIds.delete(callId)) {
+    if (!invocation) {
+      const accepted = channel.completedToolResults.get(callId);
+      if (accepted === undefined) throw new Error(`tool call is not pending: ${callId}`);
+      const replay = createHash("sha256").update(JSON.stringify(result)).digest("hex");
+      if (replay !== accepted) throw new Error(`tool completion conflicts with the accepted result: ${callId}`);
+      return;
+    }
+    if (!channel.deliveredCallIds.has(callId)) {
       throw new Error(`tool call was completed before it was delivered: ${callId}`);
     }
+    // Serialize before mutating pending state, and retain only a digest rather than tool output.
+    const accepted = createHash("sha256").update(JSON.stringify(result)).digest("hex");
+    channel.deliveredCallIds.delete(callId);
     channel.invocations.delete(callId);
+    channel.completedToolResults.set(callId, accepted);
+    while (channel.completedToolResults.size > MAX_COMPLETED_TOOL_RECEIPTS) {
+      const oldest = channel.completedToolResults.keys().next();
+      if (oldest.done) break;
+      channel.completedToolResults.delete(oldest.value);
+    }
     console.info(`[chatgpt-web] broker trace=${channel.traceId} completed call=${callId.slice(0, 17)} pending=${channel.invocations.size} isError=${result.isError === true}`);
     invocation.resolve(result);
   }
@@ -1014,7 +1034,7 @@ export class TurnBroker implements TurnBrokerOwner {
       return { submitted: true };
     }
     if (request.method === "owner_status") {
-      return { protocolVersion: 5, acceptingExternalOwners: this.acceptingExternalOwners };
+      return { protocolVersion: 5, acceptingExternalOwners: this.acceptingExternalOwners, toolCompletionReplay: true };
     }
     if (request.method === "owner_register") {
       const environment = ownerEnvironment(request.environment);
@@ -1307,6 +1327,7 @@ export class TurnBroker implements TurnBrokerOwner {
     channel.waiters.clear();
     for (const invocation of channel.invocations.values()) invocation.reject(error);
     channel.invocations.clear();
+    channel.completedToolResults.clear();
     channel.queuedCallIds = [];
     channel.deliveredCallIds.clear();
   }
@@ -1333,6 +1354,14 @@ export class TurnBrokerTimeoutError extends Error {
   }
 }
 
+/** Only transport ambiguity permits replay of an explicitly idempotent broker operation. */
+class TurnBrokerTransportError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TurnBrokerTransportError";
+  }
+}
+
 export async function callTurnBroker<T>(
   socketPath: string,
   request: Omit<BrokerRequest, "id">,
@@ -1340,7 +1369,10 @@ export async function callTurnBroker<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   const id = opaqueId("request");
-  const settleOnResponseFrame = timeoutMs === null;
+  // Completion ACKs already settled on the frame when they used an unbounded call.
+  // Keep that behavior with their bounded timer so a definitive ACK/error cannot
+  // turn into a retryable timeout merely because the peer's FIN was lost.
+  const settleOnResponseFrame = timeoutMs === null || request.method === "owner_complete";
   // The wire protocol requires a client-owned activity identity. Most callers never need to see
   // it; the MCP server supplies its own so it can retire an ambiguously delivered claim, while
   // lower-level diagnostics receive an equally client-generated identity here.
@@ -1365,7 +1397,7 @@ export async function callTurnBroker<T>(
     const finishResponse = () => {
       if (settled) return;
       if (!response) {
-        finishError(new Error("ChatGPT web turn broker closed the connection"));
+        finishError(new TurnBrokerTransportError("ChatGPT web turn broker closed the connection"));
         return;
       }
       settled = true;
@@ -1383,9 +1415,9 @@ export async function callTurnBroker<T>(
       return;
     }
     socket.setEncoding("utf8");
-    socket.once("error", error => finishError(new Error(`ChatGPT web turn broker unavailable: ${error.message}`)));
-    // The server owns response termination. Bounded calls wait for the pipe/socket to close
-    // before their callers can advance the lifecycle while Bun drains named-pipe writes.
+    socket.once("error", error => finishError(new TurnBrokerTransportError(`ChatGPT web turn broker unavailable: ${error.message}`)));
+    // Other bounded calls wait for the server-owned pipe/socket close before their callers
+    // advance the lifecycle while Bun drains named-pipe writes. Completion ACKs settle above.
     socket.once("close", finishResponse);
     socket.once("connect", () => socket.write(`${JSON.stringify({ id, ...wireRequest })}\n`));
     socket.on("data", chunk => {
@@ -1416,7 +1448,7 @@ export async function callTurnBroker<T>(
       }
       response = parsed;
       if (settleOnResponseFrame) {
-        // Long-polls finish on the full frame; their peer can otherwise keep both halves open.
+        // Long-polls and completion ACKs finish on the full frame; the peer can keep both halves open.
         finishResponse();
         socket.destroy();
       }
@@ -1522,12 +1554,32 @@ export class RemoteTurnBroker implements TurnBrokerOwner {
   }
 
   async completeTool(token: string, callId: string, result: BrokerToolResult): Promise<void> {
-    await callTurnBroker(this.socketPath, {
-      method: "owner_complete",
-      token,
-      callId,
-      toolResult: result,
-    }, null);
+    // Snapshot the wire value once: a caller mutation or toJSON hook must not change a replay.
+    const toolResult = JSON.parse(JSON.stringify(result)) as BrokerToolResult;
+    const request = { method: "owner_complete" as const, token, callId, toolResult };
+    const complete = async () => {
+      const response = await callTurnBroker<{ completed?: unknown }>(this.socketPath, request, 5_000);
+      if (!response || typeof response !== "object" || Array.isArray(response) || response.completed !== true) {
+        throw new Error("DEV turn owner received an invalid tool completion result");
+      }
+    };
+    try {
+      await complete();
+    } catch (error) {
+      if (!(error instanceof TurnBrokerTransportError) && !(error instanceof TurnBrokerTimeoutError)) throw error;
+      // DEV owners can address an older installed v5 runtime. Negotiate replay support only
+      // after ambiguous transport failure; never replay blindly against a non-idempotent peer.
+      let status: { protocolVersion?: unknown; toolCompletionReplay?: unknown };
+      try {
+        status = await callTurnBroker(this.socketPath, { method: "owner_status" }, 5_000);
+      } catch {
+        throw error;
+      }
+      if (!status || typeof status !== "object" || Array.isArray(status)
+        || status.protocolVersion !== 5 || status.toolCompletionReplay !== true) throw error;
+      // One bounded retry, with the same token/call/result. Retirement and conflicts still win.
+      await complete();
+    }
   }
 
   async waitForSafeStart(token: string, signal?: AbortSignal): Promise<void> {

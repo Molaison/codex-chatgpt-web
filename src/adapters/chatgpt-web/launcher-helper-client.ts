@@ -304,6 +304,7 @@ export class LauncherBrowserHelperClient {
             ...(turn.deferTextUntilComplete ? { deferTextUntilComplete: true } : {}),
             reasoning: turn.reasoning,
             ...(turn.modelFamily ? { modelFamily: turn.modelFamily } : {}),
+            ...(turn.proModel ? { proModel: true } : {}),
             capabilities: turn.capabilities,
             ...(turn.nativeConnector ? { nativeConnector: true } : {}),
             ...(turn.prepareResume ? { resumeAvailable: true } : {}),

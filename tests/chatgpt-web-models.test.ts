@@ -333,6 +333,7 @@ describe("fixed ChatGPT Web model routes", () => {
     expect(route).toBe(CHATGPT_WEB_ZERO_RISK_MODEL_ROUTE);
     expect(request.modelId).toBe(CHATGPT_WEB_ZERO_RISK_BACKEND_MODEL);
     expect(request.options.reasoning).toBe("low");
+    expect(request._chatgptProModel).toBeUndefined();
 
     config.zeroRiskProEnabled = true;
     const proRequest = parsed("chatgpt-web/zero-risk-pro", "ultra");
@@ -340,6 +341,7 @@ describe("fixed ChatGPT Web model routes", () => {
     expect(proRoute).toBe(CHATGPT_WEB_ZERO_RISK_PRO_MODEL_ROUTE);
     expect(proRequest.modelId).toBe(CHATGPT_WEB_ZERO_RISK_PRO_BACKEND_MODEL);
     expect(proRequest.options.reasoning).toBe("low");
+    expect(proRequest._chatgptProModel).toBeTrue();
   });
 
   test("new families honor effort, gate availability, and separate pinned retained conversations", () => {
@@ -372,6 +374,7 @@ describe("fixed ChatGPT Web model routes", () => {
       routeChatGptWebRequest(request, config);
       expect(request.options.reasoning).toBe("max");
       expect(request._chatgptModelFamily).toBe(family);
+      expect(request._chatgptProModel).toBeTrue();
       const key = chatGptConversationKey(request, "provider")!;
       keys.push(key);
       expect(chatGptConversationKey({ ...request, _compactionRequest: true }, "provider")).toBe(key);

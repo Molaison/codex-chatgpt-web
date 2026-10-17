@@ -377,6 +377,8 @@ export function routeChatGptWebRequest(parsed: CodexParsedRequest, config: AppCo
   const route = requireChatGptWebModelRoute(parsed.modelId, config, parsed.options.reasoning);
   if (route.interactionMode === "automatic" && route.modelFamily) parsed._chatgptModelFamily = route.modelFamily;
   else delete parsed._chatgptModelFamily;
+  if (route.requiresPro) parsed._chatgptProModel = true;
+  else delete parsed._chatgptProModel;
   parsed.modelId = route.backendModel;
   // Zero Risk preserves a distinct backend identity. Its immutable Codex effort is only a
   // protocol/catalog value; the manual adapter must never reinterpret it as a ChatGPT selection.
@@ -1024,6 +1026,16 @@ async function redownloadGeneratedFile(
   return expired();
 }
 
+// Emitted only before HTTP turn admission; downstream pools may safely release
+// their local pending reservation on this exact structured contract.
+function drainingResponseAdmission(): Response {
+  return Response.json({ error: {
+    message: "codex-chatgpt-web is draining for a requested service operation",
+    type: "server_error", code: "server_draining", retryable: true,
+    submission_state: "not_submitted", phase: "admission",
+  } }, { status: 503 });
+}
+
 export function startServer(
   config: AppConfig,
   dependencies: {
@@ -1308,7 +1320,7 @@ export function startServer(
         });
       }
       if (req.method === "POST" && url.pathname === "/v1/responses") {
-        if (draining) return formatErrorResponse(503, "server_error", "codex-chatgpt-web is draining for a requested service operation");
+        if (draining) return drainingResponseAdmission();
         return httpTurns.track(
           (signal, bindIdentity) => responseRequest(
             new Request(req, { signal }),
@@ -1322,7 +1334,7 @@ export function startServer(
         );
       }
       if (req.method === "POST" && url.pathname === "/v1/responses/compact") {
-        if (draining) return formatErrorResponse(503, "server_error", "codex-chatgpt-web is draining for a requested service operation");
+        if (draining) return drainingResponseAdmission();
         return httpTurns.track(
           (signal, bindIdentity) => compactRequest(
             new Request(req, { signal }),

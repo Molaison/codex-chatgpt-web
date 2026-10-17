@@ -7,6 +7,8 @@ export interface CodexParsedRequest {
   _rawBody?: unknown;
   /** Set only by the trusted Web route, never parsed from caller-supplied model metadata. */
   _chatgptModelFamily?: "5.6" | "6";
+  /** True only for a routed Pro model (for example GPT-5.6 Pro or GPT-6 Pro). */
+  _chatgptProModel?: boolean;
   /** Number of leading raw input items restored from local previous_response_id state. */
   _replayPrefixLen?: number;
   /** Server-verified durable alias; a fresh browser prompt must not replace the saved chat. */

@@ -18,7 +18,10 @@ export function normalizeCprRequest(payload, headers, requestId = randomUUID()) 
   if (Array.isArray(normalized.input)) normalized.input = normalized.input.map((item,index) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
     const message = !item.type && typeof item.role === 'string' ? {...item,type:'message'} : item;
-    return message.type === 'message' && message.role === 'user' && !message.id
+    // Native callers must retain missing IDs so the QA pool can reconcile a retry
+    // or reject an ambiguous new instruction. A transport ID would hide omission.
+    // Anonymous requests remain independent one-offs, including within a session.
+    return native === undefined && message.type === 'message' && message.role === 'user' && !message.id
       ? {...message,id:'cpr-message-'+requestId+'-'+index} : message;
   });
   return normalized;

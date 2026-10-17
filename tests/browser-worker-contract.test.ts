@@ -327,24 +327,25 @@ test("Pro and standard browser turns honor independent configurable concurrency 
       releases.set(turn.traceId, () => resolve(turn.traceId));
     }),
   }) as ChatGptBrowserWorker;
-  const browserTurn = (traceId: string, reasoning: "high" | "max") => ({
+  const browserTurn = (traceId: string, proModel: boolean, reasoning: "high" | "max" = "high") => ({
     traceId,
     modelId: "chatgpt-web/high",
     reasoning,
+    proModel,
     capabilities: { localToolsEnabled: false, solAvailable: true, extraHighAvailable: true, proAvailable: true },
     prepare: async () => ({ text: traceId, images: [], release() {} }),
     onTextDelta() {},
   });
 
   const active = [
-    worker.run(browserTurn("pro_1", "max")),
-    worker.run(browserTurn("pro_2", "max")),
-    worker.run(browserTurn("standard_1", "high")),
-    worker.run(browserTurn("standard_2", "high")),
+    worker.run(browserTurn("pro_1", true)),
+    worker.run(browserTurn("pro_2", false, "max")),
+    worker.run(browserTurn("standard_1", false)),
+    worker.run(browserTurn("standard_2", false, "high")),
   ];
   await Promise.resolve();
-  await expect(worker.run(browserTurn("pro_3", "max"))).rejects.toThrow("Pro supports at most 2");
-  const thirdStandard = worker.run(browserTurn("standard_3", "high"));
+  await expect(worker.run(browserTurn("pro_3", true, "high"))).rejects.toThrow("Pro supports at most 2");
+  const thirdStandard = worker.run(browserTurn("standard_3", false));
   await Promise.resolve();
   expect(releases.has("standard_3")).toBeTrue();
   for (const release of releases.values()) release();
