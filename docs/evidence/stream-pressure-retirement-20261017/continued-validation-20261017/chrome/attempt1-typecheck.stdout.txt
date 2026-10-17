@@ -1,0 +1,20 @@
+src/adapters/chatgpt-web/markdown.ts(2,21): error TS7016: Could not find a declaration file for module 'turndown-plugin-gfm'. '<YWL_HOME>/.local/lib/codex-chatgpt-web/cpr-stable-output-20261017-qa-1/runtime/app/node_modules/turndown-plugin-gfm/lib/turndown-plugin-gfm.cjs.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/turndown-plugin-gfm` if it exists or add a new declaration (.d.ts) file containing `declare module 'turndown-plugin-gfm';`
+src/adapters/chatgpt-web/markdown.ts(3,32): error TS2306: File '<YWL_HOME>/.local/lib/codex-chatgpt-web/cpr-stable-output-20261017-qa-1/runtime/app/node_modules/@mixmark-io/domino/lib/index.d.ts' is not a module.
+src/adapters/chatgpt-web/markdown.ts(87,9): error TS18046: 'math' is of type 'unknown'.
+src/adapters/chatgpt-web/markdown.ts(88,21): error TS18046: 'math' is of type 'unknown'.
+src/adapters/chatgpt-web/markdown.ts(94,5): error TS18046: 'math' is of type 'unknown'.
+src/adapters/chatgpt-web/markdown.ts(95,5): error TS18046: 'math' is of type 'unknown'.
+tests/pr13-local-chrome.fixture.test.ts(262,117): error TS2345: Argument of type '(signal: "SIGTERM") => void' is not assignable to parameter of type '(...args: [signal: "SIGINT"] | [signal: "SIGTERM"]) => void'.
+  Types of parameters 'signal' and 'args' are incompatible.
+    Type '[signal: "SIGINT"] | [signal: "SIGTERM"]' is not assignable to type '[signal: "SIGTERM"]'.
+      Type '[signal: "SIGINT"]' is not assignable to type '[signal: "SIGTERM"]'.
+        Type '"SIGINT"' is not assignable to type '"SIGTERM"'.
+tests/pr13-local-chrome.fixture.test.ts(277,28): error TS2769: No overload matches this call.
+  Overload 1 of 3, '(options: NetConnectOpts, connectionListener?: (() => void) | undefined): Socket', gave the following error.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+  Overload 2 of 3, '(port: number, host?: string | undefined, connectionListener?: (() => void) | undefined): Socket', gave the following error.
+    Argument of type '{ host: string; port: number | undefined; }' is not assignable to parameter of type 'number'.
+  Overload 3 of 3, '(path: string, connectionListener?: (() => void) | undefined): Socket', gave the following error.
+    Argument of type '{ host: string; port: number | undefined; }' is not assignable to parameter of type 'string'.

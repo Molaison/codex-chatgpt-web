@@ -1,0 +1,103 @@
+{
+  "frozenAt": "2026-10-17T19:29:44.957410Z",
+  "head": "cb12f370feb558002c7416ffe0087a9814e1b091",
+  "tree": "cd61345eca6242cd98d8228421faf9327e76871c",
+  "bunRevision": "1.4.0+34cbb9a40",
+  "bunSha256": "33d56b070be6a9e3da0ab013038b43d1645d0534ca811ecdba4472599117eb4b",
+  "dependencyRoot": "<YWL_TASK>/dependency-overlay",
+  "sourceAndScriptSha256": {
+    "src/server.ts": "c5c75ddc3a83702309f5204d5e729bf55df6bf8423117ae69ad2239415178455",
+    "src/event-queue.ts": "2995a648b8047ad310e4a875e0d38f49c4db71e2c55dda0b2fb1dd996eb6893b",
+    "src/bridge.ts": "636f37ef9eabb4af1779f99d10339d12f0052d220ff4a6f75774ebdace339438",
+    "src/adapters/chatgpt-web/index.ts": "0f5ffb688af811e2fe5e4b1f0348f7c88fad5152cecc5b9225cb495f530b0fd0",
+    "src/adapters/chatgpt-web/turn-execution.ts": "47de43e2dac9821d457bbca24909c396c54cda9571d46094787a2a4c4090290f",
+    "package.json": "955d3bde550b8226cb0ee827d9749d04ac1bd224d35e45fee87f06449d5d00ac",
+    "bun.lock": "298a89f9a9f050fbb7c4c839cc56966c1cb214c0369bc98221c6a262c6adb6a0",
+    "overnight-real-adapter-http-probe.ts": "d9a5fe727629764a4cbcfe553aab6f24472351faa978c631d0ae37c640e9a284",
+    "overnight-real-adapter-http-gated-supervisor.py": "76916117d85ac2ebf2a10c2ab488ddab556994eca8045232abaf928ddf50f248"
+  },
+  "directDependencyVersionsAndManifestHashes": {
+    "@mixmark-io/domino": {
+      "requested": "2.2.0",
+      "version": "2.2.0",
+      "manifestSha256": "2190c3aeea2de40b2a9afcbee22d0603e91b1a490ab2e24387b251e75a5ab77a"
+    },
+    "@modelcontextprotocol/sdk": {
+      "requested": "^1.31.0",
+      "version": "1.32.1",
+      "manifestSha256": "0216319ea53177f7ed419d660b2f52ccc7e3327e57f9ee2ef03225ff543aeae4"
+    },
+    "ajv": {
+      "requested": "8.20.0",
+      "version": "8.20.0",
+      "manifestSha256": "1f9033ee5a6515e7d76938b7072941862d1ed228a6879cc7fe10cdeb75107989"
+    },
+    "ajv-formats": {
+      "requested": "3.0.1",
+      "version": "3.0.1",
+      "manifestSha256": "402fb4bcfa457f0226813f3976ac42839dd619907c075c108efba8600d7edb69"
+    },
+    "chromium-bidi": {
+      "requested": "12.1.0",
+      "version": "12.1.0",
+      "manifestSha256": "6d20a42c37cc7418d80468deb0ec926e613281d872ddcc8b3b74626597f49249"
+    },
+    "fflate": {
+      "requested": "^0.8.2",
+      "version": "0.8.3",
+      "manifestSha256": "5922d8150b307bc0e4e441491c779c45379e9913d348848fca8d5cf02db4d134"
+    },
+    "playwright-core": {
+      "requested": "^1.62.0",
+      "version": "1.62.0",
+      "manifestSha256": "4556ebbf21a31c5e8dabb49c991ec291c5f00ffcad8b18cda45e4070b8a473bd"
+    },
+    "tiktoken": {
+      "requested": "1.0.22",
+      "version": "1.0.22",
+      "manifestSha256": "aa9ac5822add55718d3f6cff328c2b06e9226db770947575fd4e10868caad02d"
+    },
+    "toml-eslint-parser": {
+      "requested": "1.0.3",
+      "version": "1.0.3",
+      "manifestSha256": "8e6e9e8d0bf35de715ad4cd6c3a2f3dcd041f919f16f5653d3a9628a5cc1fcc3"
+    },
+    "turndown": {
+      "requested": "7.2.0",
+      "version": "7.2.0",
+      "manifestSha256": "d0b7a4ddc4a58defa9e090f145ea33428989635d412964eee59387e51610492f"
+    },
+    "turndown-plugin-gfm": {
+      "requested": "1.0.2",
+      "version": "1.0.2",
+      "manifestSha256": "f09037fb0ca31e3c83ce301a836d9dfa70081c8de7bde70eaf8f5d22d3606a53"
+    },
+    "zod": {
+      "requested": "4.4.3",
+      "version": "4.4.3",
+      "manifestSha256": "c630bd10b52dcf71c112a2bf78dbf2734b9db58d62de663b8d86c2ec2c8cda2e"
+    },
+    "@types/bun": {
+      "requested": "1.4.0",
+      "version": "1.4.0",
+      "manifestSha256": "7fe2d0d1b7e8b8603827820c2c56cbd15979be31fc77c3ab79ea0c30022a8bfb"
+    },
+    "@types/turndown": {
+      "requested": "5.0.5",
+      "version": "5.0.5",
+      "manifestSha256": "f6235db8c9759f2faeba474aa3187c4a2b5c324b1960164e7d2b8ba0e9510d29"
+    },
+    "typescript": {
+      "requested": "5.9.3",
+      "version": "5.9.3",
+      "manifestSha256": "822ef7ca6452205657b6288b066481ecf508bfbf43455d715cf7d3ec457561e6"
+    }
+  },
+  "limits": {
+    "responsePostRequests": 2,
+    "concurrency": 1,
+    "deadlineSeconds": 20,
+    "rssLimitBytes": 536870912
+  },
+  "physicalModelSubmissions": 0
+}

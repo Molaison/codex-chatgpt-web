@@ -1,0 +1,49 @@
+{
+  "capturedAtUtc": "2026-10-17 20:03:31 UTC",
+  "pulls": [
+    {
+      "number": 6,
+      "url": "https://github.com/Molaison/codex-chatgpt-web/pull/6",
+      "state": "closed",
+      "draft": true,
+      "merged": true,
+      "mergedAt": "2026-10-17T12:14:03Z",
+      "head": "2e1d3e3cfc74b856d02faf6099d629c22a83cdca",
+      "base": "3be25ae2855a2234cf8ae82e75f7717047293b86",
+      "mergeCommit": "d02a88115cc5af86ad65f94f7690293503300784"
+    },
+    {
+      "number": 7,
+      "url": "https://github.com/Molaison/codex-chatgpt-web/pull/7",
+      "state": "closed",
+      "draft": true,
+      "merged": true,
+      "mergedAt": "2026-10-17T12:14:03Z",
+      "head": "f1fde6f726112fff41a256ef4688712e7858293e",
+      "base": "3be25ae2855a2234cf8ae82e75f7717047293b86",
+      "mergeCommit": "d02a88115cc5af86ad65f94f7690293503300784"
+    },
+    {
+      "number": 12,
+      "url": "https://github.com/Molaison/codex-chatgpt-web/pull/12",
+      "state": "closed",
+      "draft": false,
+      "merged": true,
+      "mergedAt": "2026-10-17T18:40:46Z",
+      "head": "e88e20e1a1416bdf5dd2debcf60562302f1de560",
+      "base": "2efe57f522f7e5e82af196256d2d360753f6c91c",
+      "mergeCommit": "fbabf15c49a4c11862b88eaf6268845c85808665"
+    },
+    {
+      "number": 13,
+      "url": "https://github.com/Molaison/codex-chatgpt-web/pull/13",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "mergedAt": null,
+      "head": "cb12f370feb558002c7416ffe0087a9814e1b091",
+      "base": "fbabf15c49a4c11862b88eaf6268845c85808665",
+      "mergeCommit": "8d2ad4591e64b22dfc16dafd40ff0ad07a4aabf2"
+    }
+  ]
+}

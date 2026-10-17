@@ -1,0 +1,26 @@
+{
+  "payload": {
+    "model": "chatgpt-web/gpt-6-sol-instant",
+    "stream": false,
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "Reply with exactly: CPR IDENTITY READY"
+          }
+        ]
+      }
+    ],
+    "reasoning": {
+      "effort": "low-temporary"
+    },
+    "client_metadata": {
+      "x-codex-turn-metadata": "{\"thread_id\":\"mol184185-live-cpr-thread\",\"turn_id\":\"cpr-turn\",\"request_id\":\"cpr-native-new-instruction\"}"
+    },
+    "previous_response_id": "resp_01870cb24af448e989493a3250f6c83f"
+  },
+  "wireRequestId": "cpr-wire-one"
+}

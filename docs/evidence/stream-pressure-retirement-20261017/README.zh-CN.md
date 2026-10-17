@@ -47,3 +47,8 @@ PR13 的 Windows push CI39058704408/job117471974288 为1350通过、110跳过、
 ## 第二批追加证据
 
 实际 createChatGptWebAdapter 的 writer-boundary 修复、有限真实 HTTP/CLI、Windows 原12项fixture前后对照及最终消费端门控测试，见 [real-path/README.zh-CN.md](real-path/README.zh-CN.md)。该批保留原始失败与中间结果，区分自定义adapter、实际adapter、实际HTTP与实际CLI；新模型提交仍为零。上文“后续阻塞”是第一批发布时状态，第二批说明 c6 Windows 的旧10项消失、首发同步假设和额外malformed超时等后续发现；不能将第一批候选矩阵当当前分支全套通过。
+
+
+## Third evidence batch: exact cb12 controlled HTTP / native CLI / local Chrome
+
+See [continued-validation-20261017/README.zh-CN.md](continued-validation-20261017/README.zh-CN.md). This batch preserves earlier failures and adds exact-source-bound native resume/reconnect/Interrupt/20-cycle evidence plus local real-Chrome checks. It is not current real-ChatGPT acceptance. No product code or model request is part of this publication.

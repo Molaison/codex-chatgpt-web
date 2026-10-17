@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"01a14b69-a87c-7f83-9033-a7e529ffb09f"}
+{"type":"turn.started"}
+{"type":"error","message":"Reconnecting... 1/2 (stream disconnected before completion: stream closed before response.completed)"}
+{"type":"error","message":"Reconnecting... 2/2 (stream disconnected before completion: stream closed before response.completed)"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"OVERNIGHT_ANSWER_reconnect_9df20039d0284d1a80db70ce623954cb"}}
+{"type":"turn.completed","usage":{"input_tokens":14682,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":33,"reasoning_output_tokens":0}}

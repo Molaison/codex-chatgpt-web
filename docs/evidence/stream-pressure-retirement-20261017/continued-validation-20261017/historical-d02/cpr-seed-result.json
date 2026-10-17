@@ -1,0 +1,17 @@
+{
+  "op": "cpr-seed",
+  "http": 200,
+  "id": "resp_01870cb24af448e989493a3250f6c83f",
+  "status": "completed",
+  "text": "CPR IDENTITY READY",
+  "durationMs": 12465,
+  "sendBefore": {
+    "activated": 12,
+    "submitted": 12
+  },
+  "sendAfter": {
+    "activated": 13,
+    "submitted": 13
+  },
+  "reality": "real candidate AF_UNIX CPR provider -> private fixture auth bridge -> candidate pool/runtime/helper -> real browser; shared Rust gateway not exercised"
+}

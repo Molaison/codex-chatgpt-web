@@ -1,0 +1,787 @@
+{
+  "candidate": "cb12f370feb558002c7416ffe0087a9814e1b091",
+  "base": "fbabf15c49a4c11862b88eaf6268845c85808665",
+  "runs": [
+    {
+      "id": 39061660121,
+      "status": "completed",
+      "conclusion": "success",
+      "head": "cb12f370feb558002c7416ffe0087a9814e1b091",
+      "url": "https://github.com/Molaison/codex-chatgpt-web/actions/runs/39061660121",
+      "jobs": [
+        {
+          "id": 117480701510,
+          "name": "verify (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/setup-node@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Validate launcher installer with Windows PowerShell 5.1",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Run oven-sh/setup-bun@v2",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun install --frozen-lockfile",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun install --frozen-lockfile",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Prepare AVX2-independent Windows runtime",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Prepare compatible Linux libnotify",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Prepare owned AppImage toolset",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Run bun run verify",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun run app:package",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Verify Linux AppImage ABI on current Arch",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Ensure virtual display is available",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Run bun run app:smoke",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Upload compiled snapshot",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run oven-sh/setup-bun@v2",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/setup-node@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 117480701740,
+          "name": "verify (ubuntu-latest)",
+          "status": "completed",
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/setup-node@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Validate launcher installer with Windows PowerShell 5.1",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Run oven-sh/setup-bun@v2",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun install --frozen-lockfile",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun install --frozen-lockfile",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Prepare AVX2-independent Windows runtime",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Prepare compatible Linux libnotify",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Prepare owned AppImage toolset",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun run verify",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun run app:package",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Verify Linux AppImage ABI on current Arch",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Ensure virtual display is available",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun run app:smoke",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Upload compiled snapshot",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run oven-sh/setup-bun@v2",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/setup-node@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 117480701794,
+          "name": "verify (windows-latest)",
+          "status": "completed",
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/setup-node@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Validate launcher installer with Windows PowerShell 5.1",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run oven-sh/setup-bun@v2",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun install --frozen-lockfile",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun install --frozen-lockfile",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Prepare AVX2-independent Windows runtime",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Prepare compatible Linux libnotify",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Prepare owned AppImage toolset",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Run bun run verify",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun run app:package",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Verify Linux AppImage ABI on current Arch",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Ensure virtual display is available",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Run bun run app:smoke",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Upload compiled snapshot",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run oven-sh/setup-bun@v2",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/setup-node@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 117480701843,
+          "name": "actionlint",
+          "status": "completed",
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/setup-go@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Lint GitHub Actions",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/setup-go@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 39061663512,
+      "status": "completed",
+      "conclusion": "success",
+      "head": "cb12f370feb558002c7416ffe0087a9814e1b091",
+      "url": "https://github.com/Molaison/codex-chatgpt-web/actions/runs/39061663512",
+      "jobs": [
+        {
+          "id": 117480711101,
+          "name": "actionlint",
+          "status": "completed",
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/setup-go@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Lint GitHub Actions",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/setup-go@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 117480711259,
+          "name": "verify (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/setup-node@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Validate launcher installer with Windows PowerShell 5.1",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Run oven-sh/setup-bun@v2",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun install --frozen-lockfile",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun install --frozen-lockfile",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Prepare AVX2-independent Windows runtime",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Prepare compatible Linux libnotify",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Prepare owned AppImage toolset",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Run bun run verify",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun run app:package",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Verify Linux AppImage ABI on current Arch",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Ensure virtual display is available",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Run bun run app:smoke",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Upload compiled snapshot",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run oven-sh/setup-bun@v2",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/setup-node@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 117480711305,
+          "name": "verify (ubuntu-latest)",
+          "status": "completed",
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/setup-node@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Validate launcher installer with Windows PowerShell 5.1",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Run oven-sh/setup-bun@v2",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun install --frozen-lockfile",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun install --frozen-lockfile",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Prepare AVX2-independent Windows runtime",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Prepare compatible Linux libnotify",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Prepare owned AppImage toolset",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun run verify",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun run app:package",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Verify Linux AppImage ABI on current Arch",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Ensure virtual display is available",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun run app:smoke",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Upload compiled snapshot",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run oven-sh/setup-bun@v2",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/setup-node@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 117480711365,
+          "name": "verify (windows-latest)",
+          "status": "completed",
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/setup-node@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Validate launcher installer with Windows PowerShell 5.1",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run oven-sh/setup-bun@v2",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun install --frozen-lockfile",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun install --frozen-lockfile",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Prepare AVX2-independent Windows runtime",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Prepare compatible Linux libnotify",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Prepare owned AppImage toolset",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Run bun run verify",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run bun run app:package",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Verify Linux AppImage ABI on current Arch",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Ensure virtual display is available",
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Run bun run app:smoke",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Upload compiled snapshot",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run oven-sh/setup-bun@v2",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/setup-node@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "windows": {
+    "pass": 1362,
+    "skip": 110,
+    "fail": 0,
+    "assertions": 11275,
+    "files": 118,
+    "tests": 1472,
+    "oldMalformedTimeout": "retained/unattributed; current push87.37ms/current PR172.51ms"
+  },
+  "newPhysicalModelSubmissions": 0,
+  "earlierRealModelBudget": {
+    "used": 24,
+    "limit": 24,
+    "closed": true
+  },
+  "pr13": {
+    "draft": true,
+    "merged": false
+  },
+  "windowsLogFiles": {
+    "overnight-cb12-push-windows-ci-117480701794.log": {
+      "sha256": "daa0ab7b6ee2a709bc1eb16435b3b3d60573ac699fe410ec4a8a5ca9d979109c",
+      "bytes": 711606
+    },
+    "overnight-cb12-pr-windows-ci-117480711365.log": {
+      "sha256": "340408499419b055ea0aa863111bc430108ee8d30a54193090e2ea81bd9b831f",
+      "bytes": 712124
+    }
+  }
+}

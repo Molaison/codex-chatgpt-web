@@ -30,3 +30,8 @@ c599c21 仅修复 liveness fixture 清理；c6ab7bc 合入已由父线程合并�
 `overnight-real-adapter-http-probe-original.ts`/监督器可在隔离仓库复现其有限 HTTP 场景；`overnight-cli-candidate-{last-,}fixture.ts` 记录当时实际 CLI 的本地 provider、限制和清理方式。复现会创建新的 CLI/HTTP 执行，本轮额度已用完，不据此自行追加执行。新单元 fixture 仅运行 `bun test tests/server-real-adapter-pressure.test.ts`，不产生模型调用；Windows 外层监督器绑定源文件哈希并保留512MiB进程/2GiB子树/60秒停止线，原单元超时未改。
 
 真实浏览器/模型预算在此前24次上限关闭，未为本次后续修复重新开放。未重启共享服务、合并 PR13 或部署。
+
+
+## Supplement after this batch
+
+The untested HTTP SSE replay / native resume / real-browser gaps above describe this second batch. New exact-cb12 controlled validation is separately recorded in [the third batch](../continued-validation-20261017/README.zh-CN.md), including the initial shutdown telemetry limitation and its strict fresh-TCP follow-up. Original failures, aborts and source-binding limits above are unchanged. Actual ChatGPT coverage remains the older frozen round, not a new cb12 model run.

@@ -1,0 +1,32 @@
+[
+  {
+    "pid": 307181,
+    "entry": "live-server.ts",
+    "signal": "SIGTERM",
+    "alive_after": false
+  },
+  {
+    "pid": 295037,
+    "entry": "live-server.ts",
+    "signal": "SIGTERM",
+    "alive_after": false
+  },
+  {
+    "pid": 317233,
+    "entry": "live-full-legacy-server.ts",
+    "signal": "SIGTERM",
+    "alive_after": false
+  },
+  {
+    "pid": 365573,
+    "entry": "live-cli-auth-full-server.ts",
+    "signal": "SIGTERM",
+    "alive_after": false
+  },
+  {
+    "pid": 418441,
+    "entry": "cli-inspect-proxy.mjs",
+    "signal": "SIGTERM",
+    "alive_after": false
+  }
+]

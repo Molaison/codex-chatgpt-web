@@ -1,0 +1,10 @@
+{
+  "prefix_chars": 5085,
+  "full_chars": 5100,
+  "partial_at_disconnect": true,
+  "complete_prefix_retained": true,
+  "suffix_retained": true,
+  "explicit_completed": true,
+  "terminal_count": 1,
+  "no_extra_activation": true
+}

@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "<YWL_HOME>/.local/bin/codex",
+    "exec",
+    "--json",
+    "--sandbox",
+    "workspace-write",
+    "--skip-git-repo-check",
+    "--cd",
+    "<YWL_TASK>/native-workspace",
+    "-c",
+    "model_provider=\"openai\"",
+    "-c",
+    "openai_base_url=\"http://127.0.0.1:45063/v1\"",
+    "-c",
+    "model_reasoning_effort=\"low\"",
+    "-c",
+    "approval_policy=\"never\"",
+    "-c",
+    "features.multi_agent=false",
+    "--model",
+    "chatgpt-web/gpt-6-sol-instant",
+    "--output-last-message",
+    "<YWL_TASK>/cli-auth-last.txt",
+    "--disable",
+    "apps",
+    "Use exactly one real command tool to run: python3 -c \"from pathlib import Path; p=Path('tool-effect-count.txt'); n=int(p.read_text()) if p.exists() else 0; p.write_text(str(n+1)); print('MOL185_TOOL_EFFECT', n+1)\". Wait for actual stdout. Then answer the reported counter. Do not run the command again. Do not use any other tools or inspect other files or directories."
+  ],
+  "authentication": "existing native ChatGPT identity; no auth or global config change",
+  "cwd": "<YWL_TASK>/native-workspace",
+  "correction": "Reserved built-in provider table overrides removed; original error retained",
+  "entry": "existing built-in ChatGPT auth, native item attribution preserved; apps disabled only for this invocation"
+}

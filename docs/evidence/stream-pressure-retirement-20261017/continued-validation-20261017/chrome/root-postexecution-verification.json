@@ -1,0 +1,32 @@
+{
+  "status": "PASS",
+  "reviewer": "root independent of Chrome fixture author",
+  "head": "cb12f370feb558002c7416ffe0087a9814e1b091",
+  "run1": {
+    "testsPassed": 4,
+    "assertions": 107,
+    "chromeStarts": 6,
+    "responsesPosts": 9,
+    "frozenInputs": 245,
+    "manifestSha256": "28b7b8478d424fccaea42feaba3900f3707e5b2e2fa495580eb94be892d0803f"
+  },
+  "run2": {
+    "scope": "shutdown only; three unrelated tests filtered",
+    "testsPassed": 1,
+    "assertions": 17,
+    "chromeStarts": 1,
+    "responsesPosts": 1,
+    "frozenInputs": 255,
+    "manifestSha256": "ae1b208bb3450fb061fc3d38b17631b30c2c2d1e7f81b31141ed364dbf3d2fcc"
+  },
+  "history": "run1 shutdown telemetry limit retained in nonauthor review; strict run2 supplements it, not erased",
+  "screenshotsVisuallyReviewed": 3,
+  "detachObserverZeroBeforeDomCompletion": true,
+  "replacementSpawnAfterActualChildExit": true,
+  "shutdownFreshTcpRefusedBeforeExplicitStop": true,
+  "allRecordedIdentityBoundPidsAbsent": true,
+  "observedProcessIdentities": 60,
+  "monitorForcedCleanupNeeded": false,
+  "physicalModelSubmissions": 0,
+  "boundary": "Actual installed Chrome with local fixture and production DOM loop/server/adapter/registry/journal; preparation, submission/binding and worker.run are controlled. No real ChatGPT/helper acceptance, OS signal delivery, restart durability, or post-final helper linger acceptance."
+}

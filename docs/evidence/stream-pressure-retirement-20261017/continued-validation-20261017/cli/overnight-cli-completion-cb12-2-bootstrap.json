@@ -1,0 +1,21 @@
+{
+  "ownership": {
+    "candidate": "cb12f370feb558002c7416ffe0087a9814e1b091",
+    "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+    "run": "2",
+    "scriptSha256": "72d64289c55878a453e8fc1ae7a9e61a7d7b5ab4d531f0576263396819d5fc87",
+    "initialAbsent": true,
+    "supervisorPid": 3874161,
+    "createdAtUtc": "2026-10-17T19:49:16Z"
+  },
+  "beforePopenRootSnapshot": [
+    {
+      "path": ".overnight-ownership.json",
+      "isFile": true,
+      "bytes": 363,
+      "sha256": "70fd9227c0ed82c1651b2947402194d9648542b679130a94f39f8404e37029eb"
+    }
+  ],
+  "phase": "all",
+  "parentManifest": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2-manifest.json"
+}

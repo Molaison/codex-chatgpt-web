@@ -1,0 +1,99 @@
+{
+  "verifiedAt": "2026-10-17T19:30:37.310192Z",
+  "head": "cb12f370feb558002c7416ffe0087a9814e1b091",
+  "mode": "sse",
+  "currentPairAttempts": 1,
+  "currentPairPasses": 1,
+  "currentPairFailures": 0,
+  "responseHttpRequests": 2,
+  "historicalOwnHttpResponses": {
+    "originalJsonPair": 2,
+    "originalSyncSseInitial": 1,
+    "currentGatedSsePair": 2,
+    "total": 5,
+    "originalSyncSseInitialOutcome": "typed failure correctly protected overflow; original normal-first assertion invalid; original HTTP replay not run"
+  },
+  "attempts": [
+    {
+      "attempt": "feed",
+      "httpStatus": 200,
+      "wireBytes": 2021187,
+      "terminalCount": 1,
+      "status": "completed",
+      "doneCount": 1,
+      "textBytes": 10001,
+      "textSha256": "6e54d64dcefa6e734070adc72c1e29a67b369cd0d0a6a588578139c2672479cd",
+      "expectedSha256": "6e54d64dcefa6e734070adc72c1e29a67b369cd0d0a6a588578139c2672479cd"
+    },
+    {
+      "attempt": "exact-replay",
+      "httpStatus": 200,
+      "wireBytes": 802,
+      "terminalCount": 1,
+      "status": "failed",
+      "error": {
+        "message": "Adapter event backlog exceeded",
+        "type": "server_error",
+        "code": "adapter_event_backlog_exceeded"
+      },
+      "retryable": false,
+      "doneCount": 1
+    }
+  ],
+  "consumer": {
+    "source": "real loopback response.body reader",
+    "created": true,
+    "parsedTextChars": 10001,
+    "confirmedBatches": 99,
+    "allWatermarksSatisfied": true,
+    "released": true
+  },
+  "workerStarts": 1,
+  "sendActivated": 1,
+  "submitted": 1,
+  "ownerAbortedBeforeCleanup": false,
+  "physicalModelSubmissions": 0,
+  "upstreamCalls": 0,
+  "health": [
+    {
+      "stage": "before",
+      "activeHttp": 0,
+      "activeBrowser": 0,
+      "pid": 3751532
+    },
+    {
+      "stage": "after-feed",
+      "activeHttp": 0,
+      "activeBrowser": 0,
+      "pid": 3751532
+    },
+    {
+      "stage": "after-exact-replay",
+      "activeHttp": 0,
+      "activeBrowser": 0,
+      "pid": 3751532
+    },
+    {
+      "stage": "after-cleanup-before-stop",
+      "activeHttp": 0,
+      "activeBrowser": 0,
+      "pid": 3751532
+    }
+  ],
+  "healthHttpRequests": 4,
+  "portChecks": 1,
+  "portClosed": true,
+  "portCloseError": "ConnectionRefused",
+  "cleaned": true,
+  "recordedPidAbsent": true,
+  "supervisor": {
+    "pid": 3751532,
+    "exitCode": 0,
+    "stopReason": null,
+    "rssPeak": 240906240,
+    "elapsedMs": 734,
+    "childExited": true
+  },
+  "resourceCurveSamples": 28,
+  "sourceScriptsDependenciesUnchanged": true
+}

@@ -1,0 +1,226 @@
+{
+  "head": "cb12f370feb558002c7416ffe0087a9814e1b091",
+  "logicalTurns": 25,
+  "responsesHttp": 27,
+  "runs": [
+    {
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-1",
+      "phase": "all",
+      "status": "setup-failed-or-monitor-aborted",
+      "atUtc": "2026-10-17T19:45:44Z",
+      "supervisorExit": 1,
+      "stopReason": null
+    },
+    {
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "phase": "all",
+      "status": "passed",
+      "atUtc": "2026-10-17T19:49:16Z",
+      "failure": null,
+      "finishedAt": "2026-10-17T19:52:54.988Z",
+      "supervisorExit": 0,
+      "stopReason": null
+    }
+  ],
+  "turns": [
+    {
+      "name": "exec",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:49:17.411Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "resume",
+      "kind": "resume",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:49:27.834Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "reconnect",
+      "kind": "reconnect",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:49:37.995Z",
+      "httpAttempts": 3
+    },
+    {
+      "name": "interrupt-target",
+      "kind": "interrupt",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:49:48.785Z"
+    },
+    {
+      "name": "interrupt-peer",
+      "kind": "peer",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:49:48.785Z"
+    },
+    {
+      "name": "cleanup-01",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:49:49.541Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-02",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:49:59.713Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-03",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:50:09.872Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-04",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:50:20.047Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-05",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:50:30.216Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-06",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:50:40.714Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-07",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:50:50.999Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-08",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:51:01.455Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-09",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:51:11.629Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-10",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:51:21.856Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-11",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:51:32.026Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-12",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:51:42.206Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-13",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:51:52.385Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-14",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:52:02.564Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-15",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:52:12.742Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-16",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:52:22.911Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-17",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:52:33.086Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-18",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:52:33.828Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-19",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:52:34.538Z",
+      "httpAttempts": 1
+    },
+    {
+      "name": "cleanup-20",
+      "kind": "normal",
+      "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+      "status": "passed",
+      "at": "2026-10-17T19:52:44.709Z",
+      "httpAttempts": 1
+    }
+  ],
+  "physicalModelSubmissions": 0
+}

@@ -1,0 +1,7 @@
+src/adapters/chatgpt-web/markdown.ts(2,21): error TS7016: Could not find a declaration file for module 'turndown-plugin-gfm'. '<YWL_HOME>/.local/lib/codex-chatgpt-web/cpr-stable-output-20261017-qa-1/runtime/app/node_modules/turndown-plugin-gfm/lib/turndown-plugin-gfm.cjs.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/turndown-plugin-gfm` if it exists or add a new declaration (.d.ts) file containing `declare module 'turndown-plugin-gfm';`
+src/adapters/chatgpt-web/markdown.ts(3,32): error TS2306: File '<YWL_HOME>/.local/lib/codex-chatgpt-web/cpr-stable-output-20261017-qa-1/runtime/app/node_modules/@mixmark-io/domino/lib/index.d.ts' is not a module.
+src/adapters/chatgpt-web/markdown.ts(87,9): error TS18046: 'math' is of type 'unknown'.
+src/adapters/chatgpt-web/markdown.ts(88,21): error TS18046: 'math' is of type 'unknown'.
+src/adapters/chatgpt-web/markdown.ts(94,5): error TS18046: 'math' is of type 'unknown'.
+src/adapters/chatgpt-web/markdown.ts(95,5): error TS18046: 'math' is of type 'unknown'.

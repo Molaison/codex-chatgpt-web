@@ -1,0 +1,35 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests\pr13-local-chrome.fixture.test.ts:
+[chatgpt-web] browser turn 4eeb18cf1ef4 stage=browser_page started
+[chatgpt-web] browser turn 4eeb18cf1ef4 stage=browser_page completed durationMs=0
+[chatgpt-web] browser diagnostic trace=4eeb18cf1ef4 checkpoint=01-browser-page-acquired path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run2-owned\tmp\pr13-local-chrome-suite-hf3j0Q\tmp\pr13-local-chrome-lCwqnB\diagnostics\4eeb18cf1ef4-89f3eeb6
+[chatgpt-web] browser turn 4eeb18cf1ef4 opened (transport=inline, maxMessageChars=30, estimatedInputTokens=8196, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser turn 4eeb18cf1ef4 stage=temporary_chat_preparation started
+[chatgpt-web] browser turn 4eeb18cf1ef4 stage=temporary_chat_preparation completed durationMs=0
+[chatgpt-web] browser turn 4eeb18cf1ef4 stage=effort_selection started
+[chatgpt-web] browser turn 4eeb18cf1ef4 stage=effort_selection completed durationMs=0
+[chatgpt-web] browser diagnostic trace=4eeb18cf1ef4 checkpoint=02-effort-selection-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run2-owned\tmp\pr13-local-chrome-suite-hf3j0Q\tmp\pr13-local-chrome-lCwqnB\diagnostics\4eeb18cf1ef4-89f3eeb6
+[chatgpt-web] browser turn 4eeb18cf1ef4 stage=prompt_attachment started
+[chatgpt-web] browser turn 4eeb18cf1ef4 stage=prompt_attachment completed durationMs=0
+[chatgpt-web] browser diagnostic trace=4eeb18cf1ef4 checkpoint=03-prompt-attachment-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run2-owned\tmp\pr13-local-chrome-suite-hf3j0Q\tmp\pr13-local-chrome-lCwqnB\diagnostics\4eeb18cf1ef4-89f3eeb6
+[chatgpt-web] browser turn 4eeb18cf1ef4 stage=file_attachment started
+[chatgpt-web] browser turn 4eeb18cf1ef4 stage=file_attachment completed durationMs=0
+[chatgpt-web] browser diagnostic trace=4eeb18cf1ef4 checkpoint=04-file-attachment-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run2-owned\tmp\pr13-local-chrome-suite-hf3j0Q\tmp\pr13-local-chrome-lCwqnB\diagnostics\4eeb18cf1ef4-89f3eeb6
+[chatgpt-web] browser turn 4eeb18cf1ef4 stage=send started
+[chatgpt-web] browser turn 4eeb18cf1ef4 stage=send completed durationMs=0
+[chatgpt-web] browser turn 4eeb18cf1ef4 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic trace=4eeb18cf1ef4 checkpoint=05-send-accepted path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run2-owned\tmp\pr13-local-chrome-suite-hf3j0Q\tmp\pr13-local-chrome-lCwqnB\diagnostics\4eeb18cf1ef4-89f3eeb6
+[chatgpt-web] browser diagnostic trace=4eeb18cf1ef4 checkpoint=06-response-visible path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run2-owned\tmp\pr13-local-chrome-suite-hf3j0Q\tmp\pr13-local-chrome-lCwqnB\diagnostics\4eeb18cf1ef4-89f3eeb6
+[chatgpt-web] browser turn 4eeb18cf1ef4 failed: ChatGPT web turn aborted
+[chatgpt-web] response_structure {"traceId":"4eeb18cf1ef4","checkpoint":"07-turn-failed","turnIndex":0,"turnCount":1,"columns":["parent","tag","rendered","assistant","user","searchUnit","markdown","streamingStatus","activityStart","completionControl"],"turns":[{"truncated":false,"nodes":[[-1,"section",1,1,0,0,0,0,0,0],[0,"div",1,0,0,0,0,0,0,0],[1,"div",1,0,0,0,0,0,0,0],[2,"div",1,1,0,0,0,0,0,0]]}]}
+[chatgpt-web] browser diagnostic trace=4eeb18cf1ef4 checkpoint=07-turn-failed path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run2-owned\tmp\pr13-local-chrome-suite-hf3j0Q\tmp\pr13-local-chrome-lCwqnB\diagnostics\4eeb18cf1ef4-89f3eeb6
+[chatgpt-web] browser_settled {"traceId":"4eeb18cf1ef4","outcome":"error","compaction":false,"submission":"accepted"}
+PR13_LOCAL_CHROME_FIXTURE {"mode":"shutdown","output":"<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\output\\playwright\\pr13-cb12-run2","starts":1,"simulatedSubmissions":1,"physicalModelSubmissions":0,"exited":[true]}
+(pass) Local Chrome: shutdown retains its listener until its owned Chrome child exits [3370.76ms]
+
+ 1 pass
+ 3 filtered out
+ 0 fail
+ 17 expect() calls
+Ran 1 test across 1 file. [3.85s]

@@ -1,0 +1,1 @@
+cd <YWL_TASK>/pr13-chrome-typecheck && <YWL_HOME>/.local/lib/codex-chatgpt-web/cpr-native-retry-20261017-qa-1/runtime/runtime/bun node_modules/typescript/bin/tsc --project tsconfig.json --pretty false

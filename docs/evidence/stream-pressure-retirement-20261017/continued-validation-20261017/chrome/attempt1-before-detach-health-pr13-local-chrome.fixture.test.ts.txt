@@ -1,0 +1,396 @@
+// Task-only local Chrome fixture. Not ChatGPT, not a real model/helper acceptance test.
+// Production startServer/createAdapter/journal/registry run unchanged. Only worker.run is
+// replaced with an owned Chrome plus the existing runBrowserTurn fixture seam. Preparation,
+// model selection, submission and assistant binding are synthetic; the DOM response loop is real.
+import { afterAll, expect, spyOn, test } from "bun:test";
+import type { Browser, BrowserServer, Page } from "playwright-core";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, join, resolve, sep } from "node:path";
+import { connect } from "node:net";
+import type { BrowserTurn } from "../src/adapters/chatgpt-web/browser-worker";
+import type { CodexProviderConfig } from "../src/types";
+
+const enabled = process.env.PR13_CHROME_FIXTURE_RUN === "authorized";
+const localTest = test.skipIf(!enabled);
+const chrome = process.env.CHATGPT_DOM_TEST_BROWSER ?? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+const output = resolve(process.env.PR13_CHROME_FIXTURE_OUTPUT ?? `output/playwright/pr13-local-chrome-${Date.now()}`);
+const model = "chatgpt-web/gpt-5.6-sol-instant";
+const capabilities = { localToolsEnabled: false, solAvailable: true, extraHighAvailable: false, proAvailable: false };
+const capturedHtml = readFileSync(new URL("./fixtures/chatgpt-dil-smoke.html", import.meta.url), "utf8");
+const reports: unknown[] = [];
+// Isolate homes BEFORE importing production modules: their module-level caches must never
+// bind to the user's real Codex/app state. No existing profile or login data is copied.
+const environmentKeys = ["CODEX_HOME", "CODEX_SQLITE_HOME", "CODEX_CHATGPT_WEB_HOME", "TMPDIR", "TEMP", "TMP"] as const;
+const originalEnvironment = Object.fromEntries(environmentKeys.map(key => [key, process.env[key]]));
+const originalTemporaryRoot = resolve(tmpdir());
+const suiteHome = enabled ? mkdtempSync(join(originalTemporaryRoot, "pr13-local-chrome-suite-")) : undefined;
+function removeOwnedDirectory(directory: string, parent: string) {
+  const target = resolve(directory), permittedParent = resolve(parent);
+  if (!target.toLowerCase().startsWith(permittedParent.toLowerCase() + sep)
+    || !basename(target).startsWith("pr13-local-chrome-")) throw new Error("Refusing cleanup outside the task-owned temporary directory");
+  rmSync(target, { recursive: true, force: true });
+}
+let chromium: typeof import("playwright-core")["chromium"];
+let ChatGptBrowserWorker: typeof import("../src/adapters/chatgpt-web/browser-worker")["ChatGptBrowserWorker"];
+let resolveBrowserConfig: typeof import("../src/adapters/chatgpt-web/browser-worker")["resolveBrowserConfig"];
+let createChatGptWebAdapter: typeof import("../src/adapters/chatgpt-web")["createChatGptWebAdapter"];
+let resolveChatGptWebModelMode: typeof import("../src/adapters/chatgpt-web/model")["resolveChatGptWebModelMode"];
+let chatGptTurnSessions: typeof import("../src/adapters/chatgpt-web/turn-execution")["chatGptTurnSessions"];
+let defaultConfig: typeof import("../src/config")["defaultConfig"];
+let startServer: typeof import("../src/server")["startServer"];
+if (suiteHome) {
+  for (const [key, directory] of [["CODEX_HOME", "codex"], ["CODEX_SQLITE_HOME", "sqlite"],
+    ["CODEX_CHATGPT_WEB_HOME", "proxy"], ["TMPDIR", "tmp"], ["TEMP", "tmp"], ["TMP", "tmp"]] as const) {
+    const value = join(suiteHome, directory); mkdirSync(value, { recursive: true }); process.env[key] = value;
+  }
+  ({ chromium } = await import("playwright-core"));
+  ({ ChatGptBrowserWorker, resolveBrowserConfig } = await import("../src/adapters/chatgpt-web/browser-worker"));
+  ({ createChatGptWebAdapter } = await import("../src/adapters/chatgpt-web"));
+  ({ resolveChatGptWebModelMode } = await import("../src/adapters/chatgpt-web/model"));
+  ({ chatGptTurnSessions } = await import("../src/adapters/chatgpt-web/turn-execution"));
+  ({ defaultConfig } = await import("../src/config"));
+  ({ startServer } = await import("../src/server"));
+}
+afterAll(() => {
+  for (const key of environmentKeys) {
+    if (originalEnvironment[key] === undefined) delete process.env[key]; else process.env[key] = originalEnvironment[key];
+  }
+  if (suiteHome) removeOwnedDirectory(suiteHome, originalTemporaryRoot);
+});
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
+async function until(check: () => boolean | Promise<boolean>, label: string, ms = 7000) {
+  const end = performance.now() + ms;
+  while (!await check()) { if (performance.now() > end) throw new Error(`Fixture deadline: ${label}`); await Bun.sleep(10); }
+}
+function alive(pid: number) { try { process.kill(pid, 0); return true; } catch (error: any) { if (error.code === "ESRCH") return false; throw error; } }
+function frames(wire: string): any[] { return wire.split("\n").filter(line => line.startsWith("data: {")).map(line => JSON.parse(line.slice(6))); }
+function responseEvidence(label: string, httpStatus: number, wire: string) {
+  const streaming = wire.startsWith("data:") || wire.startsWith("event:");
+  const ends = streaming ? frames(wire).filter(event => ["response.completed", "response.failed", "response.incomplete"].includes(event.type)).map(event => event.response) : [JSON.parse(wire)];
+  return { label, httpStatus, streaming, terminalCount: streaming ? ends.length : ends.filter(value => ["completed", "failed", "incomplete"].includes(value.status)).length,
+    doneCount: streaming ? wire.split("data: [DONE]").length - 1 : null,
+    terminals: ends.map(value => {
+      const text = (value.output ?? []).flatMap((item: any) => item.content ?? []).filter((part: any) => part.type === "output_text").map((part: any) => part.text ?? "").join("");
+      return { status: value.status ?? null, code: value.error?.code ?? null, retryable: value.retryable ?? null,
+        textLength: text.length, textBytes: Buffer.byteLength(text), textSha256: createHash("sha256").update(text).digest("hex") };
+    }) };
+}
+function terminal(wire: string) {
+  const ends = frames(wire).filter(event => ["response.completed", "response.failed", "response.incomplete"].includes(event.type));
+  expect(ends).toHaveLength(1); expect(wire.split("data: [DONE]")).toHaveLength(2); return ends[0].response;
+}
+type Owner = {
+  number: number; browserServer?: BrowserServer; browser?: Browser; page?: Page;
+  child?: ReturnType<BrowserServer["process"]>; exit?: Promise<void>; exitObserved: boolean; exitAt?: number;
+  ready: ReturnType<typeof deferred<void>>; closing: ReturnType<typeof deferred<void>>;
+  closeGate: ReturnType<typeof deferred<void>>; done: ReturnType<typeof deferred<void>>;
+  signal?: AbortSignal; spawnAt?: number; spawnargs?: string[]; physicalCloseStarted?: number;
+  fullText?: string; domDeltas: string[]; rejectedRequests: number; capturedFinal?: string;
+  browserVersion?: string;
+};
+type Mode = "queue" | "detach" | "retirement" | "shutdown";
+
+async function fixture(mode: Mode) {
+  if (!output.toLowerCase().startsWith(resolve("output/playwright").toLowerCase() + sep)) throw new Error("Screenshots must remain under this candidate's output/playwright directory");
+  mkdirSync(output, { recursive: true });
+  const root = mkdtempSync(join(tmpdir(), "pr13-local-chrome-"));
+  const savedHome = process.env.CODEX_CHATGPT_WEB_HOME;
+  process.env.CODEX_CHATGPT_WEB_HOME = root;
+  const signalBaseline = new Map<string, ReadonlySet<unknown>>((["SIGINT", "SIGTERM"] as const).map(signal => [signal, new Set<unknown>(process.listeners(signal))]));
+  const provider: CodexProviderConfig = { adapter: "chatgpt-web", baseUrl: `browser://local-fixture-${randomUUID()}`,
+    chatgptWeb: { ...capabilities, useSavedChats: false, storageStatePath: join(root, "unused-fresh-state.json"),
+      browserDiagnosticsPath: join(root, "diagnostics"), brokerSocketPath: join(root, "broker.sock"),
+      conversationStoreDirectory: join(root, "conversations"), accountId: "local-fixture" } };
+  const worker = ChatGptBrowserWorker.forProvider(provider);
+  const owners: Owner[] = [];
+  const http: unknown[] = [], healthPhases: unknown[] = [], manualPhases: unknown[] = [];
+  let cleanupPort: unknown;
+  let admissions = 0, sends = 0, cleaning = false, relayStreaming = false;
+  let readerStarted = false, consumed = 0, relayReleased = false;
+  let wake: (() => void) | undefined;
+  const notify = () => { const waiting = wake; wake = undefined; waiting?.(); };
+  const acknowledgement = async (target: number) => {
+    while (!relayReleased && (!readerStarted || consumed < target)) await new Promise<void>(done => { wake = done; });
+  };
+  const closeOwned = async (owner: Owner) => {
+    if (!owner.browserServer) return;
+    owner.physicalCloseStarted ??= performance.now();
+    // BrowserServer.close alone is not the recorded physical signal: await the real child close.
+    try { await owner.browserServer.close(); } finally { await owner.exit; }
+    expect(owner.exitObserved).toBe(true);
+    expect(alive(owner.child!.pid!)).toBe(false);
+  };
+  const run = spyOn(worker, "run").mockImplementation(async (turn: BrowserTurn) => {
+    // A broken retirement fence must fail before it could launch an overlapping Chrome.
+    if (owners.some(previous => previous.child && !previous.exitObserved)) throw new Error("Fixture refused an overlapping Chrome launch");
+    const owner: Owner = { number: owners.length + 1, ready: deferred<void>(), closing: deferred<void>(),
+      closeGate: deferred<void>(), done: deferred<void>(), signal: turn.abortSignal,
+      exitObserved: false, domDeltas: [], rejectedRequests: 0 };
+    owners.push(owner);
+    if (!(mode === "retirement" || mode === "shutdown") || owner.number > 1) owner.closeGate.resolve();
+    try {
+      owner.browserServer = await chromium.launchServer({ executablePath: chrome, host: "127.0.0.1", port: 0,
+        headless: true, chromiumSandbox: true, timeout: 10_000,
+        handleSIGINT: false, handleSIGTERM: false, handleSIGHUP: false,
+        args: ["--disable-gpu", "--disable-background-networking", "--disable-component-update", "--disable-sync",
+          "--no-first-run", "--no-default-browser-check", "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost"] });
+      expect(new URL(owner.browserServer.wsEndpoint()).hostname).toBe("127.0.0.1");
+      owner.child = owner.browserServer.process(); owner.spawnAt = performance.now();
+      owner.exit = new Promise<void>(done => owner.child!.once("close", () => {
+        owner.exitObserved = true; owner.exitAt = performance.now(); done();
+      }));
+      owner.spawnargs = owner.child.spawnargs;
+      expect(owner.spawnargs).toContain("--disable-gpu");
+      expect(owner.spawnargs.some(arg => /^--(?:no-sandbox|disable-setuid-sandbox)(?:=|$)/.test(arg))).toBe(false);
+      const profile = owner.spawnargs.find(arg => arg.startsWith("--user-data-dir="))?.slice("--user-data-dir=".length);
+      expect(profile).toBeTruthy();
+      expect(resolve(profile!).toLowerCase().startsWith(resolve(tmpdir()).toLowerCase() + "\\")).toBe(true);
+      expect(owner.child.exitCode).toBeNull();
+      owner.browser = await chromium.connect(owner.browserServer.wsEndpoint());
+      owner.browserVersion = owner.browser.version();
+      const context = await owner.browser.newContext({ serviceWorkers: "block", acceptDownloads: false });
+      // No real website is used. A fresh, non-persistent context has no copied storage state.
+      await context.route("**/*", route => { owner.rejectedRequests++; return route.abort("blockedbyclient"); });
+      owner.page = await context.newPage();
+      await owner.page.setContent('<!doctype html><html><head><title>Local fixture, not ChatGPT</title></head><body>'
+        + '<header style="background:#ffe37a;padding:12px;font:20px sans-serif">Local fixture, not ChatGPT</header>'
+        + '<article id="user" data-user-message-bubble>Controlled local fixture input</article>' + capturedHtml + '</body></html>');
+      const startsComplete = mode === "queue" || owner.number > 1;
+      const initialText = mode === "queue" ? "x".repeat(10001) : owner.number > 1 ? "Replacement after real exit." : "Before disconnect.";
+      await owner.page.locator("#turn").evaluate((node, value) => {
+        const container = node.querySelector(".dil-first-visible-layout")!;
+        container.innerHTML = ""; const p = document.createElement("p"); p.textContent = value.text; container.append(p);
+        if (!value.complete) {
+          const pending = document.createElement("p"); pending.id = "fixture-tail"; pending.textContent = "Pending fixture tail"; container.append(pending);
+          node.querySelector('[data-testid="copy-turn-action-button"]')?.remove();
+          const stop = document.createElement("button"); stop.dataset.testid = "stop-button"; stop.textContent = "Stop"; document.body.append(stop);
+        }
+      }, { text: initialText, complete: startsComplete });
+      const domWorker = Object.assign(Object.create(ChatGptBrowserWorker.prototype), {
+        config: { ...resolveBrowserConfig(provider), appName: "Local fixture, not ChatGPT", browserHost: "launcher",
+          useSavedChats: false, turnTimeoutMs: 15_000, browserDiagnosticsPath: join(root, "diagnostics") },
+        prepareChatSurface: async () => {},
+        selectModelAndEffort: async () => resolveChatGptWebModelMode(turn.modelId, turn.reasoning, capabilities),
+        captureSubmissionBaseline: async () => ({ userTurns: owner.page!.locator("#user"), responseTurns: owner.page!.locator("#turn"), initialTurnIdentities: [], domCache: {} }),
+        attachPromptWithCompactionRetry: async () => {},
+        sendAttachedPrompt: async () => { sends++; await turn.onSendActivated?.(); await turn.onSubmitted?.(); return "user_turn"; },
+        waitForNewAssistantTurn: async () => ({ identity: "fixture-current", locator: owner.page!.locator("#turn"), acceptedTurnIdentities: ["fixture-current"] }),
+      });
+      owner.ready.resolve();
+      // This is the production DOM snapshot/Markdown/health/completion loop, not page.textContent.
+      const domTurn = { ...turn, retainConversation: false, conversationKey: undefined,
+        onTextDelta: (text: string) => { owner.domDeltas.push(text); if (mode !== "queue") turn.onTextDelta(text); } };
+      const answer: string = await domWorker.runBrowserTurn(domTurn, undefined, owner.page);
+      owner.fullText = answer;
+      if (mode === "queue") {
+        // Explicit controlled relay: the real DOM's complete answer is split into 10001 synthetic
+        // character events. This is not real token generation. Cached production replay is untouched.
+        expect(answer).toBe("x".repeat(10001));
+        if (relayStreaming) await acknowledgement(0);
+        for (let n = 0; n < answer.length; n++) {
+          turn.onTextDelta(answer[n]!);
+          if (relayStreaming && (n + 1) % 100 === 0 && n + 100 < answer.length) await acknowledgement(n + 1);
+        }
+      }
+      if (mode === "detach") {
+        owner.capturedFinal = join(output, "pr13-detach-final.png");
+        await owner.page.screenshot({ path: owner.capturedFinal, fullPage: true });
+      }
+      return answer;
+    } finally {
+      owner.closing.resolve();
+      try { if (!cleaning) await owner.closeGate.promise; await closeOwned(owner); }
+      finally { owner.done.resolve(); }
+    }
+  });
+  const actual = createChatGptWebAdapter(provider);
+  const adapter = { ...actual, async runTurn(...args: Parameters<NonNullable<typeof actual.runTurn>>) {
+    admissions++;
+    if (owners.length === 0) relayStreaming = args[0].stream;
+    return actual.runTurn!(...args);
+  } };
+  const config = { ...defaultConfig("browser-only"), host: "127.0.0.1" as const, port: 0, useSavedChats: false,
+    solAvailable: true, proAvailable: false, experimentalBiggerContext: false,
+    composerPredictionsEnabled: false, standardConcurrencyLimit: 1 };
+  const server = startServer(config, { adapterFactory: () => adapter, fetchUpstream: async () => { throw new Error("External upstream forbidden by local fixture"); } });
+  const port = server.port;
+  if (port === undefined) throw new Error("The local fixture requires a TCP listener");
+  const base = `http://127.0.0.1:${port}`;
+  const thread = `fixture-thread-${randomUUID()}`;
+  const body = (turn = "first", stream = true) => ({ model, stream, input: [{ type: "message", role: "user", id: `fixture-user-${turn}`, content: "Controlled local fixture input" }],
+    client_metadata: { "x-codex-turn-metadata": JSON.stringify({ thread_id: thread, turn_id: `fixture-${turn}` }) } });
+  const post = (value: unknown) => fetch(base + "/v1/responses", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(value) });
+  const health = async (phase = "sample", record = true) => {
+    const value = await (await fetch(base + "/healthz", { signal: AbortSignal.timeout(1000) })).json() as any;
+    if (record) healthPhases.push({ phase, status: value.status, version: value.version, accepting_turns: value.accepting_turns,
+      active_http_turns: value.active_http_turns, active_browser_turns: value.active_browser_turns });
+    return value;
+  };
+  const control = (path: string, value?: unknown) => fetch(base + path, { method: "POST", headers: {
+    authorization: `Bearer ${config.controlToken}`, "content-type": "application/json" }, ...(value ? { body: JSON.stringify(value) } : {}) });
+  const owner = async (n = 1) => { await until(() => owners.length >= n, `owner ${n} entered`); const entry = owners[n - 1]!; await entry.ready.promise; return entry; };
+  const readAll = async (response: Response, acknowledge = false, label = `response-${http.length + 1}`) => {
+    const reader = response.body!.getReader(); const decoder = new TextDecoder(); let wire = "", pending = "";
+    try { for (;;) { const part = await reader.read(); if (part.done) break; const chunk = decoder.decode(part.value, { stream: true }); wire += chunk; pending += chunk;
+      if (acknowledge) for (let newline; (newline = pending.indexOf("\n")) >= 0;) {
+        const line = pending.slice(0, newline); pending = pending.slice(newline + 1);
+        if (!line.startsWith("data: {")) continue; const event = JSON.parse(line.slice(6));
+        if (event.type === "response.created") readerStarted = true;
+        if (event.type === "response.output_text.delta") consumed += event.delta.length;
+        notify();
+      }
+    } http.push(responseEvidence(label, response.status, wire)); return wire;
+    } catch (error) { http.push({ label, httpStatus: response.status, readError: String(error), receivedCharacters: wire.length }); throw error;
+    } finally { relayReleased = true; notify(); await reader.cancel().catch(() => {}); reader.releaseLock(); }
+  };
+  const prefix = async () => {
+    const response = await post(body()); expect(response.status).toBe(200);
+    const reader = response.body!.getReader(); let wire = "";
+    while (!wire.includes("Before disconnect.")) { const part = await reader.read(); if (part.done) throw new Error("Local fixture EOF before prefix"); wire += new TextDecoder().decode(part.value); }
+    http.push(responseEvidence("prefix-before-detach-or-cancel", response.status, wire));
+    return reader;
+  };
+  const finishDom = async (entry: Owner) => entry.page!.evaluate(() => {
+    document.querySelector("#fixture-tail")!.textContent = "After disconnect.";
+    document.querySelector('[data-testid="stop-button"]')?.remove();
+    const copy = document.createElement("button"); copy.dataset.testid = "copy-turn-action-button"; copy.textContent = "Copy"; document.querySelector("#turn")!.append(copy);
+  });
+  return { owners, root, thread, body, post, health, control, owner, readAll, prefix, finishDom,
+    note(phase: string, value: unknown) { manualPhases.push({ phase, value }); },
+    recordJson(label: string, httpStatus: number, value: unknown) { http.push(responseEvidence(label, httpStatus, JSON.stringify(value))); },
+    starts: () => owners.length, sends: () => sends, admissions: () => admissions,
+    signalShutdown() { for (const listener of process.listeners("SIGTERM")) if (!signalBaseline.get("SIGTERM")!.has(listener)) (listener as (...args: any[]) => void)("SIGTERM"); },
+    async close() {
+      cleaning = true; relayReleased = true; notify();
+      for (const entry of owners) entry.closeGate.resolve();
+      chatGptTurnSessions.clear();
+      try {
+        await Promise.all(owners.map(entry => entry.done.promise));
+        await chatGptTurnSessions.waitForPhysicalSettlement();
+      } finally {
+        run.mockRestore();
+        let closeError: unknown;
+        try {
+          await server.stop(true);
+          // Use a fresh local TCP socket, not a pooled fetch connection, to prove refusal.
+          cleanupPort = await new Promise(resolveCheck => {
+            const socket = connect({ host: "127.0.0.1", port });
+            socket.setTimeout(1000, () => { socket.destroy(); resolveCheck({ origin: base, refused: false, error: "cleanup connection timed out" }); });
+            socket.once("connect", () => { socket.destroy(); resolveCheck({ origin: base, refused: false, error: "listener still accepts connections" }); });
+            socket.once("error", (error: NodeJS.ErrnoException) => resolveCheck({ origin: base, refused: error.code === "ECONNREFUSED", code: error.code, message: error.message }));
+          });
+          if (!(cleanupPort as any).refused) throw new Error(`Fixture cleanup port was not refused: ${JSON.stringify(cleanupPort)}`);
+        } catch (error) { closeError = error; cleanupPort ??= { origin: base, refused: false, error: String(error) }; }
+        for (const signal of ["SIGINT", "SIGTERM"] as const) for (const listener of process.listeners(signal))
+          if (!signalBaseline.get(signal)!.has(listener)) process.removeListener(signal, listener);
+        if (savedHome === undefined) delete process.env.CODEX_CHATGPT_WEB_HOME; else process.env.CODEX_CHATGPT_WEB_HOME = savedHome;
+        reports.push({ mode, starts: owners.length, simulatedSubmissions: sends, physicalModelSubmissions: 0,
+          http, healthPhases, manualPhases, cleanupPort,
+          owners: owners.map(entry => ({ number: entry.number, pid: entry.child?.pid, spawnAt: entry.spawnAt, exitAt: entry.exitAt,
+            exitObserved: entry.exitObserved, pidAliveAfterCleanup: entry.child ? alive(entry.child.pid!) : false,
+            spawnargs: entry.spawnargs, domDeltaCount: entry.domDeltas.length, canonicalTextLength: entry.fullText?.length,
+            rejectedRequests: entry.rejectedRequests, capturedFinal: entry.capturedFinal, browserVersion: entry.browserVersion })) });
+        writeFileSync(join(output, "observations.json"), JSON.stringify(reports, null, 2) + "\n");
+        const screenshots = ["pr13-detach-prefix.png", "pr13-detach-final.png", "pr13-retirement-pending.png"]
+          .filter(name => existsSync(join(output, name))).map(name => ({ name,
+            sha256: createHash("sha256").update(readFileSync(join(output, name))).digest("hex") }));
+        writeFileSync(join(output, "screenshots-sha256.json"), JSON.stringify(screenshots, null, 2) + "\n");
+        console.info("PR13_LOCAL_CHROME_FIXTURE", JSON.stringify({ mode, output, starts: owners.length,
+          simulatedSubmissions: sends, physicalModelSubmissions: 0, exited: owners.map(entry => entry.exitObserved) }));
+        removeOwnedDirectory(root, suiteHome!);
+        if (closeError) throw closeError;
+      }
+    },
+  };
+}
+
+localTest("Local Chrome: real DOM answer and controlled relay preserve one typed failure on exact replay", async () => {
+  for (const stream of [false, true]) {
+    const f = await fixture("queue");
+    try {
+      // JSON needs no pacing; SSE consumes the response concurrently in readAll.
+      const first = await f.post(f.body("first", stream));
+      const wire = await f.readAll(first, stream, "normal-first-feed");
+      const complete = stream ? terminal(wire) : JSON.parse(wire);
+      expect(first.status).toBe(200); expect(complete.status).toBe("completed");
+      expect(complete.output[0].content[0].text).toBe("x".repeat(10001));
+      const replay = await f.post(f.body("first", stream));
+      const replayWire = await f.readAll(replay, false, "exact-cached-replay");
+      const failed = stream ? terminal(replayWire) : JSON.parse(replayWire);
+      expect(replay.status).toBe(stream ? 200 : 502);
+      expect(failed).toMatchObject({ status: "failed", error: { code: "adapter_event_backlog_exceeded" }, retryable: false });
+      expect(f.starts()).toBe(1); expect(f.sends()).toBe(1);
+      expect(f.owners[0]!.signal?.aborted).toBe(false);
+      expect(f.owners[0]!.exitObserved).toBe(true);
+    } finally { await f.close(); }
+  }
+}, 30_000);
+
+localTest("Local Chrome: HTTP detach preserves background DOM completion and the running journal", async () => {
+  const f = await fixture("detach"); let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  try {
+    reader = await f.prefix(); const old = await f.owner();
+    await old.page!.screenshot({ path: join(output, "pr13-detach-prefix.png"), fullPage: true });
+    await reader.cancel("local fixture HTTP detach"); reader.releaseLock(); reader = undefined;
+    expect(old.signal?.aborted).toBe(false); expect(alive(old.child!.pid!)).toBe(true);
+    expect(await f.health("detached-browser-running")).toMatchObject({ active_browser_turns: 1 });
+    f.note("http-detached-child-alive", { pid: old.child!.pid, alive: alive(old.child!.pid!), ownerAborted: old.signal?.aborted });
+    await f.finishDom(old); await old.done.promise;
+    expect(old.exitObserved).toBe(true); expect(alive(old.child!.pid!)).toBe(false);
+    const replay = terminal(await f.readAll(await f.post(f.body()), false, "background-result-reconnect"));
+    expect(replay).toMatchObject({ status: "completed" });
+    expect(replay.output[0].content[0].text).toBe("Before disconnect.\n\nAfter disconnect.");
+    expect(f.starts()).toBe(1); expect(f.sends()).toBe(1);
+    expect(await f.health("background-complete-replayed")).toMatchObject({ active_browser_turns: 0 });
+  } finally { await reader?.cancel().catch(() => {}); await f.close(); }
+}, 30_000);
+
+localTest("Local Chrome: same-owner replacement cannot launch before the cancelled child actually exits", async () => {
+  const f = await fixture("retirement"); let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let replacement: Promise<{ value?: Response; error?: unknown }> | undefined;
+  try {
+    reader = await f.prefix(); const old = await f.owner();
+    const cancelled = await f.control("/admin/interrupt-turn", { threadId: f.thread, turnId: "fixture-first" });
+    const cancellationBody = await cancelled.json() as any;
+    f.note("interrupt-result", { httpStatus: cancelled.status, result: cancellationBody });
+    expect(cancellationBody.cancelled_browser_turns).toBe(1);
+    await old.closing.promise; await reader.cancel(); reader.releaseLock(); reader = undefined;
+    expect(old.signal?.aborted).toBe(true); expect(alive(old.child!.pid!)).toBe(true);
+    expect(old.exitObserved).toBe(false); expect(await f.health("cancelled-child-alive")).toMatchObject({ active_browser_turns: 1 });
+    f.note("physical-retirement-pending", { pid: old.child!.pid, alive: alive(old.child!.pid!), exitObserved: old.exitObserved });
+    await old.page!.screenshot({ path: join(output, "pr13-retirement-pending.png"), fullPage: true });
+    replacement = f.post(f.body("replacement", false)).then(value => ({ value }), error => ({ error }));
+    await until(() => f.admissions() === 2, "replacement entered production adapter");
+    await Bun.sleep(20); expect(f.starts()).toBe(1); expect(alive(old.child!.pid!)).toBe(true);
+    old.closeGate.resolve(); await old.done.promise;
+    const next = await replacement; if (next.error) throw next.error;
+    const result = await next.value!.json() as any;
+    f.recordJson("replacement-after-real-exit", next.value!.status, result);
+    expect(result).toMatchObject({ status: "completed" });
+    expect(result.output[0].content[0].text).toBe("Replacement after real exit.");
+    expect(f.starts()).toBe(2); expect(old.exitObserved).toBe(true);
+    expect(f.owners[1]!.spawnAt!).toBeGreaterThanOrEqual(old.exitAt!);
+    expect(await f.health("replacement-complete")).toMatchObject({ active_browser_turns: 0 });
+  } finally { await reader?.cancel().catch(() => {}); await f.close(); await replacement; }
+}, 30_000);
+
+localTest("Local Chrome: shutdown retains its listener until its owned Chrome child exits", async () => {
+  const f = await fixture("shutdown"); let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  try {
+    reader = await f.prefix(); const old = await f.owner(); f.signalShutdown();
+    await old.closing.promise; await reader.cancel(); reader.releaseLock(); reader = undefined;
+    expect(old.signal?.aborted).toBe(true); expect(alive(old.child!.pid!)).toBe(true);
+    expect(await f.health("shutdown-waits-real-child")).toMatchObject({ accepting_turns: false, active_browser_turns: 1 });
+    f.note("shutdown-physical-retirement-pending", { pid: old.child!.pid, alive: alive(old.child!.pid!), exitObserved: old.exitObserved });
+    const refused = await f.control("/admin/shutdown"); expect(refused.status).toBe(409);
+    const refusedBody = await refused.json();
+    f.note("shutdown-refused-while-child-alive", { httpStatus: refused.status, result: refusedBody });
+    expect(refusedBody).toMatchObject({ status: "refused", active_browser_turns: 1 });
+    old.closeGate.resolve(); await old.done.promise;
+    expect(old.exitObserved).toBe(true); expect(alive(old.child!.pid!)).toBe(false);
+    await until(async () => { try { await f.health("shutdown-close-poll", false); return false; } catch { return true; } }, "shutdown listener closed");
+    f.note("shutdown-listener-unreachable-after-child-close", { pid: old.child!.pid, alive: alive(old.child!.pid!), exitObserved: old.exitObserved });
+  } finally { await reader?.cancel().catch(() => {}); await f.close(); }
+}, 30_000);

@@ -1,0 +1,11 @@
+{
+  "used": 24,
+  "limit": 24,
+  "accounting": "18 earlier model submissions + initial true CLI model + its tool-result model continuation; future distinct Requests conservatively consume one",
+  "seen": [
+    "b96cca54148d535cef8c2b1131db984cb8988b0e1cc777d57b1b4e73c3b0ada4",
+    "6f63c650de80931a3c67ffef2941f7e1b8baf3501fe3bae4c338debb7f23c7e9",
+    "5d964564c110660814e3e460490e59f1dd245360331e42147f1ec8e63ebe78fe",
+    "ec6045214b523a1624c994ca9497852f022222160d91b3160b16fa3232341636"
+  ]
+}

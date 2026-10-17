@@ -1,0 +1,129 @@
+{
+  "reviewer": "mol190_spec; independent of fixture author",
+  "reviewedAtUtc": "2026-10-17T20:09:12.361295+00:00",
+  "method": "read-only source/hash and existing raw observation/log review; no test, Chrome, CLI or HTTP execution",
+  "verdict": "supplemental shutdown runtime evidence passes within the declared controlled local-Chrome scope; prior run1 evidence limit remains preserved",
+  "head": "cb12f370feb558002c7416ffe0087a9814e1b091",
+  "fixtureSha256": "444bd1ad73b2efbda5b5794705b85674413a2bb9e5920e013bdf0f9fb0bae924",
+  "binding": {
+    "manifestSha256Before": "ae1b208bb3450fb061fc3d38b17631b30c2c2d1e7f81b31141ed364dbf3d2fcc",
+    "manifestSha256After": "ae1b208bb3450fb061fc3d38b17631b30c2c2d1e7f81b31141ed364dbf3d2fcc",
+    "supervisorBeforeAfterMatch": true,
+    "independentCurrentFrozenInputsVerified": 255,
+    "allCurrentFrozenInputsMatch": true
+  },
+  "execution": {
+    "selectedCase": "shutdown",
+    "testsPass": 1,
+    "filtered": 3,
+    "testsFail": 0,
+    "assertions": 17,
+    "bunPid": 31944,
+    "bunExit": 0,
+    "realChromePid": 37000,
+    "realChromeExitObserved": true,
+    "realChromeAliveAfterCleanup": false,
+    "jobForcedKills": [],
+    "jobMembersBeforeHandleClose": [],
+    "remainingOwnedPids": [],
+    "physicalModelSubmissions": 0,
+    "elapsedMs": 4358,
+    "resourceSamples": 38
+  },
+  "causalSequence": [
+    {
+      "step": 1,
+      "evidence": {
+        "pid": 37000,
+        "alive": true,
+        "exitObserved": false
+      },
+      "meaning": "Shutdown began while the real child remained alive and close was not yet observed."
+    },
+    {
+      "step": 2,
+      "health": {
+        "phase": "shutdown-waits-real-child",
+        "status": "ok",
+        "version": "6.1.10",
+        "accepting_turns": false,
+        "active_http_turns": 0,
+        "active_browser_turns": 1
+      },
+      "adminShutdown": {
+        "httpStatus": 409,
+        "result": {
+          "status": "refused",
+          "accepting_turns": false,
+          "active_http_turns": 0,
+          "active_browser_turns": 1
+        }
+      },
+      "meaning": "The real listener stayed reachable and refused shutdown409 while draining with HTTP0/browser1."
+    },
+    {
+      "step": 3,
+      "childExitAtMs": 3829.6576,
+      "source": "fixture:398-399 await actual child done and assert exit/alive=false"
+    },
+    {
+      "step": 4,
+      "preExplicitStopTcp": {
+        "origin": "http://127.0.0.1:53281",
+        "refused": true,
+        "code": "ECONNREFUSED",
+        "message": "connect ECONNREFUSED 127.0.0.1:53281",
+        "pid": 37000,
+        "alive": false,
+        "exitObserved": true
+      },
+      "source": "fixture:400-409 fresh socket; only ECONNREFUSED passes before finally f.close",
+      "meaning": "This is positive TCP refusal after real physical exit and before fixture explicit server.stop, not a caught health timeout or malformed JSON."
+    },
+    {
+      "step": 5,
+      "finalCleanupTcp": {
+        "origin": "http://127.0.0.1:53281",
+        "refused": true,
+        "code": "ECONNREFUSED",
+        "message": "connect ECONNREFUSED 127.0.0.1:53281"
+      },
+      "meaning": "Separate final cleanup refusal is also preserved; it is not substituted for step4."
+    }
+  ],
+  "priorFindingResolution": {
+    "run1Unchanged": true,
+    "priorReport": "overnight-chrome-independent-review.json",
+    "oldClaimLimit": "Run1 did not isolate natural listener closure from post-cleanup stop.",
+    "newEvidence": "Run2 contains the explicit pre-stop ECONNREFUSED note plus the source ordering and successful strict assertion.",
+    "scope": "This supplemental run resolves that evidence gap only for this run and candidate. It does not retroactively strengthen run1."
+  },
+  "findings": [],
+  "remainingLimits": [
+    "Synthetic local page and worker/preparation/model/submission/binding seam, not actual ChatGPT/authenticated browser or real model acceptance.",
+    "Direct invocation of the production signal listener is used; actual OS signal delivery and real launcher/helper end handshake remain untested.",
+    "Only shutdown was re-executed; the other three tests were filtered, and their evidence remains the original run1 snapshot.",
+    "These bounded cases do not establish zero regression or an absolute no-leak guarantee."
+  ],
+  "evidencePaths": {
+    "fixture": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\tests\\pr13-local-chrome.fixture.test.ts",
+    "freeze": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\freeze.json",
+    "guard": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\pr13-cb12-run2-guard.json",
+    "observations": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\output\\playwright\\pr13-cb12-run2\\observations.json",
+    "harness": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\pr13-cb12-run2-owned\\harness.log"
+  },
+  "evidenceSha256": {
+    "overnight-source-candidate\\tests\\pr13-local-chrome.fixture.test.ts": "444bd1ad73b2efbda5b5794705b85674413a2bb9e5920e013bdf0f9fb0bae924",
+    "overnight-chrome-fixture\\freeze.json": "ae1b208bb3450fb061fc3d38b17631b30c2c2d1e7f81b31141ed364dbf3d2fcc",
+    "overnight-chrome-fixture\\pr13-cb12-run2-guard.json": "dfd1f8bb7d4e35478418883bb2813b86b2f0cdaa44f0b7f1e80d64f5859acfe8",
+    "overnight-source-candidate\\output\\playwright\\pr13-cb12-run2\\observations.json": "179f902d556f0ae55a910e872d1a9b7c2ac9b249d56464b38aab34061ecc25dc",
+    "overnight-chrome-fixture\\pr13-cb12-run2-owned\\harness.log": "a3e542df9fa9c9c4299a3372464448d9c39c682b722aab7bd872ab38bc3cd70d"
+  },
+  "preservedPriorFileHashes": {
+    "overnight-chrome-independent-review.json": "d0654edfb8fc8208c96717cd90f4e946bee9485f7b12ede021bf26dd0e3c4446",
+    "overnight-chrome-independent-review.md": "419182533955136717ab30a758df43060d87c088a94637fb9ef82eb6cbfd3c82",
+    "overnight-chrome-shutdown-fix-review.json": "2efb3cab5dfbf7baef749668f78c9766ac11f7b2eec88ef792dba6c4b18afaa5",
+    "overnight-chrome-fixture\\pr13-cb12-run1-guard.json": "76eb862c211fd2a0ae40d12216093ef6ff926058fd024584efd7c896942304f7",
+    "overnight-source-candidate\\output\\playwright\\pr13-cb12-run1\\observations.json": "08d3a15d5887b018becddfbd2ac9de26d878dc821da3ad6c8e4e94e33f0cf6b3"
+  }
+}

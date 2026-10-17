@@ -1,0 +1,117 @@
+{
+  "reviewer": "mol190_spec; independent of Chrome fixture author",
+  "method": "read-only static source and existing evidence review; no tests, Chrome, CLI or HTTP executed",
+  "reviewedAtUtc": "2026-10-17T20:05:13.271524+00:00",
+  "head": "cb12f370feb558002c7416ffe0087a9814e1b091",
+  "fixtureSha256": "ed1f90f25530bb7e78df113214531d222f70d96469aa1864966a9d5bc2c37955",
+  "verdict": "supported within declared local-fixture scope, with one shutdown telemetry limitation; no demonstrated production defect",
+  "binding": {
+    "freezeSha256": "28b7b8478d424fccaea42feaba3900f3707e5b2e2fa495580eb94be892d0803f",
+    "guardManifestBeforeAfterMatch": true,
+    "guardVerifiedInputsBefore": 245,
+    "guardVerifiedInputsAfter": 245,
+    "independentCurrentUniquePathHashesVerified": 245,
+    "allCurrentHashedInputsMatch": true,
+    "supervisorBeforeAfterMatch": true
+  },
+  "observedExecution": {
+    "testsPass": 4,
+    "testsFail": 0,
+    "assertions": 107,
+    "realOwnedChromeParentProcesses": 6,
+    "chromeVersions": [
+      "155.0.8059.80"
+    ],
+    "physicalModelSubmissions": 0,
+    "jobForcedCleanupKills": [],
+    "jobMembersBeforeHandleClose": [],
+    "remainingOwnedPids": [],
+    "exitCode": 0,
+    "elapsedMs": 27181,
+    "proxyPeakRssBytes": 280145920,
+    "treePeakRssBytes": 731156480
+  },
+  "conclusions": [
+    {
+      "kind": "queue",
+      "status": "supported",
+      "evidence": "Both JSON and SSE first feed completed with exact 10001-byte SHA. Exact replay has one nonretryable adapter_event_backlog_exceeded failure (JSON502/SSE200, SSE DONE1), starts/Send1.",
+      "boundary": "Real DOM extraction; explicit 10001-character relay is synthetic, not measured natural model token production."
+    },
+    {
+      "kind": "detach-background-completion",
+      "status": "supported",
+      "fixtureLines": [
+        336,
+        344
+      ],
+      "evidence": "Before finishDom, actual health is HTTP0/browser1, owner not aborted and Chrome alive. Initial prefix has no terminal. DOM then completes; one-owner/one-Send replay has the exact 37-byte final hash and one completed terminal.",
+      "priorFinding": "Previous missing-http0 P2 is resolved by both source ordering and observed health.",
+      "boundary": "Same-process running journal only; no restart/durable-storage acceptance."
+    },
+    {
+      "kind": "physical-retirement-replacement",
+      "status": "supported",
+      "fixtureLines": [
+        125,
+        127,
+        358,
+        378
+      ],
+      "evidence": {
+        "cancelledEntryStillBusy": true,
+        "oldChromeExitAtMs": 20030.3483,
+        "replacementLaunchReportedAtMs": 20300.4234,
+        "gapMs": 270.0750999999982,
+        "replacementCompleted": true
+      },
+      "reasonNoMask": "Production cancellableBrowserTurn logically settles by cancellation race while physicalSettlement waits original worker finally and actual Chrome child close. Early worker entry throws and cannot satisfy final replacement-completed assertions.",
+      "boundary": "spawnAt is recorded after launchServer resolves, not OS process birth; source early-entry guard supplies ordering protection. Real launcher/helper end transport is replaced."
+    },
+    {
+      "kind": "shutdown",
+      "status": "partly_supported_with_telemetry_limit",
+      "fixtureLines": [
+        276,
+        283,
+        386,
+        398
+      ],
+      "evidence": "While real child is alive: accepting=false, HTTP0/browser1 and admin/shutdown409. Real child close is observed. Final fixture cleanup gets TCP ECONNREFUSED; job scope has no leftover kills.",
+      "unsupportedStrongerClaim": "Natural production listener closure after physical exit, before fixture cleanup, is not conclusively isolated by the recorded telemetry."
+    }
+  ],
+  "findings": [
+    {
+      "severity": "P2 evidence limitation",
+      "location": "tests/pr13-local-chrome.fixture.test.ts:397 and :276-283",
+      "description": "Any health error (including timeout or malformed JSON) is accepted as listener closed; the recorded TCP ECONNREFUSED check runs only after fixture server.stop(true). A transient health failure followed by fixture-forced stop could therefore satisfy this shutdown test.",
+      "classification": "potential false-positive evidence path, not an observed product failure",
+      "requiredReportLimit": "Claim busy409 + actual Chrome exit + final cleanup port refusal; do not claim separately proven natural shutdown socket closure.",
+      "futureImprovementOnly": "For a future authorized run, record the actual pre-cleanup refusal code with a fresh socket and accept only ECONNREFUSED. Do not rerun now."
+    }
+  ],
+  "scopeLimits": [
+    "Fresh local page and owned Chrome only, not ChatGPT website/browser authentication or genuine model acceptance.",
+    "worker.run and preparation/model selection/submission/binding are replaced; only production server/adapter/registry/journal and DOM response loop are exercised.",
+    "Physical cancellation is split from the pending worker/Chrome promise, but normal completed-result versus independently delayed helper exit is not a distinct Chrome case.",
+    "signalShutdown invokes the installed production listener function directly; real OS signal delivery is not tested.",
+    "No absolute zero-regression or no-leak claim follows from these four bounded local cases."
+  ],
+  "sourceEvidence": {
+    "fixture": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\tests\\pr13-local-chrome.fixture.test.ts",
+    "freeze": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\freeze.json",
+    "guard": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\pr13-cb12-run1-guard.json",
+    "observations": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\output\\playwright\\pr13-cb12-run1\\observations.json",
+    "harness": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\pr13-cb12-run1-owned\\harness.log",
+    "screenshotsHashList": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\output\\playwright\\pr13-cb12-run1\\screenshots-sha256.json"
+  },
+  "evidenceSha256": {
+    "overnight-source-candidate\\tests\\pr13-local-chrome.fixture.test.ts": "ed1f90f25530bb7e78df113214531d222f70d96469aa1864966a9d5bc2c37955",
+    "overnight-chrome-fixture\\freeze.json": "28b7b8478d424fccaea42feaba3900f3707e5b2e2fa495580eb94be892d0803f",
+    "overnight-chrome-fixture\\pr13-cb12-run1-guard.json": "76eb862c211fd2a0ae40d12216093ef6ff926058fd024584efd7c896942304f7",
+    "overnight-source-candidate\\output\\playwright\\pr13-cb12-run1\\observations.json": "08d3a15d5887b018becddfbd2ac9de26d878dc821da3ad6c8e4e94e33f0cf6b3",
+    "overnight-chrome-fixture\\pr13-cb12-run1-owned\\harness.log": "f36a465f517dc1e0d2ecec6da84ee63c61c895089a25b0b1ded28b6fe15b012d",
+    "overnight-source-candidate\\output\\playwright\\pr13-cb12-run1\\screenshots-sha256.json": "ffb6bea46afd1e4909c03d721f046ccf067cab4ebf114fb52b5fb2128c92a002"
+  }
+}

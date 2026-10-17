@@ -1,0 +1,59 @@
+{
+  "outcome": "fixture setup failed before any CLI/server/Responses execution",
+  "error": "AssertionError: Never reuse an old home or overwrite prior evidence",
+  "location": "overnight-cli-completion-suite.ts:27",
+  "observedNewRootEntries": [
+    {
+      "path": "codex-home",
+      "kind": "directory",
+      "bytes": 26,
+      "mtimeUtc": "2026-10-17T19:45:44.113446Z"
+    },
+    {
+      "path": "codex-home/.bun",
+      "kind": "directory",
+      "bytes": 29,
+      "mtimeUtc": "2026-10-17T19:45:44.113446Z"
+    },
+    {
+      "path": "codex-home/.bun/install",
+      "kind": "directory",
+      "bytes": 27,
+      "mtimeUtc": "2026-10-17T19:45:44.113446Z"
+    },
+    {
+      "path": "codex-home/.bun/install/cache",
+      "kind": "directory",
+      "bytes": 25,
+      "mtimeUtc": "2026-10-17T19:45:44.113446Z"
+    },
+    {
+      "path": "codex-home/.bun/install/cache/@t@",
+      "kind": "directory",
+      "bytes": 43,
+      "mtimeUtc": "2026-10-17T19:45:44.113446Z"
+    },
+    {
+      "path": "codex-home/.bun/install/cache/@t@/0510f158353d20d1.pile",
+      "kind": "file",
+      "bytes": 48226,
+      "mtimeUtc": "2026-10-17T19:45:44.113446Z"
+    }
+  ],
+  "causalEvidence": "Supervisor launches Bun with HOME inside the future fixture root; Bun creates .bun/install/cache/@t@/*.pile before script entry. The untouched root-existence assertion then fails.",
+  "codexInvocations": 0,
+  "responsesHttp": 0,
+  "logicalTurns": 0,
+  "physicalModelSubmissions": 0,
+  "appServerInitializeVersion": null,
+  "appServerVersionReason": "app-server never started",
+  "portsEvidenceExists": false,
+  "serviceStarted": false,
+  "pid": 3851971,
+  "pidPresent": false,
+  "monitorKilledLeftover": false,
+  "frozenManifestVerifiedAfter": true,
+  "resourceCurveLimit": "Only one zero-RSS sample from a very short failed setup; no meaningful workload resource curve was measured.",
+  "remaining": "all 25 planned logical turns remain untested",
+  "retry": "none; stopped for parent decision"
+}

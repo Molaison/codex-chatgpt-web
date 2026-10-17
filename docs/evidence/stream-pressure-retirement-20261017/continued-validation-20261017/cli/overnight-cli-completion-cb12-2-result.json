@@ -1,0 +1,3615 @@
+{
+  "startedAt": "2026-10-17T19:49:17.387Z",
+  "phaseName": "all",
+  "ledgerPath": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-ledger.json",
+  "ownership": {
+    "candidate": "cb12f370feb558002c7416ffe0087a9814e1b091",
+    "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+    "run": "2",
+    "scriptSha256": "72d64289c55878a453e8fc1ae7a9e61a7d7b5ab4d531f0576263396819d5fc87",
+    "initialAbsent": true,
+    "supervisorPid": 3874161,
+    "createdAtUtc": "2026-10-17T19:49:16Z"
+  },
+  "fixture": "native Codex custom loopback provider + production adapter; only worker.run substituted",
+  "model": "chatgpt-web/gpt-5.6-luna",
+  "physicalModelSubmissions": 0,
+  "upstreamCalls": 0,
+  "logicalTurns": 25,
+  "responsesHttp": 27,
+  "spawnedNativeProcesses": 24,
+  "limits": {
+    "logicalTurns": 30,
+    "responsesHttp": 40,
+    "perLogicalMs": 45000,
+    "suiteMs": 900000,
+    "proxyRssBytes": 536870912,
+    "treeRssBytes": 2147483648,
+    "diskBytes": 2147483648
+  },
+  "phases": [
+    {
+      "at": "2026-10-17T19:49:17.389Z",
+      "event": "suite_start",
+      "root": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2-data",
+      "proxyPid": 3874165,
+      "limits": {
+        "logicalTurns": 30,
+        "responsesHttp": 40,
+        "perLogicalMs": 45000,
+        "suiteMs": 900000,
+        "proxyRssBytes": 536870912,
+        "treeRssBytes": 2147483648,
+        "diskBytes": 2147483648
+      }
+    },
+    {
+      "at": "2026-10-17T19:49:17.647Z",
+      "event": "worker_started",
+      "name": "exec"
+    },
+    {
+      "at": "2026-10-17T19:49:17.651Z",
+      "event": "worker_accepted",
+      "name": "exec",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:49:27.833Z",
+      "event": "logical_window",
+      "name": "exec",
+      "elapsedMs": 10422
+    },
+    {
+      "at": "2026-10-17T19:49:27.944Z",
+      "event": "worker_started",
+      "name": "resume"
+    },
+    {
+      "at": "2026-10-17T19:49:27.945Z",
+      "event": "worker_accepted",
+      "name": "resume",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:49:37.994Z",
+      "event": "logical_window",
+      "name": "resume",
+      "elapsedMs": 10160
+    },
+    {
+      "at": "2026-10-17T19:49:37.995Z",
+      "event": "lifecycle_cleanup",
+      "stage": "after-resume",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:49:38.114Z",
+      "event": "worker_started",
+      "name": "reconnect"
+    },
+    {
+      "at": "2026-10-17T19:49:38.115Z",
+      "event": "worker_accepted",
+      "name": "reconnect",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:49:38.116Z",
+      "event": "accepted_connection_cut",
+      "name": "reconnect",
+      "attempt": 1,
+      "faultKind": "accepted_partial_sse_eof",
+      "bodyFlushCompleted": true
+    },
+    {
+      "at": "2026-10-17T19:49:38.335Z",
+      "event": "accepted_connection_cut",
+      "name": "reconnect",
+      "attempt": 2,
+      "faultKind": "accepted_partial_sse_eof",
+      "bodyFlushCompleted": true
+    },
+    {
+      "at": "2026-10-17T19:49:48.783Z",
+      "event": "logical_window",
+      "name": "reconnect",
+      "elapsedMs": 10788
+    },
+    {
+      "at": "2026-10-17T19:49:48.784Z",
+      "event": "lifecycle_cleanup",
+      "stage": "after-reconnect",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:49:48.943Z",
+      "event": "worker_started",
+      "name": "interrupt-target"
+    },
+    {
+      "at": "2026-10-17T19:49:48.944Z",
+      "event": "worker_accepted",
+      "name": "interrupt-target",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:49:48.977Z",
+      "event": "worker_started",
+      "name": "interrupt-peer"
+    },
+    {
+      "at": "2026-10-17T19:49:48.978Z",
+      "event": "worker_accepted",
+      "name": "interrupt-peer",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:49:49.485Z",
+      "event": "worker_aborted",
+      "name": "interrupt-target"
+    },
+    {
+      "at": "2026-10-17T19:49:49.539Z",
+      "event": "logical_window",
+      "name": "native-interrupt-and-peer",
+      "elapsedMs": 755
+    },
+    {
+      "at": "2026-10-17T19:49:49.541Z",
+      "event": "lifecycle_cleanup",
+      "stage": "after-interrupt-peer",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:49:49.663Z",
+      "event": "worker_started",
+      "name": "cleanup-01"
+    },
+    {
+      "at": "2026-10-17T19:49:49.664Z",
+      "event": "worker_accepted",
+      "name": "cleanup-01",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:49:59.712Z",
+      "event": "logical_window",
+      "name": "cleanup-01",
+      "elapsedMs": 10171
+    },
+    {
+      "at": "2026-10-17T19:49:59.713Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-01",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:49:59.829Z",
+      "event": "worker_started",
+      "name": "cleanup-02"
+    },
+    {
+      "at": "2026-10-17T19:49:59.830Z",
+      "event": "worker_accepted",
+      "name": "cleanup-02",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:50:09.872Z",
+      "event": "logical_window",
+      "name": "cleanup-02",
+      "elapsedMs": 10159
+    },
+    {
+      "at": "2026-10-17T19:50:09.872Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-02",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:50:09.997Z",
+      "event": "worker_started",
+      "name": "cleanup-03"
+    },
+    {
+      "at": "2026-10-17T19:50:09.998Z",
+      "event": "worker_accepted",
+      "name": "cleanup-03",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:50:20.046Z",
+      "event": "logical_window",
+      "name": "cleanup-03",
+      "elapsedMs": 10173
+    },
+    {
+      "at": "2026-10-17T19:50:20.046Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-03",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:50:20.169Z",
+      "event": "worker_started",
+      "name": "cleanup-04"
+    },
+    {
+      "at": "2026-10-17T19:50:20.169Z",
+      "event": "worker_accepted",
+      "name": "cleanup-04",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:50:30.214Z",
+      "event": "logical_window",
+      "name": "cleanup-04",
+      "elapsedMs": 10167
+    },
+    {
+      "at": "2026-10-17T19:50:30.216Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-04",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:50:30.661Z",
+      "event": "worker_started",
+      "name": "cleanup-05"
+    },
+    {
+      "at": "2026-10-17T19:50:30.662Z",
+      "event": "worker_accepted",
+      "name": "cleanup-05",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:50:40.713Z",
+      "event": "logical_window",
+      "name": "cleanup-05",
+      "elapsedMs": 10497
+    },
+    {
+      "at": "2026-10-17T19:50:40.713Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-05",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:50:40.879Z",
+      "event": "worker_started",
+      "name": "cleanup-06"
+    },
+    {
+      "at": "2026-10-17T19:50:40.880Z",
+      "event": "worker_accepted",
+      "name": "cleanup-06",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:50:50.997Z",
+      "event": "logical_window",
+      "name": "cleanup-06",
+      "elapsedMs": 10283
+    },
+    {
+      "at": "2026-10-17T19:50:50.999Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-06",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:50:51.245Z",
+      "event": "worker_started",
+      "name": "cleanup-07"
+    },
+    {
+      "at": "2026-10-17T19:50:51.246Z",
+      "event": "worker_accepted",
+      "name": "cleanup-07",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:51:01.454Z",
+      "event": "logical_window",
+      "name": "cleanup-07",
+      "elapsedMs": 10455
+    },
+    {
+      "at": "2026-10-17T19:51:01.455Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-07",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:51:01.578Z",
+      "event": "worker_started",
+      "name": "cleanup-08"
+    },
+    {
+      "at": "2026-10-17T19:51:01.579Z",
+      "event": "worker_accepted",
+      "name": "cleanup-08",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:51:11.628Z",
+      "event": "logical_window",
+      "name": "cleanup-08",
+      "elapsedMs": 10172
+    },
+    {
+      "at": "2026-10-17T19:51:11.629Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-08",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:51:11.751Z",
+      "event": "worker_started",
+      "name": "cleanup-09"
+    },
+    {
+      "at": "2026-10-17T19:51:11.752Z",
+      "event": "worker_accepted",
+      "name": "cleanup-09",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:51:21.854Z",
+      "event": "logical_window",
+      "name": "cleanup-09",
+      "elapsedMs": 10225
+    },
+    {
+      "at": "2026-10-17T19:51:21.855Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-09",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:51:21.978Z",
+      "event": "worker_started",
+      "name": "cleanup-10"
+    },
+    {
+      "at": "2026-10-17T19:51:21.978Z",
+      "event": "worker_accepted",
+      "name": "cleanup-10",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:51:32.024Z",
+      "event": "logical_window",
+      "name": "cleanup-10",
+      "elapsedMs": 10168
+    },
+    {
+      "at": "2026-10-17T19:51:32.026Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-10",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:51:32.155Z",
+      "event": "worker_started",
+      "name": "cleanup-11"
+    },
+    {
+      "at": "2026-10-17T19:51:32.155Z",
+      "event": "worker_accepted",
+      "name": "cleanup-11",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:51:42.205Z",
+      "event": "logical_window",
+      "name": "cleanup-11",
+      "elapsedMs": 10179
+    },
+    {
+      "at": "2026-10-17T19:51:42.206Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-11",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:51:42.333Z",
+      "event": "worker_started",
+      "name": "cleanup-12"
+    },
+    {
+      "at": "2026-10-17T19:51:42.334Z",
+      "event": "worker_accepted",
+      "name": "cleanup-12",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:51:52.384Z",
+      "event": "logical_window",
+      "name": "cleanup-12",
+      "elapsedMs": 10178
+    },
+    {
+      "at": "2026-10-17T19:51:52.385Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-12",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:51:52.513Z",
+      "event": "worker_started",
+      "name": "cleanup-13"
+    },
+    {
+      "at": "2026-10-17T19:51:52.513Z",
+      "event": "worker_accepted",
+      "name": "cleanup-13",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:52:02.563Z",
+      "event": "logical_window",
+      "name": "cleanup-13",
+      "elapsedMs": 10178
+    },
+    {
+      "at": "2026-10-17T19:52:02.563Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-13",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:52:02.690Z",
+      "event": "worker_started",
+      "name": "cleanup-14"
+    },
+    {
+      "at": "2026-10-17T19:52:02.691Z",
+      "event": "worker_accepted",
+      "name": "cleanup-14",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:52:12.741Z",
+      "event": "logical_window",
+      "name": "cleanup-14",
+      "elapsedMs": 10177
+    },
+    {
+      "at": "2026-10-17T19:52:12.742Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-14",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:52:12.867Z",
+      "event": "worker_started",
+      "name": "cleanup-15"
+    },
+    {
+      "at": "2026-10-17T19:52:12.868Z",
+      "event": "worker_accepted",
+      "name": "cleanup-15",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:52:22.910Z",
+      "event": "logical_window",
+      "name": "cleanup-15",
+      "elapsedMs": 10168
+    },
+    {
+      "at": "2026-10-17T19:52:22.911Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-15",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:52:23.034Z",
+      "event": "worker_started",
+      "name": "cleanup-16"
+    },
+    {
+      "at": "2026-10-17T19:52:23.035Z",
+      "event": "worker_accepted",
+      "name": "cleanup-16",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:52:33.085Z",
+      "event": "logical_window",
+      "name": "cleanup-16",
+      "elapsedMs": 10174
+    },
+    {
+      "at": "2026-10-17T19:52:33.085Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-16",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:52:33.207Z",
+      "event": "worker_started",
+      "name": "cleanup-17"
+    },
+    {
+      "at": "2026-10-17T19:52:33.207Z",
+      "event": "worker_accepted",
+      "name": "cleanup-17",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:52:33.820Z",
+      "event": "logical_window",
+      "name": "cleanup-17",
+      "elapsedMs": 734
+    },
+    {
+      "at": "2026-10-17T19:52:33.828Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-17",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:52:33.947Z",
+      "event": "worker_started",
+      "name": "cleanup-18"
+    },
+    {
+      "at": "2026-10-17T19:52:33.947Z",
+      "event": "worker_accepted",
+      "name": "cleanup-18",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:52:34.530Z",
+      "event": "logical_window",
+      "name": "cleanup-18",
+      "elapsedMs": 702
+    },
+    {
+      "at": "2026-10-17T19:52:34.538Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-18",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:52:34.661Z",
+      "event": "worker_started",
+      "name": "cleanup-19"
+    },
+    {
+      "at": "2026-10-17T19:52:34.662Z",
+      "event": "worker_accepted",
+      "name": "cleanup-19",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:52:44.708Z",
+      "event": "logical_window",
+      "name": "cleanup-19",
+      "elapsedMs": 10168
+    },
+    {
+      "at": "2026-10-17T19:52:44.708Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-19",
+      "active": 0,
+      "nativeChildren": 0
+    },
+    {
+      "at": "2026-10-17T19:52:44.833Z",
+      "event": "worker_started",
+      "name": "cleanup-20"
+    },
+    {
+      "at": "2026-10-17T19:52:44.834Z",
+      "event": "worker_accepted",
+      "name": "cleanup-20",
+      "sends": 1,
+      "submitted": 1
+    },
+    {
+      "at": "2026-10-17T19:52:54.884Z",
+      "event": "logical_window",
+      "name": "cleanup-20",
+      "elapsedMs": 10175
+    },
+    {
+      "at": "2026-10-17T19:52:54.886Z",
+      "event": "lifecycle_cleanup",
+      "stage": "cleanup-20",
+      "active": 0,
+      "nativeChildren": 0
+    }
+  ],
+  "requests": [
+    {
+      "n": 1,
+      "name": "exec",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b69-587a-7862-8586-de4814d09c4b",
+        "turnId": "01a14b69-5888-7da1-9ae8-00534afb3f4d",
+        "agentName": "/root"
+      },
+      "bodySha256": "ce2ab476a752ca054dfd79dcbe7ef5ccea95e4719c08d7e58bb93f9ec89d6ef3",
+      "inputSha256": "7c88762cc6effb2b767b4f8d1f9a1c280f92225bdac375e8171f2cfcf67a1da2",
+      "inputBytes": 37763,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 2,
+      "name": "resume",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b69-587a-7862-8586-de4814d09c4b",
+        "turnId": "01a14b69-80ec-7391-913c-6779bd7bfcac",
+        "agentName": "/root"
+      },
+      "bodySha256": "2d69d2e08fde1751710c5f748603c891252e9ecf107514720bdfa4a640f26147",
+      "inputSha256": "fad90a532614b75a3d9727e9e7c0c3e7a3386d199fd4f220a2bb51f1a186fbc9",
+      "inputBytes": 38201,
+      "historyHasCanary": true,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 3,
+      "name": "reconnect",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b69-a87c-7f83-9033-a7e529ffb09f",
+        "turnId": "01a14b69-a89f-7b73-86a2-b9fa4768e423",
+        "agentName": "/root"
+      },
+      "bodySha256": "b9ebf08087708376b8c9fc0514355033eafee2f78b2caf8404922a16951fa670",
+      "inputSha256": "95ae0dd46d300cf830970bdba4d9374a4f7a7ad1b84cd2eb1a73dee3b0eec55f",
+      "inputBytes": 37768,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": true,
+      "terminalEvents": [],
+      "httpStatus": 200,
+      "cutAfterSubmitted": true,
+      "cutAt": "2026-10-17T19:49:38.115Z",
+      "faultKind": "accepted_partial_sse_eof",
+      "bodyFlushCompleted": true,
+      "bodyFlushedAt": "2026-10-17T19:49:38.116Z"
+    },
+    {
+      "n": 4,
+      "name": "reconnect",
+      "attempt": 2,
+      "identity": {
+        "threadId": "01a14b69-a87c-7f83-9033-a7e529ffb09f",
+        "turnId": "01a14b69-a89f-7b73-86a2-b9fa4768e423",
+        "agentName": "/root"
+      },
+      "bodySha256": "0e5f03706baf5833ec96035749ab9f01b1cee0a2120d469110ed88ec453ae6e5",
+      "inputSha256": "95ae0dd46d300cf830970bdba4d9374a4f7a7ad1b84cd2eb1a73dee3b0eec55f",
+      "inputBytes": 37768,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": true,
+      "terminalEvents": [],
+      "httpStatus": 200,
+      "cutAfterSubmitted": true,
+      "cutAt": "2026-10-17T19:49:38.335Z",
+      "faultKind": "accepted_partial_sse_eof",
+      "bodyFlushCompleted": true,
+      "bodyFlushedAt": "2026-10-17T19:49:38.335Z"
+    },
+    {
+      "n": 5,
+      "name": "reconnect",
+      "attempt": 3,
+      "identity": {
+        "threadId": "01a14b69-a87c-7f83-9033-a7e529ffb09f",
+        "turnId": "01a14b69-a89f-7b73-86a2-b9fa4768e423",
+        "agentName": "/root"
+      },
+      "bodySha256": "80eb2c49ca9ffa2f51afce881119c6df160725fe1cd72beee681f58742bf59bc",
+      "inputSha256": "95ae0dd46d300cf830970bdba4d9374a4f7a7ad1b84cd2eb1a73dee3b0eec55f",
+      "inputBytes": 37768,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 6,
+      "name": "interrupt-target",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b69-d2d8-7d62-b8d5-a1ac54311526",
+        "turnId": "01a14b69-d2f8-7031-b06d-1c36b05a87a9",
+        "agentName": "/root"
+      },
+      "bodySha256": "02954c30c4d16fd6b7f6f35cd6ea42e185aaa2a171281cc5a1a546d12dd4131b",
+      "inputSha256": "816b51c94267b2ef1c0527b21c2535c89444cb689169c70a8df740fbc111c957",
+      "inputBytes": 37781,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [],
+      "httpStatus": 200
+    },
+    {
+      "n": 7,
+      "name": "interrupt-peer",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b69-d300-7363-8d25-d2362b687b56",
+        "turnId": "01a14b69-d31d-7b12-a3bc-702ad415a7eb",
+        "agentName": "/root"
+      },
+      "bodySha256": "5240f864d4a609921690e367df012d7922de2f11318fa5592cae757592379c87",
+      "inputSha256": "ec6c57ef5427be19180b2898f8c5ebcaf70a8ce9d314c34c97055fde9bd52dc0",
+      "inputBytes": 37779,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 8,
+      "name": "cleanup-01",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b69-d597-7a00-9d7a-ef3f9acf310a",
+        "turnId": "01a14b69-d5ba-78d1-b7e1-a7e12477cb52",
+        "agentName": "/root"
+      },
+      "bodySha256": "d0c7f1e010f3590c8faa3fc842b57f2903b34dfc6a698d2842ca9db1552fd3e7",
+      "inputSha256": "2d347093b39ee5250ee9d7d107b43ecaf2ccaf430754360854139bc794c87e45",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 9,
+      "name": "cleanup-02",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b69-fd54-7ed1-99a8-d1303ba6dca1",
+        "turnId": "01a14b69-fd76-7d13-ad89-63b5c330bd96",
+        "agentName": "/root"
+      },
+      "bodySha256": "91aa5f134514fb5220cbd16ad1cbe47b5963aa9d90af0413ec18a8981f7780b0",
+      "inputSha256": "566b3e939ee7fcc71c2290801e410c2ddf0072bc1fdada818dc5ce97404edc56",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 10,
+      "name": "cleanup-03",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b6a-2502-7a91-acd6-10acca1ecb7e",
+        "turnId": "01a14b6a-2524-71e3-9fb7-567b9856e9f5",
+        "agentName": "/root"
+      },
+      "bodySha256": "2f61bace49436c8cb2a41374f115c0ee1cb892d1245dc0666e348a21cdf03405",
+      "inputSha256": "f0393cab2ae4547dc7fafdf9f27c6f5b725440ac95bdf1a56c14b5594c99db37",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 11,
+      "name": "cleanup-04",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b6a-4cc1-74e0-af07-ad3a240125f3",
+        "turnId": "01a14b6a-4ce5-7f70-8a85-4680a574a14d",
+        "agentName": "/root"
+      },
+      "bodySha256": "867024730bb884423c179d56475897351d62e01099cc0ee0a93d86968884435e",
+      "inputSha256": "734eec6e6017c85e63861041123d365454bbaccfe819bf311d07b23df08e2261",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 12,
+      "name": "cleanup-05",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b6a-747d-75e1-b127-88bfa7dff505",
+        "turnId": "01a14b6a-74a0-7720-919b-13110f4beca4",
+        "agentName": "/root"
+      },
+      "bodySha256": "b832eb6604f9aa012b381b3056f94a1e6f332069ed59e8e3a4a1b47828f004e1",
+      "inputSha256": "7fdadf13edde4ae6879e3319a278ae01b5d3c714781aef8ffdfc73b37a82277d",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 13,
+      "name": "cleanup-06",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b6a-9d7e-7243-9f60-a8b24ae39711",
+        "turnId": "01a14b6a-9da0-7902-8858-5497cd1bdc5c",
+        "agentName": "/root"
+      },
+      "bodySha256": "9b9f827681465d16f0aee927bc75f0c2a0adbd7b17718fec276d373474cd9db1",
+      "inputSha256": "be0af65d689e7494cbc58a88640287612af0863590987bc5425bfcf26a0b5fe8",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 14,
+      "name": "cleanup-07",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b6a-c5ac-7041-af80-f5b9a4e1e104",
+        "turnId": "01a14b6a-c5ce-79a3-8cf3-7e1109089db9",
+        "agentName": "/root"
+      },
+      "bodySha256": "ed74c96f61641f1ccf7bf6bd205e7c61884dcb5b0a2f33a43805cf27c3ec4fbf",
+      "inputSha256": "119db16a805f304c4ccbdcc1acda052927e6932b0c3152c6a032e4a822f5da45",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 15,
+      "name": "cleanup-08",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b6a-ee82-7832-8a6c-da39540ef457",
+        "turnId": "01a14b6a-eea4-7780-b3ea-75337950c577",
+        "agentName": "/root"
+      },
+      "bodySha256": "f6abd65585f4c62956d6f4d742a9ac88ed40ca91ed580bce02bec23ae8975765",
+      "inputSha256": "fecd20cbd2b5a5e35bf87e258f02fd0dbe6bbffdbc7b43a16bbecf10506b84cd",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 16,
+      "name": "cleanup-09",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b6b-1640-7192-9f3a-c12e4d3401c9",
+        "turnId": "01a14b6b-1662-78b2-84cb-beca5733bb85",
+        "agentName": "/root"
+      },
+      "bodySha256": "a26dcb1cdb8bfaff5ce89cf799ff9c1223e6a1b613b8cd086d78ac8969e98c6d",
+      "inputSha256": "22d0ee2aa9fb58c8ad44e9083969b36d4e8adae6721194a0006f50a29ccecabb",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 17,
+      "name": "cleanup-10",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b6b-3e33-7283-9ef3-26abf0276d3f",
+        "turnId": "01a14b6b-3e56-7b13-adca-7b5d19eab235",
+        "agentName": "/root"
+      },
+      "bodySha256": "d6e513c8d729af09326bdea917b6a8406fa0caa867981c4ef777e683bc2c1864",
+      "inputSha256": "b5a901aa4ea07df5f6056f391a1ad127123f8e6f46b9da921d59045f7e06f221",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 18,
+      "name": "cleanup-11",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b6b-65ee-7d03-9690-b901ff4f8fb1",
+        "turnId": "01a14b6b-6612-7861-bb29-b614b4264fd4",
+        "agentName": "/root"
+      },
+      "bodySha256": "ec777068fd49a5b643df83be2e1a5f8b07ce4bde49ce2b68f6c644c3251ad5ce",
+      "inputSha256": "131fe1671f6c8d6c03c065bc81d9a3370fad89b0ee9644f8404a7f344bd8be11",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 19,
+      "name": "cleanup-12",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b6b-8db3-7160-95c6-757d67875993",
+        "turnId": "01a14b6b-8dd4-7840-9d02-c74998366428",
+        "agentName": "/root"
+      },
+      "bodySha256": "ac732522f4e41967c294fc2865ee72f502c33f7c0daae79b7d314601609768b4",
+      "inputSha256": "4e269a25d5a4fc43a657a83c0fb9a0776d5c260fabf68f20586196b25dfad91c",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 20,
+      "name": "cleanup-13",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b6b-b574-7263-9989-ab75bb9fab79",
+        "turnId": "01a14b6b-b597-7141-a41d-d9e17a0c0d16",
+        "agentName": "/root"
+      },
+      "bodySha256": "19953ae4930380bf98211e6783b4bad86fc3fb9e4d8dbd53ef4f655128c0f3d8",
+      "inputSha256": "ad5ef3b0e76be1d6e5f04bedc23c90905f2340d38868f2b390a49d7dea02cd7d",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 21,
+      "name": "cleanup-14",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b6b-dd37-7a93-a5a7-3befa0cb4704",
+        "turnId": "01a14b6b-dd5a-7541-851b-7b94545566b7",
+        "agentName": "/root"
+      },
+      "bodySha256": "dfb3124492efeada96df2718b314698bafc88631cda0c8ee2f494d8b3fe11735",
+      "inputSha256": "e0b4dc087340bce1d47192bb2322b6a5ba8a794bf9e33e6f13c3cc0de395917c",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 22,
+      "name": "cleanup-15",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b6c-04f9-7403-acee-d9e027aaa407",
+        "turnId": "01a14b6c-051c-7d52-bebb-713f40f974fa",
+        "agentName": "/root"
+      },
+      "bodySha256": "c2e5a658134bac83ca2c03fa55b27855ac14519c920e0fe2a6176af42bf200ff",
+      "inputSha256": "7d147b43d6c5b27c9576b4e2f1c0fd2b4cdf4e364d3c2137fa50714d4fc5b99e",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 23,
+      "name": "cleanup-16",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b6c-2cb3-7321-95a6-ede2df03ec5b",
+        "turnId": "01a14b6c-2cd6-71b2-80e3-42da4bcbaa76",
+        "agentName": "/root"
+      },
+      "bodySha256": "7020e3274efa73f237cb826c7fb1026b8dfb63a3edb1179931eab65d36a0fc95",
+      "inputSha256": "96802fad4155d7d14bfb452178973a819fac51b6710ac673e83e0c764a73752d",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 24,
+      "name": "cleanup-17",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b6c-5471-7343-bb50-e2b0d5ad9052",
+        "turnId": "01a14b6c-5493-7c31-9e03-35c200fb3b61",
+        "agentName": "/root"
+      },
+      "bodySha256": "57a0777708fdc1d9de6150c1d88a7cda3d1aa2f32f81959ab71c2a65f3ca0a3c",
+      "inputSha256": "adf1f2be85fc7ae29a50a7383714a85250a357fdbc9d7418210027246e70d01a",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 25,
+      "name": "cleanup-18",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b6c-5757-7e61-a21d-146584b802b1",
+        "turnId": "01a14b6c-577a-7f03-b93b-185da529c7dd",
+        "agentName": "/root"
+      },
+      "bodySha256": "a4ea7fc657d863f70590b20ceb0f692bd988f18af6855320e39a69c15fb2956f",
+      "inputSha256": "83473fb6b13679c19742ec483f39e97d07ed8a11aaf7bd48505d5381400c1bc0",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 26,
+      "name": "cleanup-19",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b6c-5a1d-7462-83bf-e704d248ef11",
+        "turnId": "01a14b6c-5a3f-7901-8bad-c695141b3301",
+        "agentName": "/root"
+      },
+      "bodySha256": "fdb14ef3d1dd5669ca4942870d0c8f25ce9eb9620cae1b7391d396ca3cfe5c3a",
+      "inputSha256": "29461e32a0fd55026b02ad57048de86270f1a8b76b747966be747b8d98b61d42",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    },
+    {
+      "n": 27,
+      "name": "cleanup-20",
+      "attempt": 1,
+      "identity": {
+        "threadId": "01a14b6c-81d7-7dd3-8194-a2983830540b",
+        "turnId": "01a14b6c-81fb-7311-82e5-2ce8907c9928",
+        "agentName": "/root"
+      },
+      "bodySha256": "f9c01da2c3433bd5aa517bc08c99376346f8c6bff7eca27c85f99784e4a861be",
+      "inputSha256": "8d7672856d393ffc9bee4ada51c69aa0e8f5cbf4c35e07b1c4757cba8bc7cb48",
+      "inputBytes": 37769,
+      "historyHasCanary": false,
+      "previousResponseId": null,
+      "model": "chatgpt-web/gpt-5.6-luna",
+      "encoding": null,
+      "cut": false,
+      "terminalEvents": [
+        "response.completed"
+      ],
+      "httpStatus": 200,
+      "finished": true
+    }
+  ],
+  "workers": [
+    {
+      "name": "exec",
+      "traceId": "a3a808ce893d",
+      "startedAt": "2026-10-17T19:49:17.647Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "d279344b4d5ec3bf0590c36b716edb7d0181899df105de2481eb6144e1c17ea5",
+      "settledAt": "2026-10-17T19:49:17.651Z"
+    },
+    {
+      "name": "resume",
+      "traceId": "371a198678bd",
+      "startedAt": "2026-10-17T19:49:27.944Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": true,
+      "compiledContextSha256": "26533474c3eed8e0e5340183cef50c27b5bb094ad3f92d670c3664432c9edd3a",
+      "settledAt": "2026-10-17T19:49:27.945Z"
+    },
+    {
+      "name": "reconnect",
+      "traceId": "a25254449b5d",
+      "startedAt": "2026-10-17T19:49:38.114Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "0e605fe9bd2173cb00726188743a9dd9e7d9df0ff4343d4c80dc6a94cb513001",
+      "settledAt": "2026-10-17T19:49:38.741Z"
+    },
+    {
+      "name": "interrupt-target",
+      "traceId": "52cf91591616",
+      "startedAt": "2026-10-17T19:49:48.943Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": true,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "8f4ece6053b11b601b50d16cb80f8306ebcfb9bd302757c490ca8731a68a84aa",
+      "settledAt": "2026-10-17T19:49:49.492Z"
+    },
+    {
+      "name": "interrupt-peer",
+      "traceId": "52142cc6f105",
+      "startedAt": "2026-10-17T19:49:48.977Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 2,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "20083fe7b99bfb9c98f8e6992a4520bca206fb955d4924eff8b6474610932008",
+      "settledAt": "2026-10-17T19:49:49.510Z"
+    },
+    {
+      "name": "cleanup-01",
+      "traceId": "51b1e5ca5b00",
+      "startedAt": "2026-10-17T19:49:49.663Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "262ddd02b4ab58b91a2880a261f2f6dff47bf2db85d12509d3efe903665dce36",
+      "settledAt": "2026-10-17T19:49:49.664Z"
+    },
+    {
+      "name": "cleanup-02",
+      "traceId": "60c9385480d5",
+      "startedAt": "2026-10-17T19:49:59.829Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "5071da26de41931eb890ed9f33cd4391599e76153ce33e3a2810be4888f2d7a3",
+      "settledAt": "2026-10-17T19:49:59.830Z"
+    },
+    {
+      "name": "cleanup-03",
+      "traceId": "45c0541ca384",
+      "startedAt": "2026-10-17T19:50:09.997Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "c47269ed5b05acc27ed89b6fa2f057cdcab588e157700fef015ec433db901072",
+      "settledAt": "2026-10-17T19:50:09.998Z"
+    },
+    {
+      "name": "cleanup-04",
+      "traceId": "492902006dfa",
+      "startedAt": "2026-10-17T19:50:20.169Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "b59776055e7ccc335b924e278b44d8a0072f83484a8de20feae2b5d30a55df18",
+      "settledAt": "2026-10-17T19:50:20.170Z"
+    },
+    {
+      "name": "cleanup-05",
+      "traceId": "aaab7bbc7c47",
+      "startedAt": "2026-10-17T19:50:30.661Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "fdbd9087760fa1275c5f1250baa5bc62da300984fe25ad05b85a3427d2f398f5",
+      "settledAt": "2026-10-17T19:50:30.662Z"
+    },
+    {
+      "name": "cleanup-06",
+      "traceId": "9be88d4815fc",
+      "startedAt": "2026-10-17T19:50:40.879Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "f834010624f577ab98c850c0d7d0438c863a3d5f153c3285487d1a16e1da17cf",
+      "settledAt": "2026-10-17T19:50:40.880Z"
+    },
+    {
+      "name": "cleanup-07",
+      "traceId": "de4720db5cbb",
+      "startedAt": "2026-10-17T19:50:51.245Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "5dafe864b6a75c689b603e2f6fb460b1a9553a710ca2fb8110fa2825422ccafe",
+      "settledAt": "2026-10-17T19:50:51.246Z"
+    },
+    {
+      "name": "cleanup-08",
+      "traceId": "a41b03829741",
+      "startedAt": "2026-10-17T19:51:01.578Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "4bd39affd1916b0d577f1ef4a559d165dec3ad6221772387c960cd03ae6d20f3",
+      "settledAt": "2026-10-17T19:51:01.579Z"
+    },
+    {
+      "name": "cleanup-09",
+      "traceId": "753322bd83f8",
+      "startedAt": "2026-10-17T19:51:11.751Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "5d2ce5c28d185225b4b2c909dad0a1298171b73042892baee8fdb771f4ac8dd4",
+      "settledAt": "2026-10-17T19:51:11.752Z"
+    },
+    {
+      "name": "cleanup-10",
+      "traceId": "7e8dc0c37d2b",
+      "startedAt": "2026-10-17T19:51:21.978Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "e299512d5eb9cc2b1e78276fe53117509211a80710e36950a444fd2604cadbac",
+      "settledAt": "2026-10-17T19:51:21.979Z"
+    },
+    {
+      "name": "cleanup-11",
+      "traceId": "54ca95276f39",
+      "startedAt": "2026-10-17T19:51:32.155Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "8beefb496708fc9e3553e6acc40e83845b5f7675628ad4e493054f64c3dc494c",
+      "settledAt": "2026-10-17T19:51:32.155Z"
+    },
+    {
+      "name": "cleanup-12",
+      "traceId": "7578ff636e1e",
+      "startedAt": "2026-10-17T19:51:42.333Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "7ff423726152315f632bc7b8cdb7e5dbd240e73c879422ad77c2c6b5d5c98bf2",
+      "settledAt": "2026-10-17T19:51:42.334Z"
+    },
+    {
+      "name": "cleanup-13",
+      "traceId": "7b2113d69e4e",
+      "startedAt": "2026-10-17T19:51:52.513Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "56dd69326662ccc5820d0ba8875acdb03a7fc6d9d698e7da6707273868cf8baf",
+      "settledAt": "2026-10-17T19:51:52.514Z"
+    },
+    {
+      "name": "cleanup-14",
+      "traceId": "25c421dd6428",
+      "startedAt": "2026-10-17T19:52:02.690Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "f7859a0173b13b59273083109e3883cae514f137893c1f119ca8d1d61ce28001",
+      "settledAt": "2026-10-17T19:52:02.691Z"
+    },
+    {
+      "name": "cleanup-15",
+      "traceId": "1ef0911a9f8e",
+      "startedAt": "2026-10-17T19:52:12.867Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "346e9aed4b683b76d64af0ae9d0c8dd67891fa57d7810025ee3243c2dee82fe2",
+      "settledAt": "2026-10-17T19:52:12.868Z"
+    },
+    {
+      "name": "cleanup-16",
+      "traceId": "26c05ed6ef3a",
+      "startedAt": "2026-10-17T19:52:23.034Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "2616f9f36a9ab1e01b0309f846835f0262fa75f431d149bb18f3def64f7a2c09",
+      "settledAt": "2026-10-17T19:52:23.035Z"
+    },
+    {
+      "name": "cleanup-17",
+      "traceId": "09cd5b8b54dc",
+      "startedAt": "2026-10-17T19:52:33.207Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "8055c32fb4d8780fd248168a5fee3ab519447d866115130d9e7a3c4b354f1f66",
+      "settledAt": "2026-10-17T19:52:33.208Z"
+    },
+    {
+      "name": "cleanup-18",
+      "traceId": "307a3b062226",
+      "startedAt": "2026-10-17T19:52:33.947Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "74a50c9690a18f6aa0ea4344afc06559952aeec96760c30fc6eac19dbc57328a",
+      "settledAt": "2026-10-17T19:52:33.948Z"
+    },
+    {
+      "name": "cleanup-19",
+      "traceId": "538a3df87f7e",
+      "startedAt": "2026-10-17T19:52:34.661Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "294b838495448b3f50313749f35139cfafe09b00aff594eefed29f78280e3cb3",
+      "settledAt": "2026-10-17T19:52:34.662Z"
+    },
+    {
+      "name": "cleanup-20",
+      "traceId": "0a4344949b96",
+      "startedAt": "2026-10-17T19:52:44.833Z",
+      "model": "gpt-5.6-luna",
+      "starts": 1,
+      "aborted": false,
+      "settled": true,
+      "activeStubWorkers": 1,
+      "compiledContextHasOldCanary": false,
+      "compiledContextSha256": "d78bba28d62bdcabbb42275831e8d9128cecadd53dc6f4b77f19b2262af2b342",
+      "settledAt": "2026-10-17T19:52:44.834Z"
+    }
+  ],
+  "cases": [
+    {
+      "name": "exec",
+      "exit": 0,
+      "thread": "01a14b69-587a-7862-8586-de4814d09c4b",
+      "expectedSha256": "a5f8ef609a5f368ad091def492003e2f3557bd0265b7c936073075a860bcda3c",
+      "answersSha256": [
+        "a5f8ef609a5f368ad091def492003e2f3557bd0265b7c936073075a860bcda3c"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "resume",
+      "exit": 0,
+      "thread": "01a14b69-587a-7862-8586-de4814d09c4b",
+      "expectedSha256": "5f38b466df3925a915cf84a29397edee3fa4e1b5bfc928d5c342457fe54d4c19",
+      "answersSha256": [
+        "5f38b466df3925a915cf84a29397edee3fa4e1b5bfc928d5c342457fe54d4c19"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "reconnect",
+      "exit": 0,
+      "thread": "01a14b69-a87c-7f83-9033-a7e529ffb09f",
+      "expectedSha256": "a8a132eb226d37e52161cc9c42abeee69a78d75de012949b8fc7a15819055b28",
+      "answersSha256": [
+        "a8a132eb226d37e52161cc9c42abeee69a78d75de012949b8fc7a15819055b28"
+      ],
+      "terminalCompleted": 1,
+      "failures": [
+        {
+          "type": "error",
+          "message": "Reconnecting... 1/2 (stream disconnected before completion: stream closed before response.completed)"
+        },
+        {
+          "type": "error",
+          "message": "Reconnecting... 2/2 (stream disconnected before completion: stream closed before response.completed)"
+        }
+      ],
+      "attempts": 3,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": {
+        "faultKind": "accepted_partial_sse_eof",
+        "httpAttempts": 3,
+        "stableIdentity": true,
+        "nativeStreamMessages": [
+          {
+            "type": "error",
+            "message": "Reconnecting... 1/2 (stream disconnected before completion: stream closed before response.completed)"
+          },
+          {
+            "type": "error",
+            "message": "Reconnecting... 2/2 (stream disconnected before completion: stream closed before response.completed)"
+          }
+        ],
+        "completionReceived": true
+      }
+    },
+    {
+      "name": "native-interrupt-and-peer",
+      "target": {
+        "threadId": "01a14b69-d2d8-7d62-b8d5-a1ac54311526",
+        "turnId": "01a14b69-d2f8-7031-b06d-1c36b05a87a9"
+      },
+      "peer": {
+        "threadId": "01a14b69-d300-7363-8d25-d2362b687b56",
+        "turnId": "01a14b69-d31d-7b12-a3bc-702ad415a7eb"
+      },
+      "hookTrusted": true,
+      "targetAborted": true,
+      "targetSettled": true,
+      "peerAborted": false,
+      "peerCompleted": true,
+      "peerAnswerSha256": "21a61bb05ced137d39bccc80d550be7af8c0a8626c35a14fc6cc2638f177e602"
+    },
+    {
+      "name": "cleanup-01",
+      "exit": 0,
+      "thread": "01a14b69-d597-7a00-9d7a-ef3f9acf310a",
+      "expectedSha256": "62faadf76198eb30dc5f78e383a3e56337efff37add6afb02b34942176bafcc2",
+      "answersSha256": [
+        "62faadf76198eb30dc5f78e383a3e56337efff37add6afb02b34942176bafcc2"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-02",
+      "exit": 0,
+      "thread": "01a14b69-fd54-7ed1-99a8-d1303ba6dca1",
+      "expectedSha256": "67f69c7b09e32c5857ee3a8abc9d0783dfbd27c996ca54d898f2b132d4683c24",
+      "answersSha256": [
+        "67f69c7b09e32c5857ee3a8abc9d0783dfbd27c996ca54d898f2b132d4683c24"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-03",
+      "exit": 0,
+      "thread": "01a14b6a-2502-7a91-acd6-10acca1ecb7e",
+      "expectedSha256": "f0005660e596f4a11d8071b0bd22c8fc1d30be29a2d6a06fa06dc44c746cd80c",
+      "answersSha256": [
+        "f0005660e596f4a11d8071b0bd22c8fc1d30be29a2d6a06fa06dc44c746cd80c"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-04",
+      "exit": 0,
+      "thread": "01a14b6a-4cc1-74e0-af07-ad3a240125f3",
+      "expectedSha256": "18f70960f7967e9e82e217be64246c3403362c9a8fd8313c8ea4dc0965fc5ed7",
+      "answersSha256": [
+        "18f70960f7967e9e82e217be64246c3403362c9a8fd8313c8ea4dc0965fc5ed7"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-05",
+      "exit": 0,
+      "thread": "01a14b6a-747d-75e1-b127-88bfa7dff505",
+      "expectedSha256": "e45c8cfec871559b0cd36adbfc567d36ad09e5b18f833118a410e3e5a8e64ba6",
+      "answersSha256": [
+        "e45c8cfec871559b0cd36adbfc567d36ad09e5b18f833118a410e3e5a8e64ba6"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-06",
+      "exit": 0,
+      "thread": "01a14b6a-9d7e-7243-9f60-a8b24ae39711",
+      "expectedSha256": "b835785bca61628e7baad0c9a881f0c8c0678d5213938b1909b95756f752efff",
+      "answersSha256": [
+        "b835785bca61628e7baad0c9a881f0c8c0678d5213938b1909b95756f752efff"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-07",
+      "exit": 0,
+      "thread": "01a14b6a-c5ac-7041-af80-f5b9a4e1e104",
+      "expectedSha256": "66e7a0cda3701b0d7d7d53c922e2c74c0e6b0da6834eca5d516ceeefe232330d",
+      "answersSha256": [
+        "66e7a0cda3701b0d7d7d53c922e2c74c0e6b0da6834eca5d516ceeefe232330d"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-08",
+      "exit": 0,
+      "thread": "01a14b6a-ee82-7832-8a6c-da39540ef457",
+      "expectedSha256": "69bdb7cb72a7dff8dd1482767cbaf7bdc6dca023fd481b36475ff645c854e57b",
+      "answersSha256": [
+        "69bdb7cb72a7dff8dd1482767cbaf7bdc6dca023fd481b36475ff645c854e57b"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-09",
+      "exit": 0,
+      "thread": "01a14b6b-1640-7192-9f3a-c12e4d3401c9",
+      "expectedSha256": "ba2aaf25088e1688b4118943e2b40b4ccf0c42fb5c2e2c2d30d00fd9eebdb454",
+      "answersSha256": [
+        "ba2aaf25088e1688b4118943e2b40b4ccf0c42fb5c2e2c2d30d00fd9eebdb454"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-10",
+      "exit": 0,
+      "thread": "01a14b6b-3e33-7283-9ef3-26abf0276d3f",
+      "expectedSha256": "b9f7643f4cf1a60a24dbe0354bb4804e941c382b0394bad29f42975e8a8fa223",
+      "answersSha256": [
+        "b9f7643f4cf1a60a24dbe0354bb4804e941c382b0394bad29f42975e8a8fa223"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-11",
+      "exit": 0,
+      "thread": "01a14b6b-65ee-7d03-9690-b901ff4f8fb1",
+      "expectedSha256": "d9f728be2d9127db20d2cedcd2e668c5175c8172017f87d5e1f4a500a9bf36e4",
+      "answersSha256": [
+        "d9f728be2d9127db20d2cedcd2e668c5175c8172017f87d5e1f4a500a9bf36e4"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-12",
+      "exit": 0,
+      "thread": "01a14b6b-8db3-7160-95c6-757d67875993",
+      "expectedSha256": "9764ea2bb8aee70b2ee345e0960c966c23677e18152b9fd5be662c1acacfb0b2",
+      "answersSha256": [
+        "9764ea2bb8aee70b2ee345e0960c966c23677e18152b9fd5be662c1acacfb0b2"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-13",
+      "exit": 0,
+      "thread": "01a14b6b-b574-7263-9989-ab75bb9fab79",
+      "expectedSha256": "91dd138687a26f39079be638a5c1c9c4c59221e3531f70a6d2563b7382de8da3",
+      "answersSha256": [
+        "91dd138687a26f39079be638a5c1c9c4c59221e3531f70a6d2563b7382de8da3"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-14",
+      "exit": 0,
+      "thread": "01a14b6b-dd37-7a93-a5a7-3befa0cb4704",
+      "expectedSha256": "6d02a08633fe09b07e3d460a6f6b78b17e8f949abe720d5c6236df9f6bf9bf0c",
+      "answersSha256": [
+        "6d02a08633fe09b07e3d460a6f6b78b17e8f949abe720d5c6236df9f6bf9bf0c"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-15",
+      "exit": 0,
+      "thread": "01a14b6c-04f9-7403-acee-d9e027aaa407",
+      "expectedSha256": "9c1d9940cafec7fe4775f167fc712236621d7e01e4a7350b07174e6277f9597b",
+      "answersSha256": [
+        "9c1d9940cafec7fe4775f167fc712236621d7e01e4a7350b07174e6277f9597b"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-16",
+      "exit": 0,
+      "thread": "01a14b6c-2cb3-7321-95a6-ede2df03ec5b",
+      "expectedSha256": "f568784a63880310ec10857a2e3e5191cdc2292fa93df8c38162d41dfe54046d",
+      "answersSha256": [
+        "f568784a63880310ec10857a2e3e5191cdc2292fa93df8c38162d41dfe54046d"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-17",
+      "exit": 0,
+      "thread": "01a14b6c-5471-7343-bb50-e2b0d5ad9052",
+      "expectedSha256": "6e2990dafa502f2aa312830b0ea71091fe9f25a8d56a9e54bb4e6268332169e3",
+      "answersSha256": [
+        "6e2990dafa502f2aa312830b0ea71091fe9f25a8d56a9e54bb4e6268332169e3"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-18",
+      "exit": 0,
+      "thread": "01a14b6c-5757-7e61-a21d-146584b802b1",
+      "expectedSha256": "a4d1360c9f99cfbcea7763d522e9c3f4da2d24ee60dfd145bfcbd111c2b306d8",
+      "answersSha256": [
+        "a4d1360c9f99cfbcea7763d522e9c3f4da2d24ee60dfd145bfcbd111c2b306d8"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-19",
+      "exit": 0,
+      "thread": "01a14b6c-5a1d-7462-83bf-e704d248ef11",
+      "expectedSha256": "8f8ed4fb6b82bc870e027dea3a53928387f97315d872d07e7a3d8b7280787af4",
+      "answersSha256": [
+        "8f8ed4fb6b82bc870e027dea3a53928387f97315d872d07e7a3d8b7280787af4"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    },
+    {
+      "name": "cleanup-20",
+      "exit": 0,
+      "thread": "01a14b6c-81d7-7dd3-8194-a2983830540b",
+      "expectedSha256": "57ee3f530f2dccfe1941b29f85b3e8d6a0ce55728c4ce84da623cff385cc0d0c",
+      "answersSha256": [
+        "57ee3f530f2dccfe1941b29f85b3e8d6a0ce55728c4ce84da623cff385cc0d0c"
+      ],
+      "terminalCompleted": 1,
+      "failures": [],
+      "attempts": 1,
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "ownerAborted": false,
+      "nativeReconnectEvidence": null
+    }
+  ],
+  "health": [
+    {
+      "stage": "initial",
+      "at": "2026-10-17T19:49:17.411Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 181243904,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "after-exec",
+      "at": "2026-10-17T19:49:27.833Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 200089600,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "after-resume",
+      "at": "2026-10-17T19:49:37.995Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 201957376,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "after-reconnect",
+      "at": "2026-10-17T19:49:48.784Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 201830400,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "both-native-threads-active",
+      "at": "2026-10-17T19:49:48.982Z",
+      "http": 2,
+      "browser": 2,
+      "rss": 205520896,
+      "nativeChildren": 1
+    },
+    {
+      "stage": "target-interrupted-peer-active",
+      "at": "2026-10-17T19:49:49.509Z",
+      "http": 1,
+      "browser": 1,
+      "rss": 205484032,
+      "nativeChildren": 1
+    },
+    {
+      "stage": "after-interrupt-peer",
+      "at": "2026-10-17T19:49:49.541Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 207220736,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-01",
+      "at": "2026-10-17T19:49:59.712Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 204492800,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-02",
+      "at": "2026-10-17T19:50:09.872Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 204128256,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-03",
+      "at": "2026-10-17T19:50:20.046Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 206741504,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-04",
+      "at": "2026-10-17T19:50:30.215Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 206233600,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-05",
+      "at": "2026-10-17T19:50:40.713Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 206868480,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-06",
+      "at": "2026-10-17T19:50:50.998Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 207151104,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-07",
+      "at": "2026-10-17T19:51:01.455Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 208449536,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-08",
+      "at": "2026-10-17T19:51:11.629Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 208715776,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-09",
+      "at": "2026-10-17T19:51:21.855Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 208355328,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-10",
+      "at": "2026-10-17T19:51:32.025Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 208867328,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-11",
+      "at": "2026-10-17T19:51:42.206Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 209272832,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-12",
+      "at": "2026-10-17T19:51:52.385Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 209412096,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-13",
+      "at": "2026-10-17T19:52:02.563Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 210071552,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-14",
+      "at": "2026-10-17T19:52:12.741Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 209981440,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-15",
+      "at": "2026-10-17T19:52:22.911Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 210690048,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-16",
+      "at": "2026-10-17T19:52:33.085Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 210526208,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-17",
+      "at": "2026-10-17T19:52:33.828Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 217710592,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-18",
+      "at": "2026-10-17T19:52:34.538Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 226279424,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-19",
+      "at": "2026-10-17T19:52:44.708Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 212254720,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "cleanup-20",
+      "at": "2026-10-17T19:52:54.885Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 212140032,
+      "nativeChildren": 0
+    },
+    {
+      "stage": "final-cleanup",
+      "at": "2026-10-17T19:52:54.987Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 212189184,
+      "nativeChildren": 0
+    }
+  ],
+  "unhandledRejections": [],
+  "cleanup": {
+    "children": [
+      {
+        "name": "exec",
+        "pid": 3874342,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_exec_156f4b85c78c441da4caa4c1510bc7b4. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:49:17.414Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "resume",
+        "pid": 3875473,
+        "args": [
+          "exec",
+          "resume",
+          "--skip-git-repo-check",
+          "--json",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "01a14b69-587a-7862-8586-de4814d09c4b",
+          "OVERNIGHT_INPUT_resume_ba56402cec314260b12f292caaacc73a. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:49:27.835Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "reconnect",
+        "pid": 3877253,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_reconnect_5c309d5b2b6e4d3694b51739f3b0cc93. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:49:37.996Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "app-server-interrupt",
+        "pid": 3878622,
+        "args": [
+          "app-server"
+        ],
+        "startedAt": "2026-10-17T19:49:48.786Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-01",
+        "pid": 3879092,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-01_27c829dee8ee4db7b4ff61c88618fe89. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:49:49.542Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-02",
+        "pid": 3880247,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-02_a3c6e9fac43f482c9a53eb4a9716a6bb. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:49:59.714Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-03",
+        "pid": 3881472,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-03_6a0150dd584644378b59d15cb4dc120e. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:50:09.873Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-04",
+        "pid": 3882661,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-04_82df1813fb2f44cfab8ef10191ea5eeb. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:50:20.048Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-05",
+        "pid": 3883872,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-05_655d9ef2762442c18f5eff94b85a3f0a. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:50:30.217Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-06",
+        "pid": 3885630,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-06_c28d92b2c9a845f9954b2a7710c71aa6. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:50:40.715Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-07",
+        "pid": 3886977,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-07_baeb03c30fc94b1c975a1a36674317e8. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:50:51.000Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-08",
+        "pid": 3888059,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-08_e23d2c5d21934b88823a378dab8841d3. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:51:01.457Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-09",
+        "pid": 3889348,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-09_0d4e9d89a8d94853b938185663c16711. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:51:11.630Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-10",
+        "pid": 3890531,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-10_b2253ceea8ff48008262c9d72909730a. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:51:21.857Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-11",
+        "pid": 3892171,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-11_1e84af8e409d4549a00800dbc28e1523. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:51:32.027Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-12",
+        "pid": 3893198,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-12_a3854bd995af4cf8a9e4898c189fc771. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:51:42.207Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-13",
+        "pid": 3894585,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-13_a2d293ff078640aca10df0170bf59985. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:51:52.386Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-14",
+        "pid": 3895617,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-14_a9d5e44dacb4483c943ee1bd6bc9ea91. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:52:02.565Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-15",
+        "pid": 3896836,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-15_613129c46ebd45258cf52680e14de1e4. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:52:12.743Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-16",
+        "pid": 3898132,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-16_352de65325354ae7b50344aacc3326a7. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:52:22.912Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-17",
+        "pid": 3899934,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-17_026b8a3721c444a8932f5ee0a9de0dc7. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:52:33.086Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-18",
+        "pid": 3900223,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-18_51882fceeb7d462fb2fed08439a61950. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:52:33.829Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-19",
+        "pid": 3900472,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-19_e40d37d7ddda485d9e371e952b982881. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:52:34.539Z",
+        "exit": 0,
+        "signal": null
+      },
+      {
+        "name": "cleanup-20",
+        "pid": 3901728,
+        "args": [
+          "exec",
+          "--skip-git-repo-check",
+          "--json",
+          "--sandbox",
+          "read-only",
+          "-m",
+          "chatgpt-web/gpt-5.6-luna",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "--disable",
+          "apps",
+          "OVERNIGHT_INPUT_cleanup-20_863aa89beef047d7a6bd01884800484c. Return only the controlled canary. Do not use tools."
+        ],
+        "startedAt": "2026-10-17T19:52:44.710Z",
+        "exit": 0,
+        "signal": null
+      }
+    ],
+    "runtimePortClosed": true,
+    "proxyPortClosed": true,
+    "steps": [
+      {
+        "name": "clear-and-physical-settlement",
+        "ok": true
+      },
+      {
+        "name": "flush-state",
+        "ok": true
+      },
+      {
+        "name": "health-zero-before-stop",
+        "ok": true
+      },
+      {
+        "name": "proxy-stop",
+        "ok": true
+      },
+      {
+        "name": "workers-close",
+        "ok": true
+      },
+      {
+        "name": "broker-close",
+        "ok": true
+      },
+      {
+        "name": "runtime-stop",
+        "ok": true
+      },
+      {
+        "name": "runtime-port-closed",
+        "ok": true
+      },
+      {
+        "name": "proxy-port-closed",
+        "ok": true
+      }
+    ],
+    "liveNativeChildren": 0,
+    "workerRestored": true,
+    "allOk": true
+  },
+  "failure": null,
+  "completed": true,
+  "route": {
+    "model": "chatgpt-web/gpt-5.6-luna",
+    "backendModel": "gpt-5.6-luna",
+    "requiresPro": false,
+    "solAvailable": false,
+    "proAvailable": false,
+    "localToolsEnabled": false,
+    "fallback": "none; unknown routes rejected"
+  },
+  "catalogSha256": "38a14d747df0919b600097773d7f45bda0c8356530f594dd15c172a078827b1d",
+  "hook": {
+    "command": "'<YWL_HOME>/.local/lib/codex-chatgpt-web/cpr-native-retry-20261017-qa-1/runtime/runtime/bun' '<YWL_TASK>/overnight-pressure/src/cli.ts' '--home' '<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2-data/app-home' 'hook' 'interrupt'",
+    "trustedHash": "sha256:10907b29e6b2ffddcc1fb26b7a3ce3fee87673b5e8a8982c441a0f862c5019fb",
+    "configSha256": "c2fd01eb3040c4636b83b0a34b4b995a3db2a982113fea817e6e10f9ca0ba03f",
+    "installedWith": "production installCodexInterruptHook",
+    "verifiedWith": "production verifyCodexInterruptHook",
+    "nativeTrusted": true,
+    "nativeCurrentHash": "sha256:10907b29e6b2ffddcc1fb26b7a3ce3fee87673b5e8a8982c441a0f862c5019fb"
+  },
+  "stubWorkerPeak": 2,
+  "cumulativeLedger": {
+    "logicalTurns": 25,
+    "responsesHttp": 27,
+    "runs": 2,
+    "turns": [
+      {
+        "name": "exec",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:49:17.411Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "resume",
+        "kind": "resume",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:49:27.834Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "reconnect",
+        "kind": "reconnect",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:49:37.995Z",
+        "httpAttempts": 3
+      },
+      {
+        "name": "interrupt-target",
+        "kind": "interrupt",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:49:48.785Z"
+      },
+      {
+        "name": "interrupt-peer",
+        "kind": "peer",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:49:48.785Z"
+      },
+      {
+        "name": "cleanup-01",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:49:49.541Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-02",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:49:59.713Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-03",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:50:09.872Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-04",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:50:20.047Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-05",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:50:30.216Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-06",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:50:40.714Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-07",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:50:50.999Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-08",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:51:01.455Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-09",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:51:11.629Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-10",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:51:21.856Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-11",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:51:32.026Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-12",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:51:42.206Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-13",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:51:52.385Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-14",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:52:02.564Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-15",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:52:12.742Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-16",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:52:22.911Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-17",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:52:33.086Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-18",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:52:33.828Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-19",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:52:34.538Z",
+        "httpAttempts": 1
+      },
+      {
+        "name": "cleanup-20",
+        "kind": "normal",
+        "prefix": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2",
+        "status": "passed",
+        "at": "2026-10-17T19:52:44.709Z",
+        "httpAttempts": 1
+      }
+    ]
+  },
+  "finalStates": [
+    {
+      "name": "exec",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_exec_156f4b85c78c441da4caa4c1510bc7b4",
+      "answer": "OVERNIGHT_ANSWER_exec_d60c56d278f64a2296edf4b865c5e7ad",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b69-587a-7862-8586-de4814d09c4b",
+          "turnId": "01a14b69-5888-7da1-9ae8-00534afb3f4d",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "a3a808ce893d",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "resume",
+      "kind": "resume",
+      "marker": "OVERNIGHT_INPUT_resume_ba56402cec314260b12f292caaacc73a",
+      "answer": "OVERNIGHT_ANSWER_resume_6fa11c68642b45dd8c58feaefd6f5a67",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b69-587a-7862-8586-de4814d09c4b",
+          "turnId": "01a14b69-80ec-7391-913c-6779bd7bfcac",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "371a198678bd",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "reconnect",
+      "kind": "reconnect",
+      "marker": "OVERNIGHT_INPUT_reconnect_5c309d5b2b6e4d3694b51739f3b0cc93",
+      "answer": "OVERNIGHT_ANSWER_reconnect_9df20039d0284d1a80db70ce623954cb",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 3,
+      "cuts": 2,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b69-a87c-7f83-9033-a7e529ffb09f",
+          "turnId": "01a14b69-a89f-7b73-86a2-b9fa4768e423",
+          "agentName": "/root"
+        },
+        {
+          "threadId": "01a14b69-a87c-7f83-9033-a7e529ffb09f",
+          "turnId": "01a14b69-a89f-7b73-86a2-b9fa4768e423",
+          "agentName": "/root"
+        },
+        {
+          "threadId": "01a14b69-a87c-7f83-9033-a7e529ffb09f",
+          "turnId": "01a14b69-a89f-7b73-86a2-b9fa4768e423",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "a25254449b5d",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "interrupt-target",
+      "kind": "interrupt",
+      "marker": "OVERNIGHT_INPUT_interrupt-target_da3b899cec314f87b703e6cc2dbd0cc5",
+      "answer": "OVERNIGHT_ANSWER_interrupt-target_7cbfa900670a41479434498bb265ea53",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": true,
+      "requestIds": [
+        {
+          "threadId": "01a14b69-d2d8-7d62-b8d5-a1ac54311526",
+          "turnId": "01a14b69-d2f8-7031-b06d-1c36b05a87a9",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "52cf91591616",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "interrupt-peer",
+      "kind": "peer",
+      "marker": "OVERNIGHT_INPUT_interrupt-peer_05141cf34d09479a825b5fd5fdbda360",
+      "answer": "OVERNIGHT_ANSWER_interrupt-peer_fc5b10cfe5b64d218e7fa48b869eaf52",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b69-d300-7363-8d25-d2362b687b56",
+          "turnId": "01a14b69-d31d-7b12-a3bc-702ad415a7eb",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "52142cc6f105",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-01",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-01_27c829dee8ee4db7b4ff61c88618fe89",
+      "answer": "OVERNIGHT_ANSWER_cleanup-01_aebb6c55f8194516b06a7bbca921eaf6",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b69-d597-7a00-9d7a-ef3f9acf310a",
+          "turnId": "01a14b69-d5ba-78d1-b7e1-a7e12477cb52",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "51b1e5ca5b00",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-02",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-02_a3c6e9fac43f482c9a53eb4a9716a6bb",
+      "answer": "OVERNIGHT_ANSWER_cleanup-02_db7f5310a2a34f37ab66fd0b7ffe0bc3",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b69-fd54-7ed1-99a8-d1303ba6dca1",
+          "turnId": "01a14b69-fd76-7d13-ad89-63b5c330bd96",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "60c9385480d5",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-03",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-03_6a0150dd584644378b59d15cb4dc120e",
+      "answer": "OVERNIGHT_ANSWER_cleanup-03_75218feb11814bdfa03e3f524af42169",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b6a-2502-7a91-acd6-10acca1ecb7e",
+          "turnId": "01a14b6a-2524-71e3-9fb7-567b9856e9f5",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "45c0541ca384",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-04",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-04_82df1813fb2f44cfab8ef10191ea5eeb",
+      "answer": "OVERNIGHT_ANSWER_cleanup-04_f3825868ec704a57afb2974eff7c9a16",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b6a-4cc1-74e0-af07-ad3a240125f3",
+          "turnId": "01a14b6a-4ce5-7f70-8a85-4680a574a14d",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "492902006dfa",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-05",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-05_655d9ef2762442c18f5eff94b85a3f0a",
+      "answer": "OVERNIGHT_ANSWER_cleanup-05_527f6620fc7b4ed2bb2019829b6ad0b3",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b6a-747d-75e1-b127-88bfa7dff505",
+          "turnId": "01a14b6a-74a0-7720-919b-13110f4beca4",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "aaab7bbc7c47",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-06",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-06_c28d92b2c9a845f9954b2a7710c71aa6",
+      "answer": "OVERNIGHT_ANSWER_cleanup-06_fe0ac64aee504e16bc9a0cbdb2676eea",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b6a-9d7e-7243-9f60-a8b24ae39711",
+          "turnId": "01a14b6a-9da0-7902-8858-5497cd1bdc5c",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "9be88d4815fc",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-07",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-07_baeb03c30fc94b1c975a1a36674317e8",
+      "answer": "OVERNIGHT_ANSWER_cleanup-07_314969440ee2457db8c010af8fe5b6c6",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b6a-c5ac-7041-af80-f5b9a4e1e104",
+          "turnId": "01a14b6a-c5ce-79a3-8cf3-7e1109089db9",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "de4720db5cbb",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-08",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-08_e23d2c5d21934b88823a378dab8841d3",
+      "answer": "OVERNIGHT_ANSWER_cleanup-08_30369e86134a4420a66e8f99ffdcea73",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b6a-ee82-7832-8a6c-da39540ef457",
+          "turnId": "01a14b6a-eea4-7780-b3ea-75337950c577",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "a41b03829741",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-09",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-09_0d4e9d89a8d94853b938185663c16711",
+      "answer": "OVERNIGHT_ANSWER_cleanup-09_664a7a163c944c0da3648a4f0add052d",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b6b-1640-7192-9f3a-c12e4d3401c9",
+          "turnId": "01a14b6b-1662-78b2-84cb-beca5733bb85",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "753322bd83f8",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-10",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-10_b2253ceea8ff48008262c9d72909730a",
+      "answer": "OVERNIGHT_ANSWER_cleanup-10_f9cb0f0d843c489ca45b63e006af5be7",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b6b-3e33-7283-9ef3-26abf0276d3f",
+          "turnId": "01a14b6b-3e56-7b13-adca-7b5d19eab235",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "7e8dc0c37d2b",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-11",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-11_1e84af8e409d4549a00800dbc28e1523",
+      "answer": "OVERNIGHT_ANSWER_cleanup-11_c8b8f4f7343f4f5e9055788dab88c2b7",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b6b-65ee-7d03-9690-b901ff4f8fb1",
+          "turnId": "01a14b6b-6612-7861-bb29-b614b4264fd4",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "54ca95276f39",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-12",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-12_a3854bd995af4cf8a9e4898c189fc771",
+      "answer": "OVERNIGHT_ANSWER_cleanup-12_0d5cef07931642e7bc032bb80001390e",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b6b-8db3-7160-95c6-757d67875993",
+          "turnId": "01a14b6b-8dd4-7840-9d02-c74998366428",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "7578ff636e1e",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-13",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-13_a2d293ff078640aca10df0170bf59985",
+      "answer": "OVERNIGHT_ANSWER_cleanup-13_f615386f221d42d0a02b809209efca18",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b6b-b574-7263-9989-ab75bb9fab79",
+          "turnId": "01a14b6b-b597-7141-a41d-d9e17a0c0d16",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "7b2113d69e4e",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-14",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-14_a9d5e44dacb4483c943ee1bd6bc9ea91",
+      "answer": "OVERNIGHT_ANSWER_cleanup-14_b0de1678a74c4cfd8b255322c5bad8d9",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b6b-dd37-7a93-a5a7-3befa0cb4704",
+          "turnId": "01a14b6b-dd5a-7541-851b-7b94545566b7",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "25c421dd6428",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-15",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-15_613129c46ebd45258cf52680e14de1e4",
+      "answer": "OVERNIGHT_ANSWER_cleanup-15_8fa5af7be83c4890958fb6ce27f3804b",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b6c-04f9-7403-acee-d9e027aaa407",
+          "turnId": "01a14b6c-051c-7d52-bebb-713f40f974fa",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "1ef0911a9f8e",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-16",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-16_352de65325354ae7b50344aacc3326a7",
+      "answer": "OVERNIGHT_ANSWER_cleanup-16_060e25bbcccd4421badef46dcf87691e",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b6c-2cb3-7321-95a6-ede2df03ec5b",
+          "turnId": "01a14b6c-2cd6-71b2-80e3-42da4bcbaa76",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "26c05ed6ef3a",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-17",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-17_026b8a3721c444a8932f5ee0a9de0dc7",
+      "answer": "OVERNIGHT_ANSWER_cleanup-17_29c273700f644476b52d803d84febd40",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b6c-5471-7343-bb50-e2b0d5ad9052",
+          "turnId": "01a14b6c-5493-7c31-9e03-35c200fb3b61",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "09cd5b8b54dc",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-18",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-18_51882fceeb7d462fb2fed08439a61950",
+      "answer": "OVERNIGHT_ANSWER_cleanup-18_ae5abc977bac428585972b0d685805c1",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b6c-5757-7e61-a21d-146584b802b1",
+          "turnId": "01a14b6c-577a-7f03-b93b-185da529c7dd",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "307a3b062226",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-19",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-19_e40d37d7ddda485d9e371e952b982881",
+      "answer": "OVERNIGHT_ANSWER_cleanup-19_8bab68ee13c045a48d4b447931f3bc21",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b6c-5a1d-7462-83bf-e704d248ef11",
+          "turnId": "01a14b6c-5a3f-7901-8bad-c695141b3301",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "538a3df87f7e",
+      "ownerSignalAborted": true
+    },
+    {
+      "name": "cleanup-20",
+      "kind": "normal",
+      "marker": "OVERNIGHT_INPUT_cleanup-20_863aa89beef047d7a6bd01884800484c",
+      "answer": "OVERNIGHT_ANSWER_cleanup-20_1aed564b3a444ce78ee246447f0fcf7e",
+      "starts": 1,
+      "sends": 1,
+      "submitted": 1,
+      "attempts": 1,
+      "cuts": 0,
+      "done": true,
+      "aborted": false,
+      "requestIds": [
+        {
+          "threadId": "01a14b6c-81d7-7dd3-8194-a2983830540b",
+          "turnId": "01a14b6c-81fb-7311-82e5-2ce8907c9928",
+          "agentName": "/root"
+        }
+      ],
+      "workerTrace": "0a4344949b96",
+      "ownerSignalAborted": true
+    }
+  ],
+  "finishedAt": "2026-10-17T19:52:54.989Z"
+}

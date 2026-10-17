@@ -1,0 +1,39 @@
+{
+  "exitCode": 1,
+  "stopReason": null,
+  "pid": 3851971,
+  "elapsedMs": 476,
+  "samples": [
+    {
+      "ms": 104,
+      "proxyRssBytes": 0,
+      "treeRssBytes": 0,
+      "diskBytes": 95734,
+      "processes": [
+        {
+          "pid": 3851971,
+          "ppid": 3851967,
+          "pgrp": 3851971,
+          "start": 38867994,
+          "rss": 0
+        }
+      ]
+    }
+  ],
+  "proxyPeakRssBytes": 0,
+  "treePeakRssBytes": 0,
+  "taskDiskBytes": 95734,
+  "optionalMissingDiskSkips": 0,
+  "ownedPidsObserved": {
+    "3851971": 38867994
+  },
+  "ownedPidsStillPresent": [],
+  "lingeringBeforeSupervisorCleanup": [],
+  "physicalModelSubmissions": 0,
+  "frozenManifestVerifiedAfter": true,
+  "cumulativeLedger": {
+    "logicalTurns": 0,
+    "responsesHttp": 0,
+    "runs": 1
+  }
+}

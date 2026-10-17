@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "head": "cb12f370feb558002c7416ffe0087a9814e1b091",
+  "sourceClosureExactVsRemote": true,
+  "sourceFileCount": 103,
+  "manifestSha256": "28b7b8478d424fccaea42feaba3900f3707e5b2e2fa495580eb94be892d0803f",
+  "fixtureSha256": "ed1f90f25530bb7e78df113214531d222f70d96469aa1864966a9d5bc2c37955",
+  "reviewer": "root independent of fixture author",
+  "latestChange": "Await actual HTTP=0/browser=1 before completing disconnected DOM; typecheck bound; no assertions weakened",
+  "guardNonAuthorReviewed": true,
+  "jobSelftestPassed": true,
+  "notYetRun": "Chrome fixture"
+}

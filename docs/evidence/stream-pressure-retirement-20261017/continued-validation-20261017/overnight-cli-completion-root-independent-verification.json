@@ -1,0 +1,23 @@
+{
+  "status": "PASS",
+  "reviewer": "root, independent of CLI probe author",
+  "head": "cb12f370feb558002c7416ffe0087a9814e1b091",
+  "archiveSha256": "5593564f1c9d5c292085425687914cfa9e01d40c086293ec0558bdb6db659bba",
+  "fileHashesChecked": 74,
+  "nativeExecOutputsChecked": 23,
+  "rawAppServerInterruptedAndPeerCompletedChecked": true,
+  "resumeHistoryAndCompiledContextChecked": true,
+  "reconnectIdentityAndFlushedEofChecked": true,
+  "cycleDenominator": {
+    "attempted": 20,
+    "passed": 20
+  },
+  "setupFailurePreserved": true,
+  "physicalModelSubmissions": 0,
+  "limitations": [
+    "Native CLI stdout/stderr and app-server stdout/stderr are preserved verbatim.",
+    "HTTP bodies/headers are represented by native identity, SHA256, terminal and fault metadata; complete raw HTTP wire bytes were not recorded.",
+    "App-server stdin RPC write bytes were not separately recorded; exact frozen script, actual IDs, prompts and child arguments are retained.",
+    "Uses isolated custom provider and real production adapter with only worker.run substituted. No real browser/model or built-in-provider installation acceptance."
+  ]
+}

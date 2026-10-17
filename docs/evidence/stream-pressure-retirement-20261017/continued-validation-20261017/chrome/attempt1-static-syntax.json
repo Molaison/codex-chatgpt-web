@@ -1,0 +1,10 @@
+{
+  "command": [
+    "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-current-runtime\\runtime\\bun.exe",
+    "-e",
+    "const fs=require('node:fs');new Bun.Transpiler({loader:'ts',target:'bun'}).transformSync(fs.readFileSync(process.argv[1],'utf8'));console.log(JSON.stringify({check:'static syntax only; fixture not imported/executed',bun:Bun.version,status:'passed'}));",
+    "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\tests\\pr13-local-chrome.fixture.test.ts"
+  ],
+  "exitCode": 0,
+  "fixtureSHA256": "f7cc6ecd1eb30ef7babdfad7fdb37da42fae4dbff9559661b47547430582d241"
+}

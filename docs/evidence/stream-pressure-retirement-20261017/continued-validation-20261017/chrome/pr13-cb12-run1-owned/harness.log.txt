@@ -1,0 +1,157 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests\pr13-local-chrome.fixture.test.ts:
+[chatgpt-web] browser turn a81f3bc4a215 stage=browser_page started
+[chatgpt-web] browser turn a81f3bc4a215 stage=browser_page completed durationMs=0
+[chatgpt-web] browser diagnostic trace=a81f3bc4a215 checkpoint=01-browser-page-acquired path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-tS3XpM\diagnostics\a81f3bc4a215-73b5b3e2
+[chatgpt-web] browser turn a81f3bc4a215 opened (transport=inline, maxMessageChars=30, estimatedInputTokens=8196, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser turn a81f3bc4a215 stage=temporary_chat_preparation started
+[chatgpt-web] browser turn a81f3bc4a215 stage=temporary_chat_preparation completed durationMs=0
+[chatgpt-web] browser turn a81f3bc4a215 stage=effort_selection started
+[chatgpt-web] browser turn a81f3bc4a215 stage=effort_selection completed durationMs=0
+[chatgpt-web] browser diagnostic trace=a81f3bc4a215 checkpoint=02-effort-selection-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-tS3XpM\diagnostics\a81f3bc4a215-73b5b3e2
+[chatgpt-web] browser turn a81f3bc4a215 stage=prompt_attachment started
+[chatgpt-web] browser turn a81f3bc4a215 stage=prompt_attachment completed durationMs=0
+[chatgpt-web] browser diagnostic trace=a81f3bc4a215 checkpoint=03-prompt-attachment-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-tS3XpM\diagnostics\a81f3bc4a215-73b5b3e2
+[chatgpt-web] browser turn a81f3bc4a215 stage=file_attachment started
+[chatgpt-web] browser turn a81f3bc4a215 stage=file_attachment completed durationMs=0
+[chatgpt-web] browser diagnostic trace=a81f3bc4a215 checkpoint=04-file-attachment-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-tS3XpM\diagnostics\a81f3bc4a215-73b5b3e2
+[chatgpt-web] browser turn a81f3bc4a215 stage=send started
+[chatgpt-web] browser turn a81f3bc4a215 stage=send completed durationMs=0
+[chatgpt-web] browser turn a81f3bc4a215 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic trace=a81f3bc4a215 checkpoint=05-send-accepted path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-tS3XpM\diagnostics\a81f3bc4a215-73b5b3e2
+[chatgpt-web] browser diagnostic trace=a81f3bc4a215 checkpoint=06-response-visible path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-tS3XpM\diagnostics\a81f3bc4a215-73b5b3e2
+[chatgpt-web] browser diagnostic trace=a81f3bc4a215 checkpoint=07-turn-completed path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-tS3XpM\diagnostics\a81f3bc4a215-73b5b3e2
+[chatgpt-web] browser turn a81f3bc4a215 completed (markdownChars=10001, domFullScans=1, domCacheHits=8)
+[chatgpt-web] browser_settled {"traceId":"a81f3bc4a215","outcome":"final","compaction":false,"submission":"accepted"}
+PR13_LOCAL_CHROME_FIXTURE {"mode":"queue","output":"<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\output\\playwright\\pr13-cb12-run1","starts":1,"simulatedSubmissions":1,"physicalModelSubmissions":0,"exited":[true]}
+[chatgpt-web] browser turn 75a0f7b752dc stage=browser_page started
+[chatgpt-web] browser turn 75a0f7b752dc stage=browser_page completed durationMs=0
+[chatgpt-web] browser diagnostic trace=75a0f7b752dc checkpoint=01-browser-page-acquired path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-sT5uvv\diagnostics\75a0f7b752dc-0e0ee82d
+[chatgpt-web] browser turn 75a0f7b752dc opened (transport=inline, maxMessageChars=30, estimatedInputTokens=8196, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser turn 75a0f7b752dc stage=temporary_chat_preparation started
+[chatgpt-web] browser turn 75a0f7b752dc stage=temporary_chat_preparation completed durationMs=0
+[chatgpt-web] browser turn 75a0f7b752dc stage=effort_selection started
+[chatgpt-web] browser turn 75a0f7b752dc stage=effort_selection completed durationMs=0
+[chatgpt-web] browser diagnostic trace=75a0f7b752dc checkpoint=02-effort-selection-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-sT5uvv\diagnostics\75a0f7b752dc-0e0ee82d
+[chatgpt-web] browser turn 75a0f7b752dc stage=prompt_attachment started
+[chatgpt-web] browser turn 75a0f7b752dc stage=prompt_attachment completed durationMs=0
+[chatgpt-web] browser diagnostic trace=75a0f7b752dc checkpoint=03-prompt-attachment-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-sT5uvv\diagnostics\75a0f7b752dc-0e0ee82d
+[chatgpt-web] browser turn 75a0f7b752dc stage=file_attachment started
+[chatgpt-web] browser turn 75a0f7b752dc stage=file_attachment completed durationMs=0
+[chatgpt-web] browser diagnostic trace=75a0f7b752dc checkpoint=04-file-attachment-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-sT5uvv\diagnostics\75a0f7b752dc-0e0ee82d
+[chatgpt-web] browser turn 75a0f7b752dc stage=send started
+[chatgpt-web] browser turn 75a0f7b752dc stage=send completed durationMs=0
+[chatgpt-web] browser turn 75a0f7b752dc submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic trace=75a0f7b752dc checkpoint=05-send-accepted path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-sT5uvv\diagnostics\75a0f7b752dc-0e0ee82d
+[chatgpt-web] browser diagnostic trace=75a0f7b752dc checkpoint=06-response-visible path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-sT5uvv\diagnostics\75a0f7b752dc-0e0ee82d
+[chatgpt-web] browser diagnostic trace=75a0f7b752dc checkpoint=07-turn-completed path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-sT5uvv\diagnostics\75a0f7b752dc-0e0ee82d
+[chatgpt-web] browser turn 75a0f7b752dc completed (markdownChars=10001, domFullScans=1, domCacheHits=8)
+[chatgpt-web] browser_settled {"traceId":"75a0f7b752dc","outcome":"final","compaction":false,"submission":"accepted"}
+PR13_LOCAL_CHROME_FIXTURE {"mode":"queue","output":"<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\output\\playwright\\pr13-cb12-run1","starts":1,"simulatedSubmissions":1,"physicalModelSubmissions":0,"exited":[true]}
+(pass) Local Chrome: real DOM answer and controlled relay preserve one typed failure on exact replay [9802.84ms]
+[chatgpt-web] browser turn 32d1cf46d691 stage=browser_page started
+[chatgpt-web] browser turn 32d1cf46d691 stage=browser_page completed durationMs=0
+[chatgpt-web] browser diagnostic trace=32d1cf46d691 checkpoint=01-browser-page-acquired path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-NTjiPb\diagnostics\32d1cf46d691-dfadb4b0
+[chatgpt-web] browser turn 32d1cf46d691 opened (transport=inline, maxMessageChars=30, estimatedInputTokens=8196, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser turn 32d1cf46d691 stage=temporary_chat_preparation started
+[chatgpt-web] browser turn 32d1cf46d691 stage=temporary_chat_preparation completed durationMs=0
+[chatgpt-web] browser turn 32d1cf46d691 stage=effort_selection started
+[chatgpt-web] browser turn 32d1cf46d691 stage=effort_selection completed durationMs=0
+[chatgpt-web] browser diagnostic trace=32d1cf46d691 checkpoint=02-effort-selection-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-NTjiPb\diagnostics\32d1cf46d691-dfadb4b0
+[chatgpt-web] browser turn 32d1cf46d691 stage=prompt_attachment started
+[chatgpt-web] browser turn 32d1cf46d691 stage=prompt_attachment completed durationMs=0
+[chatgpt-web] browser diagnostic trace=32d1cf46d691 checkpoint=03-prompt-attachment-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-NTjiPb\diagnostics\32d1cf46d691-dfadb4b0
+[chatgpt-web] browser turn 32d1cf46d691 stage=file_attachment started
+[chatgpt-web] browser turn 32d1cf46d691 stage=file_attachment completed durationMs=0
+[chatgpt-web] browser diagnostic trace=32d1cf46d691 checkpoint=04-file-attachment-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-NTjiPb\diagnostics\32d1cf46d691-dfadb4b0
+[chatgpt-web] browser turn 32d1cf46d691 stage=send started
+[chatgpt-web] browser turn 32d1cf46d691 stage=send completed durationMs=0
+[chatgpt-web] browser turn 32d1cf46d691 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic trace=32d1cf46d691 checkpoint=05-send-accepted path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-NTjiPb\diagnostics\32d1cf46d691-dfadb4b0
+[chatgpt-web] browser diagnostic trace=32d1cf46d691 checkpoint=06-response-visible path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-NTjiPb\diagnostics\32d1cf46d691-dfadb4b0
+[chatgpt-web] browser diagnostic trace=32d1cf46d691 checkpoint=07-turn-completed path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-NTjiPb\diagnostics\32d1cf46d691-dfadb4b0
+[chatgpt-web] browser turn 32d1cf46d691 completed (markdownChars=37, domFullScans=2, domCacheHits=11)
+[chatgpt-web] browser_settled {"traceId":"32d1cf46d691","outcome":"final","compaction":false,"submission":"accepted"}
+PR13_LOCAL_CHROME_FIXTURE {"mode":"detach","output":"<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\output\\playwright\\pr13-cb12-run1","starts":1,"simulatedSubmissions":1,"physicalModelSubmissions":0,"exited":[true]}
+(pass) Local Chrome: HTTP detach preserves background DOM completion and the running journal [6371.85ms]
+[chatgpt-web] browser turn 758de64b6380 stage=browser_page started
+[chatgpt-web] browser turn 758de64b6380 stage=browser_page completed durationMs=0
+[chatgpt-web] browser diagnostic trace=758de64b6380 checkpoint=01-browser-page-acquired path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-uhd0cE\diagnostics\758de64b6380-7578e1a6
+[chatgpt-web] browser turn 758de64b6380 opened (transport=inline, maxMessageChars=30, estimatedInputTokens=8196, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser turn 758de64b6380 stage=temporary_chat_preparation started
+[chatgpt-web] browser turn 758de64b6380 stage=temporary_chat_preparation completed durationMs=0
+[chatgpt-web] browser turn 758de64b6380 stage=effort_selection started
+[chatgpt-web] browser turn 758de64b6380 stage=effort_selection completed durationMs=0
+[chatgpt-web] browser diagnostic trace=758de64b6380 checkpoint=02-effort-selection-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-uhd0cE\diagnostics\758de64b6380-7578e1a6
+[chatgpt-web] browser turn 758de64b6380 stage=prompt_attachment started
+[chatgpt-web] browser turn 758de64b6380 stage=prompt_attachment completed durationMs=0
+[chatgpt-web] browser diagnostic trace=758de64b6380 checkpoint=03-prompt-attachment-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-uhd0cE\diagnostics\758de64b6380-7578e1a6
+[chatgpt-web] browser turn 758de64b6380 stage=file_attachment started
+[chatgpt-web] browser turn 758de64b6380 stage=file_attachment completed durationMs=0
+[chatgpt-web] browser diagnostic trace=758de64b6380 checkpoint=04-file-attachment-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-uhd0cE\diagnostics\758de64b6380-7578e1a6
+[chatgpt-web] browser turn 758de64b6380 stage=send started
+[chatgpt-web] browser turn 758de64b6380 stage=send completed durationMs=0
+[chatgpt-web] browser turn 758de64b6380 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic trace=758de64b6380 checkpoint=05-send-accepted path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-uhd0cE\diagnostics\758de64b6380-7578e1a6
+[chatgpt-web] browser diagnostic trace=758de64b6380 checkpoint=06-response-visible path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-uhd0cE\diagnostics\758de64b6380-7578e1a6
+[chatgpt-web] browser_settled {"traceId":"758de64b6380","outcome":"error","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser turn 758de64b6380 failed: ChatGPT web turn aborted
+[chatgpt-web] response_structure {"traceId":"758de64b6380","checkpoint":"07-turn-failed","turnIndex":0,"turnCount":1,"columns":["parent","tag","rendered","assistant","user","searchUnit","markdown","streamingStatus","activityStart","completionControl"],"turns":[{"truncated":false,"nodes":[[-1,"section",1,1,0,0,0,0,0,0],[0,"div",1,0,0,0,0,0,0,0],[1,"div",1,0,0,0,0,0,0,0],[2,"div",1,1,0,0,0,0,0,0]]}]}
+[chatgpt-web] browser diagnostic trace=758de64b6380 checkpoint=07-turn-failed path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-uhd0cE\diagnostics\758de64b6380-7578e1a6
+[chatgpt-web] browser turn b8c49fca2348 stage=browser_page started
+[chatgpt-web] browser turn b8c49fca2348 stage=browser_page completed durationMs=0
+[chatgpt-web] browser diagnostic trace=b8c49fca2348 checkpoint=01-browser-page-acquired path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-uhd0cE\diagnostics\b8c49fca2348-6b152214
+[chatgpt-web] browser turn b8c49fca2348 opened (transport=inline, maxMessageChars=30, estimatedInputTokens=8196, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser turn b8c49fca2348 stage=temporary_chat_preparation started
+[chatgpt-web] browser turn b8c49fca2348 stage=temporary_chat_preparation completed durationMs=0
+[chatgpt-web] browser turn b8c49fca2348 stage=effort_selection started
+[chatgpt-web] browser turn b8c49fca2348 stage=effort_selection completed durationMs=0
+[chatgpt-web] browser diagnostic trace=b8c49fca2348 checkpoint=02-effort-selection-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-uhd0cE\diagnostics\b8c49fca2348-6b152214
+[chatgpt-web] browser turn b8c49fca2348 stage=prompt_attachment started
+[chatgpt-web] browser turn b8c49fca2348 stage=prompt_attachment completed durationMs=0
+[chatgpt-web] browser diagnostic trace=b8c49fca2348 checkpoint=03-prompt-attachment-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-uhd0cE\diagnostics\b8c49fca2348-6b152214
+[chatgpt-web] browser turn b8c49fca2348 stage=file_attachment started
+[chatgpt-web] browser turn b8c49fca2348 stage=file_attachment completed durationMs=0
+[chatgpt-web] browser diagnostic trace=b8c49fca2348 checkpoint=04-file-attachment-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-uhd0cE\diagnostics\b8c49fca2348-6b152214
+[chatgpt-web] browser turn b8c49fca2348 stage=send started
+[chatgpt-web] browser turn b8c49fca2348 stage=send completed durationMs=0
+[chatgpt-web] browser turn b8c49fca2348 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic trace=b8c49fca2348 checkpoint=05-send-accepted path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-uhd0cE\diagnostics\b8c49fca2348-6b152214
+[chatgpt-web] browser diagnostic trace=b8c49fca2348 checkpoint=06-response-visible path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-uhd0cE\diagnostics\b8c49fca2348-6b152214
+[chatgpt-web] browser diagnostic trace=b8c49fca2348 checkpoint=07-turn-completed path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-uhd0cE\diagnostics\b8c49fca2348-6b152214
+[chatgpt-web] browser turn b8c49fca2348 completed (markdownChars=28, domFullScans=1, domCacheHits=8)
+[chatgpt-web] browser_settled {"traceId":"b8c49fca2348","outcome":"final","compaction":false,"submission":"accepted"}
+PR13_LOCAL_CHROME_FIXTURE {"mode":"retirement","output":"<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\output\\playwright\\pr13-cb12-run1","starts":2,"simulatedSubmissions":2,"physicalModelSubmissions":0,"exited":[true,true]}
+(pass) Local Chrome: same-owner replacement cannot launch before the cancelled child actually exits [6671.61ms]
+[chatgpt-web] browser turn c3927318f306 stage=browser_page started
+[chatgpt-web] browser turn c3927318f306 stage=browser_page completed durationMs=0
+[chatgpt-web] browser diagnostic trace=c3927318f306 checkpoint=01-browser-page-acquired path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-GK4fzL\diagnostics\c3927318f306-a8668f7f
+[chatgpt-web] browser turn c3927318f306 opened (transport=inline, maxMessageChars=30, estimatedInputTokens=8196, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser turn c3927318f306 stage=temporary_chat_preparation started
+[chatgpt-web] browser turn c3927318f306 stage=temporary_chat_preparation completed durationMs=0
+[chatgpt-web] browser turn c3927318f306 stage=effort_selection started
+[chatgpt-web] browser turn c3927318f306 stage=effort_selection completed durationMs=0
+[chatgpt-web] browser diagnostic trace=c3927318f306 checkpoint=02-effort-selection-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-GK4fzL\diagnostics\c3927318f306-a8668f7f
+[chatgpt-web] browser turn c3927318f306 stage=prompt_attachment started
+[chatgpt-web] browser turn c3927318f306 stage=prompt_attachment completed durationMs=0
+[chatgpt-web] browser diagnostic trace=c3927318f306 checkpoint=03-prompt-attachment-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-GK4fzL\diagnostics\c3927318f306-a8668f7f
+[chatgpt-web] browser turn c3927318f306 stage=file_attachment started
+[chatgpt-web] browser turn c3927318f306 stage=file_attachment completed durationMs=0
+[chatgpt-web] browser diagnostic trace=c3927318f306 checkpoint=04-file-attachment-complete path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-GK4fzL\diagnostics\c3927318f306-a8668f7f
+[chatgpt-web] browser turn c3927318f306 stage=send started
+[chatgpt-web] browser turn c3927318f306 stage=send completed durationMs=0
+[chatgpt-web] browser turn c3927318f306 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic trace=c3927318f306 checkpoint=05-send-accepted path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-GK4fzL\diagnostics\c3927318f306-a8668f7f
+[chatgpt-web] browser diagnostic trace=c3927318f306 checkpoint=06-response-visible path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-GK4fzL\diagnostics\c3927318f306-a8668f7f
+[chatgpt-web] browser turn c3927318f306 failed: ChatGPT web turn aborted
+[chatgpt-web] response_structure {"traceId":"c3927318f306","checkpoint":"07-turn-failed","turnIndex":0,"turnCount":1,"columns":["parent","tag","rendered","assistant","user","searchUnit","markdown","streamingStatus","activityStart","completionControl"],"turns":[{"truncated":false,"nodes":[[-1,"section",1,1,0,0,0,0,0,0],[0,"div",1,0,0,0,0,0,0,0],[1,"div",1,0,0,0,0,0,0,0],[2,"div",1,1,0,0,0,0,0,0]]}]}
+[chatgpt-web] browser diagnostic trace=c3927318f306 checkpoint=07-turn-failed path=<WIN_WORKSPACE>\.codex-tasks\20261017-windows-ci-crash\overnight-chrome-fixture\pr13-cb12-run1-owned\tmp\pr13-local-chrome-suite-4lvZHb\tmp\pr13-local-chrome-GK4fzL\diagnostics\c3927318f306-a8668f7f
+[chatgpt-web] browser_settled {"traceId":"c3927318f306","outcome":"error","compaction":false,"submission":"accepted"}
+PR13_LOCAL_CHROME_FIXTURE {"mode":"shutdown","output":"<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\output\\playwright\\pr13-cb12-run1","starts":1,"simulatedSubmissions":1,"physicalModelSubmissions":0,"exited":[true]}
+(pass) Local Chrome: shutdown retains its listener until its owned Chrome child exits [3318.12ms]
+
+ 4 pass
+ 0 fail
+ 107 expect() calls
+Ran 4 tests across 1 file. [26.68s]

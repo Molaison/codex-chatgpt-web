@@ -1,0 +1,13 @@
+{
+  "head": "cb12f370feb558002c7416ffe0087a9814e1b091",
+  "tree": "cd61345eca6242cd98d8228421faf9327e76871c",
+  "sanitizedOrigin": "https://github.com/Molaison/codex-chatgpt-web.git",
+  "trackedProductionDiff": "",
+  "ancestry": {
+    "pr6": true,
+    "pr7": true,
+    "frozenCombo": true,
+    "mainBase": true
+  },
+  "remoteMain": "fbabf15c49a4c11862b88eaf6268845c85808665\trefs/heads/main"
+}
