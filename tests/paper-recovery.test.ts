@@ -35,25 +35,29 @@ function conversation(): any {
 }
 function fixture(existingReady = false) {
   const root = mkdtempSync(join(tmpdir(), "paper-recovery-")), db = new Database(join(root, "pool.sqlite"));
-  db.exec("CREATE TABLE sessions(session_hash TEXT PRIMARY KEY,account_id TEXT NOT NULL,created_at TEXT NOT NULL,project_id TEXT,project_name TEXT)");
-  const registry = new PaperRegistry(db), scope: PaperScope = { accountId, projectId, sessionScope: ["cpr", "papers"], directory: join(root, "native") };
-  const reservation = registry.resolve(paperId, scope, {}), row = registry.get(paperId);
-  db.query("INSERT INTO sessions VALUES(?,?,?,?,?)").run(row.session_hash, accountId, dispatchStartedAt, projectId, "papers");
-  const pdf = Buffer.from("%PDF-1.4\nRecovery fixture\n%%EOF"), sha = createHash("sha256").update(pdf).digest("hex");
-  registry.prepare(paperId, scope, { paper_upload_token: reservation.upload_token, paper_pdf_sha256: sha }, [
-    { role: "user", content: [{ type: "input_text", text: "Fixture question" }, { type: "input_file", file_data: "data:application/pdf;base64," + pdf.toString("base64") }] },
-  ]);
-  const store = new ChatGptConversationStore(scope.directory, accountId);
-  const nativeKey = chatGptQuestionAnswerKey("qa-pool-" + row.session_hash, chatGptQuestionAnswerNamespace(accountId));
-  store.bind(nativeKey, store.reserve(nativeKey), conversationUrl);
-  const mappingPath = join(store.directory, createHash("sha256").update(nativeKey).digest("hex") + ".json");
-  if (existingReady) {
-    registry.begin(paperId); registry.complete(paperId, scope); registry.finish(paperId, true);
-  }
-  registry.begin(paperId);
-  db.query("UPDATE paper_events SET at=? WHERE id=(SELECT max(id) FROM paper_events WHERE event='dispatch_started')").run(dispatchStartedAt);
-  registry.finish(paperId, false);
-  db.query("INSERT INTO paper_aliases VALUES(?,?)").run(aliasId, paperId);
+  // Commit the real file-backed fixture once; reconciliation still runs outside a transaction.
+  const { registry, scope, sha, mappingPath } = db.transaction(() => {
+    db.exec("CREATE TABLE sessions(session_hash TEXT PRIMARY KEY,account_id TEXT NOT NULL,created_at TEXT NOT NULL,project_id TEXT,project_name TEXT)");
+    const registry = new PaperRegistry(db), scope: PaperScope = { accountId, projectId, sessionScope: ["cpr", "papers"], directory: join(root, "native") };
+    const reservation = registry.resolve(paperId, scope, {}), row = registry.get(paperId);
+    db.query("INSERT INTO sessions VALUES(?,?,?,?,?)").run(row.session_hash, accountId, dispatchStartedAt, projectId, "papers");
+    const pdf = Buffer.from("%PDF-1.4\nRecovery fixture\n%%EOF"), sha = createHash("sha256").update(pdf).digest("hex");
+    registry.prepare(paperId, scope, { paper_upload_token: reservation.upload_token, paper_pdf_sha256: sha }, [
+      { role: "user", content: [{ type: "input_text", text: "Fixture question" }, { type: "input_file", file_data: "data:application/pdf;base64," + pdf.toString("base64") }] },
+    ]);
+    const store = new ChatGptConversationStore(scope.directory, accountId);
+    const nativeKey = chatGptQuestionAnswerKey("qa-pool-" + row.session_hash, chatGptQuestionAnswerNamespace(accountId));
+    store.bind(nativeKey, store.reserve(nativeKey), conversationUrl);
+    const mappingPath = join(store.directory, createHash("sha256").update(nativeKey).digest("hex") + ".json");
+    if (existingReady) {
+      registry.begin(paperId); registry.complete(paperId, scope); registry.finish(paperId, true);
+    }
+    registry.begin(paperId);
+    db.query("UPDATE paper_events SET at=? WHERE id=(SELECT max(id) FROM paper_events WHERE event='dispatch_started')").run(dispatchStartedAt);
+    registry.finish(paperId, false);
+    db.query("INSERT INTO paper_aliases VALUES(?,?)").run(aliasId, paperId);
+    return { registry, scope, sha, mappingPath };
+  }).immediate();
   const options = (reader: PaperRecoveryReader) => ({ reader, browserHostDescriptorPath: join(root, "unused-descriptor"), signal: new AbortController().signal });
   const snapshot = () => ({ papers: db.query("SELECT * FROM papers").all(), events: db.query("SELECT * FROM paper_events").all(), mapping: readFileSync(mappingPath, "utf8") });
   return { root, db, registry, scope, row: registry.get(paperId), sha, mappingPath, options, snapshot,
