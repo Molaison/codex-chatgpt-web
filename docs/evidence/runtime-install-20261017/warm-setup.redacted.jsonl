@@ -1,0 +1,2 @@
+{"side": "baseline", "setupMs": 12902.8305, "installed": "<task-scratch>/warm-home-baseline/versions/6.1.10-win32-x64", "scans": 4}
+{"side": "candidate", "setupMs": 10358.827099999999, "installed": "<task-scratch>/warm-home-candidate/versions/6.1.10-win32-x64", "scans": 3}

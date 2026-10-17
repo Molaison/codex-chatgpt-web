@@ -1,0 +1,74 @@
+{
+  "baseline": {
+    "totalMs": {
+      "median": 13429.761399999988,
+      "min": 13136.674100000004,
+      "max": 13587.3028
+    },
+    "copyMs": {
+      "median": 6527.425800000012,
+      "min": 6443.410400000001,
+      "max": 6716.925299999995
+    },
+    "scanMs": {
+      "median": 6816.526600000005,
+      "min": 6429.0180000000255,
+      "max": 7130.2934
+    },
+    "samples": 5,
+    "scanCounts": [
+      5,
+      5,
+      5,
+      5,
+      5
+    ]
+  },
+  "candidate": {
+    "totalMs": {
+      "median": 12665.812000000002,
+      "min": 12164.555900000003,
+      "max": 13084.217799999999
+    },
+    "copyMs": {
+      "median": 6613.762300000002,
+      "min": 6525.134399999999,
+      "max": 7878.159999999989
+    },
+    "scanMs": {
+      "median": 5602.8467000000055,
+      "min": 5168.560100000002,
+      "max": 6131.5358000000015
+    },
+    "samples": 5,
+    "scanCounts": [
+      4,
+      4,
+      4,
+      4,
+      4
+    ]
+  },
+  "pairedDeltaMs": [
+    921.4907999999978,
+    1150.4369999999944,
+    921.660899999988,
+    52.456300000005285,
+    687.2301999999909
+  ],
+  "totalMedianReductionPercent": 5.6884808094951556,
+  "input": {
+    "appVersion": "6.1.10",
+    "bundleId": "c11fe8093fadf93f1d6f636a399f677ae3f47754f1e71d3a81c2388d976c0ad6",
+    "bunVersion": "1.4.0",
+    "playwright": "1.62.0",
+    "platform": "win32",
+    "arch": "x64"
+  },
+  "hashes": {
+    "manifest.json": "16468710b3da17b5ce1e2f555790c7cae88eccb84f56c9cd2543677122098c40",
+    "app\\browser-helper.cjs": "dcd5b85f26aa8a271e7214ca72445f05d2269100d36fe4f7d20ffe3bbb1b057f",
+    "app\\cli.js": "b2fe650eab046c45d54766fd7bb6e7dfe43d6d619dba6c1535e7c29ff9f27368",
+    "runtime\\bun.exe": "627d2e4775c24bdedee2cd7ccc18dcadae061e5345274ab6e3c4c797927bfb8f"
+  }
+}

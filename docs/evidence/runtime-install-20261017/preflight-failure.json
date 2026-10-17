@@ -1,0 +1,14 @@
+{
+  "case": "CI-expanded-runtime-preflight",
+  "result": "rejected-as-incomplete",
+  "modelSubmissions": 0,
+  "artifactId": 12103444248,
+  "artifactSha256": "ec9619e35bf144b5000f45c570f0814af27959e49c0c578a9940fe655e110319",
+  "version": "6.1.10",
+  "manifestFiles": 6041,
+  "missingFiles": 87,
+  "missingBytes": 1133954,
+  "firstMissing": "app/node_modules/.bin/node-which.bunx",
+  "error": "Packaged runtime did not fully materialize within 30000ms: Runtime bundle file is missing",
+  "classification": "Actions expanded artifact omitted hidden files; extraction of embedded installer runtime is a separate setup correction. No validation bypass."
+}
