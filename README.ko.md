@@ -1,3 +1,5 @@
+현재 ywl 소스 변형과 업스트림 체크포인트: [브랜치 안내](docs/ywl-source-branches.md).
+
 ## Molaison QA와 Full 도구
 
 일반 QA 모델은 대화만 처리합니다. 공개 `-tools` 모델은 별도로 인증된 Full provider를 사용합니다.

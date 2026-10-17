@@ -1,3 +1,5 @@
+現在の ywl ソース変種と上流チェックポイント：[ブランチガイド](docs/ywl-source-branches.md)。
+
 ## Molaison QA と Full ツール
 
 通常の QA モデルは会話のみを扱います。公開 `-tools` モデルは独立した認証付き Full provider を使います。
