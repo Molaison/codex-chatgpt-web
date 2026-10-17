@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { sanitizeForExport } = require("./logging.cjs");
 
 const startedAt = Date.now();
 
@@ -35,7 +36,7 @@ function runSmokeCommand(command, args, options = {}) {
     windowsHide: true,
   });
   if (result.error || result.status !== 0) {
-    process.stderr.write(`PACKAGED_LAUNCHER_SMOKE_COMMAND_FAILED ${JSON.stringify({
+    const diagnostic = sanitizeForExport({
       command: path.basename(command),
       code: result.error?.code || null,
       status: result.status,
@@ -45,11 +46,15 @@ function runSmokeCommand(command, args, options = {}) {
       timeoutMs: options.timeout || 45_000,
       markerWritten: Boolean(options.markerPath && fs.existsSync(options.markerPath)),
       phases: readPackageSmokeProgress(options.markerPath),
-      stdout: result.stdout?.trim().slice(-8192) || "",
-      stderr: result.stderr?.trim().slice(-8192) || "",
-    })}\n`);
+      stdout: result.stdout?.trim() || "",
+      stderr: result.stderr?.trim() || "",
+    });
+    // Sanitize before bounding output so cutting a token prefix cannot expose its tail.
+    diagnostic.stdout = diagnostic.stdout.slice(-8192);
+    diagnostic.stderr = diagnostic.stderr.slice(-8192);
+    process.stderr.write(`PACKAGED_LAUNCHER_SMOKE_COMMAND_FAILED ${JSON.stringify(diagnostic)}\n`);
     if (result.error) throw result.error;
-    throw new Error(`${command} failed with status ${result.status}: ${result.stderr?.trim() || result.stdout?.trim() || "no output"}`);
+    throw new Error(`${diagnostic.command} failed with status ${result.status}: ${diagnostic.stderr || diagnostic.stdout || "no output"}`);
   }
   return result;
 }

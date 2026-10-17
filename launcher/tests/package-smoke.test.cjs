@@ -23,7 +23,7 @@ function probe(markerPath, code, timeout = 5000) {
       runSmokeCommand(process.execPath, ["-e", ${JSON.stringify(code)}], {
         markerPath: ${JSON.stringify(markerPath)}, timeout: ${timeout}
       });
-    } catch { process.exitCode = 1; }
+    } catch (error) { process.stderr.write("SMOKE_PROBE_ERROR " + error.message + "\\n"); process.exitCode = 1; }
   `], { encoding: "utf8", timeout: 10000, windowsHide: true });
 }
 
@@ -61,3 +61,24 @@ for (const markerWritten of [false, true]) {
     assert.ok(fs.existsSync(`${markerPath}.progress`), "failure evidence is read before caller cleanup");
   }));
 }
+
+
+test("smoke output and the thrown failure reuse the existing export sanitizer", () => withScratch(markerPath => {
+  const key = "sk-" + "synthetic".repeat(40);
+  const bearer = "fixture".repeat(6);
+  // The raw 8192-character tail starts inside the key; sanitize before slicing.
+  const stdout = "prefix".repeat(100) + " runtime " + key + " https://fixture.invalid/private/path?opaque=value" + "z".repeat(8100);
+  const stderr = "Authorization: Bearer " + bearer + " C:\\Users\\Fixture\\private";
+  const code = "process.stdout.write(" + JSON.stringify(stdout) + "); process.stderr.write(" + JSON.stringify(stderr) + "); process.exit(7)";
+  const result = probe(markerPath, code);
+  assert.equal(result.status, 1);
+  assert.ok(!result.stderr.includes(key));
+  assert.ok(!result.stderr.includes("synthetic"), "even a key fragment at the raw tail boundary stays redacted");
+  assert.ok(!result.stderr.includes(bearer));
+  assert.ok(!result.stderr.includes("/private/path"));
+  assert.ok(!result.stderr.includes("Fixture"));
+  const diagnostic = JSON.parse(result.stderr.trim().split("\n")[0].split("PACKAGED_LAUNCHER_SMOKE_COMMAND_FAILED ")[1]);
+  assert.match(diagnostic.stdout, /\[runtime-key\]/);
+  assert.match(diagnostic.stderr, /Bearer \[redacted\]/);
+  assert.match(result.stderr, /SMOKE_PROBE_ERROR/);
+}));
