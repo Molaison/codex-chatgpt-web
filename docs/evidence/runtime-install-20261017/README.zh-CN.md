@@ -39,4 +39,4 @@ payload/unpacked/resources/runtime/ # 同一安装包中的完整 runtime
 
 完整包获取方式：已校验的 Actions ZIP 中，展开的 build/runtime 因 artifact 隐藏文件过滤缺 87 项，被原清单/30 秒检查拒绝（`preflight-failure.json`）。没有补造文件或绕过验证。用本机既有 7-Zip 只提取 ZIP 内 `artifacts/codex-web-gpt-6.1.10-win-x64.exe` 的 `$PLUGINSDIR/app-64.7z`，再提取 `resources/runtime/*`。没有运行安装程序。该完整嵌入包经原校验后才用于所有正式样本。
 
-Windows 最终安装回归日志为 `windows-correctness.log`，14/14，包括发布后同长度损坏的新装清除/旧包恢复，以及已有安装同长度篡改后的修复。所有证据为本地文件/受控安装，模型物理提交为零。
+Windows 最终安装回归日志为 `windows-correctness.tap.txt`，14/14，包括发布后同长度损坏的新装清除/旧包恢复，以及已有安装同长度篡改后的修复。所有证据为本地文件/受控安装，模型物理提交为零。
