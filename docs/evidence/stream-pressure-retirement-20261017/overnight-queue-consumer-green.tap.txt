@@ -1,0 +1,15 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/event-queue.test.ts:
+(pass) a full queue delivers one failure instead of its undelivered backlog [0.60ms]
+(pass) failure releases waiting consumers with one terminal value [0.16ms]
+(pass) normal close drains accepted values and releases idle waiters [0.10ms]
+(pass) return discards undelivered output and closes every waiter [0.11ms]
+
+tests/server-event-pressure.test.ts:
+(pass) non-streaming output is consumed while an asynchronous adapter is still producing [18.90ms]
+
+ 5 pass
+ 0 fail
+ 10 expect() calls
+Ran 5 tests across 2 files. [444.00ms]

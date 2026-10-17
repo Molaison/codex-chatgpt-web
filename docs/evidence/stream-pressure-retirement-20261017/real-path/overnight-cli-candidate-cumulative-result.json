@@ -1,0 +1,77 @@
+{
+  "at": "2026-10-17T18:44:23.563804Z",
+  "actualLogicalCliTurns": 2,
+  "actualHttpAttempts": 2,
+  "physicalModelCalls": 0,
+  "workerStarts": 2,
+  "sendActivatedCallbacks": 2,
+  "submittedCallbacks": 2,
+  "passedCompleteExec": 1,
+  "monitorAbortedExec": 1,
+  "resume": "NOT_TESTED; cancelled in favor of one final normal exec using the one remaining authorized CLI slot",
+  "setupFailures": [
+    {
+      "kind": "script generator SyntaxError",
+      "cli": 0,
+      "http": 0
+    },
+    {
+      "kind": "self-test exit-listener wait race, task selftest stopped and preserved",
+      "cli": 0,
+      "http": 0
+    }
+  ],
+  "monitorSelfTest": {
+    "actualFilesystemExceptions": [
+      "ENOENT",
+      "ENOENT",
+      "ENOENT",
+      "ENOENT"
+    ],
+    "optionalDiskSkips": 293,
+    "rssUnavailableStops": true,
+    "previousRunException": "not originally captured; exact previous cause remains unknown"
+  },
+  "lastExec": {
+    "head": "f60bd7793af9897a6bdddd22aff75e7a346c4fb2",
+    "exit": 0,
+    "canary": [
+      "OVERNIGHT_CANARY_1"
+    ],
+    "http": 1,
+    "worker": 1,
+    "durationMs": 10720,
+    "proxyPeakRssBytes": 215519232,
+    "treePeakRssBytes": 910020608,
+    "persistentOwnedChildPeakRssBytes": {
+      "3452404": 664842240,
+      "3452563": 5087232,
+      "3452565": 5185536,
+      "3452566": 10952704,
+      "3452677": 5033984,
+      "3452678": 5070848,
+      "3452679": 11182080,
+      "3452805": 6819840,
+      "3453242": 35328000
+    },
+    "childRoleLimit": "Per-PID child RSS is retained. Repeated descendants belong to the CLI subtree based on fixture source; comm names were not captured. Transient ps child remains included in total-tree RSS.",
+    "rssCapsExceeded": false
+  },
+  "versionBinding": {
+    "documentOnlyHeadDelta": "ee43d556 -> f60bd779; no production tracked delta",
+    "limitation": "Launch-time source hashes and dirty diff were not captured by this fixture. Current hashes and mtimes are post-run supporting observations, not retroactive cryptographic proof of loaded source. Do not imply HEAD alone binds actual execution.",
+    "supportingMtimes": "examined runtime files match ee43 blobs now, mtime18:17\u201318:28 before18:42 execution; current dirty paths empty at check"
+  },
+  "scope": "actual Codex0.162 exec and real startServer/createChatGptWebAdapter, only worker.run substituted; local custom HTTP provider/dummy local key; not built-in-provider install or authenticated browser acceptance",
+  "cleanup": {
+    "noRemainingTaskProcesses": true,
+    "allFirstAndLastLoopbackPortsClosed": {
+      "first:proxyPort": true,
+      "first:runtimePort": true,
+      "-last:proxyPort": true,
+      "-last:runtimePort": true
+    },
+    "noFurtherCliWillBeStarted": true
+  },
+  "baselinePreserved": true
+}

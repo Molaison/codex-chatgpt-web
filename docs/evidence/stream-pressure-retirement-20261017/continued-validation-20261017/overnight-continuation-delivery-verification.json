@@ -1,0 +1,16 @@
+{
+  "status": "PASS",
+  "atUtc": "2026-10-17T20:12:47Z",
+  "archive": "overnight-continuation-review-evidence.tar.gz",
+  "sha256": "7e0dd592af359fd7fe5ea6d1ed549ab9c6e8aecac24bfd4a96cf7b16013b3f38",
+  "bytes": 960364,
+  "fileHashCount": 17,
+  "head": "cb12f370feb558002c7416ffe0087a9814e1b091",
+  "productionDiffEmpty": true,
+  "nativeRecordedPidsStillOurIdentity": [],
+  "recordedPidsReusedByOtherIdentitiesCount": 0,
+  "nativeRecordedPortsListening": [],
+  "remoteMain": "fbabf15c49a4c11862b88eaf6268845c85808665\trefs/heads/main",
+  "newModelSubmissions": 0,
+  "clockSource": "ywl system clock; cross-host clocks are not used to infer event order"
+}

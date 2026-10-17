@@ -1,0 +1,18 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/event-queue.test.ts:
+3 | 
+4 | test("a full queue delivers one failure instead of its undelivered backlog", async () => {
+5 |   const queue = new AsyncEventQueue<string>(1);
+6 |   queue.push("undelivered partial output");
+7 |   expect(() => queue.push("overflow")).toThrow("Adapter event backlog exceeded");
+8 |   queue.fail("failed");
+            ^
+TypeError: queue.fail is not a function. (In 'queue.fail("failed")', 'queue.fail' is undefined)
+      at <anonymous> (<user-home>/mol184185-live-20261017-1000/overnight-pressure/tests/event-queue.test.ts:8:9)
+(fail) a full queue delivers one failure instead of its undelivered backlog [0.58ms]
+
+ 0 pass
+ 1 fail
+ 1 expect() calls
+Ran 1 test across 1 file. [5.00ms]

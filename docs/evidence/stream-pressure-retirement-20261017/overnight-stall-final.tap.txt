@@ -1,0 +1,13 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/bridge-stall-timeout.test.ts:
+[bridge] upstream silence halfway to the stall budget model=chatgpt-web/test response=resp_fc123f7c803848b189149553cc3df12f stallSec=1 adapterEvents=0 lastEvent=<none> sinceLastEventMs=1500
+[bridge] upstream_stall_timeout model=chatgpt-web/test response=resp_fc123f7c803848b189149553cc3df12f stallSec=1 adapterEvents=0 lastEvent=<none> sinceLastEventMs=1500 sinceStreamStartMs=1500 iteratorStarted=true upstreamDone=false emittedFrames=1
+(pass) an adapter that goes silent past the budget is cancelled after coalesced timer ticks [11.83ms]
+(pass) an adapter that keeps heartbeating is never cancelled, however long it takes [2016.51ms]
+(pass) the stall budget is configurable and falls back to the shipped default [0.06ms]
+
+ 3 pass
+ 0 fail
+ 11 expect() calls
+Ran 3 tests across 1 file. [2.04s]

@@ -1,0 +1,3 @@
+{
+  "note": "The script requested two isolated Python invocations; the Windows job observed root plus two remaining descendants. Do not infer total process count from the original short boundary label. Job membership survived parent exit and was emptied by intentional private-job termination. This was not a Chrome/business cleanup result."
+}

@@ -1,0 +1,20 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/server-event-pressure.test.ts:
+14 |     const waiter = this.waiters.shift();
+15 |     if (waiter) {
+16 |       waiter({ value, done: false });
+17 |       return;
+18 |     }
+19 |     if (this.buffered.length >= this.maxBuffered) throw new EventQueueOverflowError();
+                                                             ^
+error: Adapter event backlog exceeded
+      at push (<user-home>/mol184185-live-20261017-1000/overnight-pressure/src/event-queue.ts:19:57)
+      at <anonymous> (<user-home>/mol184185-live-20261017-1000/overnight-pressure/src/server.ts:826:13)
+      at async responseRequest (<user-home>/mol184185-live-20261017-1000/overnight-pressure/src/server.ts:863:9)
+      at async <anonymous> (<user-home>/mol184185-live-20261017-1000/overnight-pressure/tests/server-event-pressure.test.ts:13:26)
+(fail) non-streaming output is consumed while an asynchronous adapter is still producing [7.91ms]
+
+ 0 pass
+ 1 fail
+Ran 1 test across 1 file. [461.00ms]

@@ -1,0 +1,18 @@
+22 |   writeFileSync(temporary, JSON.stringify(ledger, null, 2) + "\n"); renameSync(temporary, ledgerPath);
+23 | }
+24 | const codex = "<YWL_HOME>/.local/lib/codex-official-v0.162.0/bin/codex";
+25 | const model = "chatgpt-web/gpt-5.6-luna";
+26 | const root = prefix + "-data";
+27 | assert.ok(!existsSync(root), "Never reuse an old home or overwrite prior evidence");
+            ^
+AssertionError: Never reuse an old home or overwrite prior evidence
+ generatedMessage: false,
+     actual: false,
+   expected: true,
+   operator: "==",
+       diff: "simple",
+       code: "ERR_ASSERTION"
+
+      at <YWL_TASK>/overnight-pressure/overnight-cli-completion-suite.ts:27:8
+
+Bun v1.4.0 (Linux x64)

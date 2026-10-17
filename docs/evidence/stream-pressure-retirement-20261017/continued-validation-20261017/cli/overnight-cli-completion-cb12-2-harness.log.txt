@@ -1,0 +1,152 @@
+{"at":"2026-10-17T19:49:17.389Z","event":"suite_start","root":"<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2-data","proxyPid":3874165,"limits":{"logicalTurns":30,"responsesHttp":40,"perLogicalMs":45000,"suiteMs":900000,"proxyRssBytes":536870912,"treeRssBytes":2147483648,"diskBytes":2147483648}}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:49:17.647Z","event":"worker_started","name":"exec"}
+{"at":"2026-10-17T19:49:17.651Z","event":"worker_accepted","name":"exec","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"a3a808ce893d","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:49:27.833Z","event":"logical_window","name":"exec","elapsedMs":10422}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:49:27.944Z","event":"worker_started","name":"resume"}
+{"at":"2026-10-17T19:49:27.945Z","event":"worker_accepted","name":"resume","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"371a198678bd","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:49:37.994Z","event":"logical_window","name":"resume","elapsedMs":10160}
+{"at":"2026-10-17T19:49:37.995Z","event":"lifecycle_cleanup","stage":"after-resume","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:49:38.114Z","event":"worker_started","name":"reconnect"}
+{"at":"2026-10-17T19:49:38.115Z","event":"worker_accepted","name":"reconnect","sends":1,"submitted":1}
+{"at":"2026-10-17T19:49:38.116Z","event":"accepted_connection_cut","name":"reconnect","attempt":1,"faultKind":"accepted_partial_sse_eof","bodyFlushCompleted":true}
+{"at":"2026-10-17T19:49:38.335Z","event":"accepted_connection_cut","name":"reconnect","attempt":2,"faultKind":"accepted_partial_sse_eof","bodyFlushCompleted":true}
+[chatgpt-web] browser_settled {"traceId":"a25254449b5d","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:49:48.783Z","event":"logical_window","name":"reconnect","elapsedMs":10788}
+{"at":"2026-10-17T19:49:48.784Z","event":"lifecycle_cleanup","stage":"after-reconnect","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:49:48.943Z","event":"worker_started","name":"interrupt-target"}
+{"at":"2026-10-17T19:49:48.944Z","event":"worker_accepted","name":"interrupt-target","sends":1,"submitted":1}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:49:48.977Z","event":"worker_started","name":"interrupt-peer"}
+{"at":"2026-10-17T19:49:48.978Z","event":"worker_accepted","name":"interrupt-peer","sends":1,"submitted":1}
+{"at":"2026-10-17T19:49:49.485Z","event":"worker_aborted","name":"interrupt-target"}
+[chatgpt-web] browser_settled {"traceId":"52cf91591616","outcome":"error","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"52142cc6f105","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:49:49.539Z","event":"logical_window","name":"native-interrupt-and-peer","elapsedMs":755}
+{"at":"2026-10-17T19:49:49.541Z","event":"lifecycle_cleanup","stage":"after-interrupt-peer","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:49:49.663Z","event":"worker_started","name":"cleanup-01"}
+{"at":"2026-10-17T19:49:49.664Z","event":"worker_accepted","name":"cleanup-01","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"51b1e5ca5b00","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:49:59.712Z","event":"logical_window","name":"cleanup-01","elapsedMs":10171}
+{"at":"2026-10-17T19:49:59.713Z","event":"lifecycle_cleanup","stage":"cleanup-01","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:49:59.829Z","event":"worker_started","name":"cleanup-02"}
+{"at":"2026-10-17T19:49:59.830Z","event":"worker_accepted","name":"cleanup-02","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"60c9385480d5","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:50:09.872Z","event":"logical_window","name":"cleanup-02","elapsedMs":10159}
+{"at":"2026-10-17T19:50:09.872Z","event":"lifecycle_cleanup","stage":"cleanup-02","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:50:09.997Z","event":"worker_started","name":"cleanup-03"}
+{"at":"2026-10-17T19:50:09.998Z","event":"worker_accepted","name":"cleanup-03","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"45c0541ca384","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:50:20.046Z","event":"logical_window","name":"cleanup-03","elapsedMs":10173}
+{"at":"2026-10-17T19:50:20.046Z","event":"lifecycle_cleanup","stage":"cleanup-03","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:50:20.169Z","event":"worker_started","name":"cleanup-04"}
+{"at":"2026-10-17T19:50:20.169Z","event":"worker_accepted","name":"cleanup-04","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"492902006dfa","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:50:30.214Z","event":"logical_window","name":"cleanup-04","elapsedMs":10167}
+{"at":"2026-10-17T19:50:30.216Z","event":"lifecycle_cleanup","stage":"cleanup-04","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:50:30.661Z","event":"worker_started","name":"cleanup-05"}
+{"at":"2026-10-17T19:50:30.662Z","event":"worker_accepted","name":"cleanup-05","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"aaab7bbc7c47","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:50:40.713Z","event":"logical_window","name":"cleanup-05","elapsedMs":10497}
+{"at":"2026-10-17T19:50:40.713Z","event":"lifecycle_cleanup","stage":"cleanup-05","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:50:40.879Z","event":"worker_started","name":"cleanup-06"}
+{"at":"2026-10-17T19:50:40.880Z","event":"worker_accepted","name":"cleanup-06","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"9be88d4815fc","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:50:50.997Z","event":"logical_window","name":"cleanup-06","elapsedMs":10283}
+{"at":"2026-10-17T19:50:50.999Z","event":"lifecycle_cleanup","stage":"cleanup-06","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:50:51.245Z","event":"worker_started","name":"cleanup-07"}
+{"at":"2026-10-17T19:50:51.246Z","event":"worker_accepted","name":"cleanup-07","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"de4720db5cbb","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:51:01.454Z","event":"logical_window","name":"cleanup-07","elapsedMs":10455}
+{"at":"2026-10-17T19:51:01.455Z","event":"lifecycle_cleanup","stage":"cleanup-07","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:51:01.578Z","event":"worker_started","name":"cleanup-08"}
+{"at":"2026-10-17T19:51:01.579Z","event":"worker_accepted","name":"cleanup-08","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"a41b03829741","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:51:11.628Z","event":"logical_window","name":"cleanup-08","elapsedMs":10172}
+{"at":"2026-10-17T19:51:11.629Z","event":"lifecycle_cleanup","stage":"cleanup-08","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:51:11.751Z","event":"worker_started","name":"cleanup-09"}
+{"at":"2026-10-17T19:51:11.752Z","event":"worker_accepted","name":"cleanup-09","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"753322bd83f8","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:51:21.854Z","event":"logical_window","name":"cleanup-09","elapsedMs":10225}
+{"at":"2026-10-17T19:51:21.855Z","event":"lifecycle_cleanup","stage":"cleanup-09","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:51:21.978Z","event":"worker_started","name":"cleanup-10"}
+{"at":"2026-10-17T19:51:21.978Z","event":"worker_accepted","name":"cleanup-10","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"7e8dc0c37d2b","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:51:32.024Z","event":"logical_window","name":"cleanup-10","elapsedMs":10168}
+{"at":"2026-10-17T19:51:32.026Z","event":"lifecycle_cleanup","stage":"cleanup-10","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:51:32.155Z","event":"worker_started","name":"cleanup-11"}
+{"at":"2026-10-17T19:51:32.155Z","event":"worker_accepted","name":"cleanup-11","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"54ca95276f39","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:51:42.205Z","event":"logical_window","name":"cleanup-11","elapsedMs":10179}
+{"at":"2026-10-17T19:51:42.206Z","event":"lifecycle_cleanup","stage":"cleanup-11","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:51:42.333Z","event":"worker_started","name":"cleanup-12"}
+{"at":"2026-10-17T19:51:42.334Z","event":"worker_accepted","name":"cleanup-12","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"7578ff636e1e","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:51:52.384Z","event":"logical_window","name":"cleanup-12","elapsedMs":10178}
+{"at":"2026-10-17T19:51:52.385Z","event":"lifecycle_cleanup","stage":"cleanup-12","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:51:52.513Z","event":"worker_started","name":"cleanup-13"}
+{"at":"2026-10-17T19:51:52.513Z","event":"worker_accepted","name":"cleanup-13","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"7b2113d69e4e","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:52:02.563Z","event":"logical_window","name":"cleanup-13","elapsedMs":10178}
+{"at":"2026-10-17T19:52:02.563Z","event":"lifecycle_cleanup","stage":"cleanup-13","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:52:02.690Z","event":"worker_started","name":"cleanup-14"}
+{"at":"2026-10-17T19:52:02.691Z","event":"worker_accepted","name":"cleanup-14","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"25c421dd6428","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:52:12.741Z","event":"logical_window","name":"cleanup-14","elapsedMs":10177}
+{"at":"2026-10-17T19:52:12.742Z","event":"lifecycle_cleanup","stage":"cleanup-14","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:52:12.867Z","event":"worker_started","name":"cleanup-15"}
+{"at":"2026-10-17T19:52:12.868Z","event":"worker_accepted","name":"cleanup-15","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"1ef0911a9f8e","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:52:22.910Z","event":"logical_window","name":"cleanup-15","elapsedMs":10168}
+{"at":"2026-10-17T19:52:22.911Z","event":"lifecycle_cleanup","stage":"cleanup-15","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:52:23.034Z","event":"worker_started","name":"cleanup-16"}
+{"at":"2026-10-17T19:52:23.035Z","event":"worker_accepted","name":"cleanup-16","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"26c05ed6ef3a","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:52:33.085Z","event":"logical_window","name":"cleanup-16","elapsedMs":10174}
+{"at":"2026-10-17T19:52:33.085Z","event":"lifecycle_cleanup","stage":"cleanup-16","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:52:33.207Z","event":"worker_started","name":"cleanup-17"}
+{"at":"2026-10-17T19:52:33.207Z","event":"worker_accepted","name":"cleanup-17","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"09cd5b8b54dc","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:52:33.820Z","event":"logical_window","name":"cleanup-17","elapsedMs":734}
+{"at":"2026-10-17T19:52:33.828Z","event":"lifecycle_cleanup","stage":"cleanup-17","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:52:33.947Z","event":"worker_started","name":"cleanup-18"}
+{"at":"2026-10-17T19:52:33.947Z","event":"worker_accepted","name":"cleanup-18","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"307a3b062226","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:52:34.530Z","event":"logical_window","name":"cleanup-18","elapsedMs":702}
+{"at":"2026-10-17T19:52:34.538Z","event":"lifecycle_cleanup","stage":"cleanup-18","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:52:34.661Z","event":"worker_started","name":"cleanup-19"}
+{"at":"2026-10-17T19:52:34.662Z","event":"worker_accepted","name":"cleanup-19","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"538a3df87f7e","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:52:44.708Z","event":"logical_window","name":"cleanup-19","elapsedMs":10168}
+{"at":"2026-10-17T19:52:44.708Z","event":"lifecycle_cleanup","stage":"cleanup-19","active":0,"nativeChildren":0}
+[chatgpt-web] Luna rolling checkpoint applied=false reason=no proven completed parent assistant answer
+{"at":"2026-10-17T19:52:44.833Z","event":"worker_started","name":"cleanup-20"}
+{"at":"2026-10-17T19:52:44.834Z","event":"worker_accepted","name":"cleanup-20","sends":1,"submitted":1}
+[chatgpt-web] browser_settled {"traceId":"0a4344949b96","outcome":"final","compaction":false,"submission":"accepted"}
+{"at":"2026-10-17T19:52:54.884Z","event":"logical_window","name":"cleanup-20","elapsedMs":10175}
+{"at":"2026-10-17T19:52:54.886Z","event":"lifecycle_cleanup","stage":"cleanup-20","active":0,"nativeChildren":0}
+{"completed":true,"failure":null,"responsesHttp":27,"logicalTurns":25,"physicalModelSubmissions":0,"cleanupOk":true}

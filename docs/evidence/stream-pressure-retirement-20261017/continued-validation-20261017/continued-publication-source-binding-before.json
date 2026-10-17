@@ -1,0 +1,15 @@
+{
+  "testedCommit": "cb12f370feb558002c7416ffe0087a9814e1b091",
+  "testedTree": "cd61345eca6242cd98d8228421faf9327e76871c",
+  "branch": "codex/stream-pressure-retirement-20261017",
+  "remoteBranchHead": "cb12f370feb558002c7416ffe0087a9814e1b091",
+  "sourceGitTree": "4289bb9571aa5e7397d30aa8f28934c0847b1868",
+  "testsGitTree": "a793ff056cae4be68089399e117d9197bf891e45",
+  "packageJsonBlob": "cadf74e99396927d92105e8cd36277b04b7bfbe6",
+  "bunLockBlob": "fe8c60b8a27915c879fb7740e3839243f573b23e",
+  "nonEvidenceFingerprintSha256": "78bd00f5d8a1187bda4575be7c6dd7826e861841978f860018ac6909745d7878",
+  "fingerprintDefinition": "SHA256 of git ls-tree -r lines excluding docs/evidence/stream-pressure-retirement-20261017/, in Git order, joined by LF including trailing LF",
+  "capturedAtYwlClock": "2026-10-17T20:17:14Z",
+  "newProductChangesAllowed": false,
+  "newModelCallsAllowed": false
+}

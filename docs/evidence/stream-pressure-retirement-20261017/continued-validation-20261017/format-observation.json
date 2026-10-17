@@ -1,0 +1,12 @@
+{
+  "kind": "Read-only publication formatting observation",
+  "defaultGitDiffCheckExit": 2,
+  "defaultOutputLines": 37896,
+  "crAwareGitDiffCheckExit": 2,
+  "crAwareTrailingWhitespaceWarnings": 20,
+  "remainingWarningFile": "historical-d02/results.csv",
+  "reason": "Quoted observed-answer fields intentionally retain original Markdown two-space line endings. Windows CRLF is also preserved in original task evidence. No observed answer/record was trimmed to satisfy formatting.",
+  "ciDiffCheckReferencesFound": 0,
+  "productFilesChanged": 0,
+  "modelCalls": 0
+}

@@ -1,0 +1,29 @@
+{
+  "kind": "TypeScript semantic typecheck; no fixture/test/browser execution",
+  "typescript": "5.9.3",
+  "bunTypes": "1.4.0",
+  "fixtureSHA256": "f7cc6ecd1eb30ef7babdfad7fdb37da42fae4dbff9559661b47547430582d241",
+  "command": "cd <YWL_TASK>/pr13-chrome-typecheck && <YWL_HOME>/.local/lib/codex-chatgpt-web/cpr-native-retry-20261017-qa-1/runtime/runtime/bun node_modules/typescript/bin/tsc --project tsconfig.json --pretty false",
+  "config": {
+    "compilerOptions": {
+      "target": "ES2023",
+      "module": "ESNext",
+      "moduleResolution": "Bundler",
+      "strict": true,
+      "skipLibCheck": true,
+      "noEmit": true,
+      "types": [
+        "bun-types"
+      ]
+    },
+    "files": [
+      "tests/pr13-local-chrome.fixture.test.ts",
+      "src/domino.d.ts",
+      "src/turndown-plugin-gfm.d.ts"
+    ]
+  },
+  "exitCode": 0,
+  "seconds": 4.006173100000069,
+  "productionSource": "<YWL_TASK>/overnight-pressure/src",
+  "runtimeDependencies": "<YWL_TASK>/dependency-overlay"
+}

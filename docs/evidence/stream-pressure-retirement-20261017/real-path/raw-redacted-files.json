@@ -1,0 +1,372 @@
+{
+  "overnight-cli-candidate-cleanup.json": {
+    "rawSha256": "817fb35be90057b45cd9cec415408d0ceddc2ef2f1da8989f03ff319d77e1819",
+    "redactedSha256": "f5e28fa976856be3fe5a1d4b095d15bb114ed614e035815ff0d3d12de75a4f71",
+    "bytes": 235
+  },
+  "overnight-cli-candidate-cumulative-result.json": {
+    "rawSha256": "c68b787bb77005c2eb4179d27cf6fd0f3c095e448b1cfbbcd75bc569423bc69f",
+    "redactedSha256": "b54eee941c4eff972b087cdbca84afb0641432a4b9dcdb90acfb9227552f3f3e",
+    "bytes": 2834
+  },
+  "overnight-cli-candidate-exec.jsonl": {
+    "rawSha256": "a2c8853f3e0614e62a922f8be00f710de5b0b5401e51c01c94b22788a9da7baa",
+    "redactedSha256": "8b3c9d6fc50980acaca3342522a0a300f8ce5cf2cd3ef742faa39c6bbc9a29c0",
+    "bytes": 362
+  },
+  "overnight-cli-candidate-exec.stderr.txt": {
+    "rawSha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721",
+    "redactedSha256": "c6b5053c67cc6f7dda29a58e5d2b8c97f3880785a6526eff66f2491c756abfb7",
+    "bytes": 40
+  },
+  "overnight-cli-candidate-fixture.ts": {
+    "rawSha256": "93756a6a5429bd6bcafcc03712376368586f34a5c6aa135d9069ea63e5569c8c",
+    "redactedSha256": "92b5ceeefd1cce0983f0a86de970d5a252aa1deecd73e3c71c8f0ca4f451c01a",
+    "bytes": 10329
+  },
+  "overnight-cli-candidate-harness.tap.txt": {
+    "rawSha256": "3c0e79f941008e0dba62a8b56c3527a3530efd632b942ba70fd3c01a5b77f89b",
+    "redactedSha256": "b3d6055fd5abb2b579fe1e8812325e91e5c90400f0198adeab63bdd25209e16b",
+    "bytes": 1481
+  },
+  "overnight-cli-candidate-http-worker.jsonl": {
+    "rawSha256": "2f004008193ae6706f07d6ff105c418220ea582711e00296d244650b0b04ade9",
+    "redactedSha256": "bc55c3cfc055dc3781df88940b9507684b416621292dec3ad0cdde27c004c927",
+    "bytes": 591
+  },
+  "overnight-cli-candidate-last-exec.jsonl": {
+    "rawSha256": "79b4a142107bc04e671500228e6e6b722a98e3cf54b1a22d6340cfca93c923d6",
+    "redactedSha256": "61e208cccb8134c3d31fb0671adaa6bf07bbe2bf90c46fa576bf99fd05fea5ec",
+    "bytes": 362
+  },
+  "overnight-cli-candidate-last-exec.stderr.txt": {
+    "rawSha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721",
+    "redactedSha256": "c6b5053c67cc6f7dda29a58e5d2b8c97f3880785a6526eff66f2491c756abfb7",
+    "bytes": 40
+  },
+  "overnight-cli-candidate-last-fixture.ts": {
+    "rawSha256": "7510e33f2562e396f316da6290c90e77844619a21f05d8f9eeaaaa11cabaf692",
+    "redactedSha256": "7040b2ad6ef47564c2701725f71e5984ab6ca512d875465486f6eef69ea23677",
+    "bytes": 10985
+  },
+  "overnight-cli-candidate-last-harness.tap.txt": {
+    "rawSha256": "43e3497302ba527afd2e9f6aec9760564dfcd38099634e7869d48ff911ab5d5a",
+    "redactedSha256": "b9b29ee009e32858daff9778d705e5150944974ff9c1ab5ae1f74b59d5228781",
+    "bytes": 1530
+  },
+  "overnight-cli-candidate-last-http-worker.jsonl": {
+    "rawSha256": "1b1ae564f0dbe1b89ade86776e2010a2104aab085882e64e5d9ef5b6f14d1ef8",
+    "redactedSha256": "29d4d3159ed4c51505a86985826fb7f6d8d21afd8e68532ba1b61b0d35ce8d4d",
+    "bytes": 501
+  },
+  "overnight-cli-candidate-last-ports.json": {
+    "rawSha256": "109e48a9fba66b1ff729085e8a69b3886cecb684af551d7e2d937b1e9cbd10d8",
+    "redactedSha256": "109e48a9fba66b1ff729085e8a69b3886cecb684af551d7e2d937b1e9cbd10d8",
+    "bytes": 58
+  },
+  "overnight-cli-candidate-last-resources.json": {
+    "rawSha256": "660a9babab27ecd78f0e5ab221d6b7ed1e84f73ccd19577d2a0ae0abd04741da",
+    "redactedSha256": "1b9db0a87f4c7b633f6dd1bdbd085d9caf06f00357c77227bcbf26ba4a4f86cb",
+    "bytes": 81880
+  },
+  "overnight-cli-candidate-last-source-binding.json": {
+    "rawSha256": "edf1752d483c989e2b70fe18d95d975c0ee3695bbe4dba90e9f78b40806ebedd",
+    "redactedSha256": "20ac685bad2c2462f91ecef772316510b48eb722dcc4dc4622933c7b5fa5a097",
+    "bytes": 9201
+  },
+  "overnight-cli-candidate-last-summary.json": {
+    "rawSha256": "41c2c671ca211f8c19998d78d86d8f918cadb1ff3133b48ce76bae211963497e",
+    "redactedSha256": "d6fd7f2b37b52ed9cf0278fbf09c7c23f32d27cb52e7595d080a2f1aa2387102",
+    "bytes": 1438
+  },
+  "overnight-cli-candidate-monitor-selftest-attempt1.tap.txt": {
+    "rawSha256": "915ff5df02e6fe091a1147dcf81a92428aee2d46adad65bcca2cd06e34b79bad",
+    "redactedSha256": "915ff5df02e6fe091a1147dcf81a92428aee2d46adad65bcca2cd06e34b79bad",
+    "bytes": 181
+  },
+  "overnight-cli-candidate-monitor-selftest-attempt1.ts": {
+    "rawSha256": "f55c105cb6411e76b23701746214c2f4a7753049fe5def2a15af1cc6098aa1fb",
+    "redactedSha256": "4c5dd0caee84539beafcab7e0d7cc57ca8c7924cf080f7e2adc3c25134d29768",
+    "bytes": 3355
+  },
+  "overnight-cli-candidate-monitor-selftest.json": {
+    "rawSha256": "2d78df6bbd6746d4cd5ac5f18fc85d80d3d482edeb7548454f8838c411d9893d",
+    "redactedSha256": "83ba8ccbee03e1315743e19aba92b0bd1bc79ddbf23ad18eef8724bbeec317be",
+    "bytes": 4493
+  },
+  "overnight-cli-candidate-monitor-selftest.tap.txt": {
+    "rawSha256": "60e1fc5afdc3389b83425e18c8431d51e6fb32978d51b47826c4d4f54ce39e96",
+    "redactedSha256": "60cbd87127cfcd946d59b98192cdb514267b11c9b988ab87d7d17ced0c268d73",
+    "bytes": 1317
+  },
+  "overnight-cli-candidate-monitor-selftest.ts": {
+    "rawSha256": "3ef6acfbb3654b9fc167705eb91b950bcc78fca9a4ca7be5af616e296f9b78ba",
+    "redactedSha256": "bba54dd0a38bd6b02bdfc8ad5d6f1003b99f0bb52d0779b50336e67f6fb608ae",
+    "bytes": 3490
+  },
+  "overnight-cli-candidate-ports.json": {
+    "rawSha256": "f3301387bc9c21a472d1fa6893b9421262ca3e53a5b5a587ed8ab54fd4d42322",
+    "redactedSha256": "f3301387bc9c21a472d1fa6893b9421262ca3e53a5b5a587ed8ab54fd4d42322",
+    "bytes": 58
+  },
+  "overnight-cli-candidate-resources.json": {
+    "rawSha256": "155a759b58be43ac35e4694773ca05820e37d6e79ec8efbb24e89b02ef68ec94",
+    "redactedSha256": "790d26f6d19985701cfb1919936ee6dc2e491a499c0b35cf3c1bdc256c5e3f76",
+    "bytes": 41651
+  },
+  "overnight-cli-candidate-run-manifest.json": {
+    "rawSha256": "962320e717d2c8c29ecfb9b15321478dda7e6c3f01fca13eaed87b967cef8811",
+    "redactedSha256": "57835437111f1a2d47ae3c3d5d0bd077b6769c85a54e37f1c6296e1e85100621",
+    "bytes": 2302
+  },
+  "overnight-cli-candidate-setup-attempt1-bun.tap.txt": {
+    "rawSha256": "2060bd1e4396fd63435d3a8ae3653bf84d8897dbc2009f3f380d367bb6d50efc",
+    "redactedSha256": "e262ccf14c523295e81e91905f7d3dd01774f8e66b97238e0f1b995d72c37bbd",
+    "bytes": 82
+  },
+  "overnight-cli-candidate-setup-attempt1.tap.txt": {
+    "rawSha256": "a949a926115c7f5434708bf0b7ce8cb48612be42cb257feeec3a696b7ea75816",
+    "redactedSha256": "cd999bcc7cf08957fdb67f0ea116230db4c89c19cae457479dcd31554cfb3fdb",
+    "bytes": 175
+  },
+  "overnight-cli-candidate-summary.json": {
+    "rawSha256": "90f51a0c28d487d0a3b6909d6b272f8ad0997608799f87d2f8035ed2f5d21cfd",
+    "redactedSha256": "44b98c071fe7d28242b865b98c549d266426eb986cf08c07a2b314bdf8cceae6",
+    "bytes": 1371
+  },
+  "overnight-confirmed-integrated-typecheck.tap.txt": {
+    "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redactedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "overnight-integrated-focused-final.tap.txt": {
+    "rawSha256": "ba5a40ca10ef7109b19f9869dff824f9c4afece2afc4c857095db8b2a1e96865",
+    "redactedSha256": "4d4571aa23aef78df06a78c0de8cfce23644cbbdf49194ffdaa722c59864c628",
+    "bytes": 18500
+  },
+  "overnight-integrated-typecheck-final.tap.txt": {
+    "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redactedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "overnight-real-adapter-detach-regression.tap.txt": {
+    "rawSha256": "552103d141d6bdde0581532faaafb99d1034b95028941395fa72335a0ff80bbc",
+    "redactedSha256": "715af16b6ca04f87e5c9cb50e353c9fe3dc1eee26c0e0ddd8c18cf89a90f4816",
+    "bytes": 1292
+  },
+  "overnight-real-adapter-http-cleanup-proof.json": {
+    "rawSha256": "dc665fa87a69e2a6db10f78e3d8633ac615e5bf47595342dce17d72f98451d3a",
+    "redactedSha256": "7c418249e6457e159bbfc46b3c861a760e47657c80832ca7ff17e7369ed3afda",
+    "bytes": 1309
+  },
+  "overnight-real-adapter-http-delivery-sha256.txt": {
+    "rawSha256": "201e1891831d405cc39adbfd02918e736924cd5fef537865a03088a1cbcc4886",
+    "redactedSha256": "4d866b829d616c08ddbd3f6b11dcfedef7c8ca9d9d2a31e429fe7cd374a87af4",
+    "bytes": 1110
+  },
+  "overnight-real-adapter-http-json-1-supervisor.json": {
+    "rawSha256": "a6333acf64d71f42570ee0144e4923b987de2ac6d056d452e2acb4e1e5bd877f",
+    "redactedSha256": "587c3711124fe9d3d48a18ac7fe651e47202dac8374a8055e0e8b50a0776de18",
+    "bytes": 1701
+  },
+  "overnight-real-adapter-http-json-1.json": {
+    "rawSha256": "8c37b34d4ecaaedae6adda7df965547f7627921ad35e8f94dc67f97f3297a67d",
+    "redactedSha256": "8154f5690adb3f80a00e2b3abb2c7ecfc7b38c7939d4b68aba1a971457941401",
+    "bytes": 2681
+  },
+  "overnight-real-adapter-http-json-1.tap.txt": {
+    "rawSha256": "b719045c2b47075c851f37e58ef30a1ea9d2db7c35cab5acb8dc3c7cb72b5f69",
+    "redactedSha256": "72ba4a6e21e45d47af0ca3f2f8c5def9e6847ab156b521b81c5c098b21ef327a",
+    "bytes": 2407
+  },
+  "overnight-real-adapter-http-probe-original.ts": {
+    "rawSha256": "536057aaeeb117a4b743f3c39e16007388a70ad5a890487921976a0139c98f7a",
+    "redactedSha256": "5d354b1faba11374ec5350e0aff3dbafabeea6849cb4cff2bc54f14ca20e1de0",
+    "bytes": 8214
+  },
+  "overnight-real-adapter-http-sha256.txt": {
+    "rawSha256": "ddab6f16f4e679e7b6e92fa195ddc96adf6ca512830fbb21515f940859ef4b7d",
+    "redactedSha256": "682a19a20b94f47ade59ba670767f0197b6c09a9aa4d6914ea6ec9a0bdb1c2b9",
+    "bytes": 629
+  },
+  "overnight-real-adapter-http-sse-1-supervisor.json": {
+    "rawSha256": "4599286493e1e1f284f65a79adfe66df31803c704edebe43fa09a714b6b0386e",
+    "redactedSha256": "1055b69392b0534484d074025b6e690a40d36a4ada6f2919f4fdbe632aa68e45",
+    "bytes": 1700
+  },
+  "overnight-real-adapter-http-sse-1.json": {
+    "rawSha256": "c4d512ca6d50d1c435b9671cba8dda5926126e5c4b31f2d9d6d3228a73935035",
+    "redactedSha256": "2ea8cc6897a1a710f5c34c6732040f31374c54d480e2e6e3bc5d3ea3df78b873",
+    "bytes": 1830
+  },
+  "overnight-real-adapter-http-sse-1.tap.txt": {
+    "rawSha256": "5a36319e0404551a2596dd68e154e0a2cb11c9c3179f1b89738c767773c4db2e",
+    "redactedSha256": "3520995ed3b49ec4e9c2c85560f04bb357864e87e7505293f10e6f245173f603",
+    "bytes": 1673
+  },
+  "overnight-real-adapter-http-summary.md": {
+    "rawSha256": "b669761e27de14b0e97d46788d4e0f00dc590c7a7eae92d47b4cf8773c349487",
+    "redactedSha256": "ab23fadccb7dd067cef7cc32d15dd0686aa9204ad81e101516a56b588a7a859a",
+    "bytes": 2758
+  },
+  "overnight-real-adapter-http-supervisor-original.py": {
+    "rawSha256": "23fbf0aa8aab94ef279a2c2c9070407f86b72994cd3539a93cfb4398259ee349",
+    "redactedSha256": "2ec10b0c4b86cae56c5bcce75f99f359bd42d18a8288d7c11dcfef371b742cd2",
+    "bytes": 1824
+  },
+  "overnight-real-adapter-paced-feed-unit.tap.txt": {
+    "rawSha256": "8fd5b84d81295a452f47582f4ccfb3b261fe099fc2f6e872bd890b8e460f510c",
+    "redactedSha256": "c219537d9a5d194e99587bd94c19dcb20cfab6800e80cc6e4241a8a528cf3273",
+    "bytes": 2093
+  },
+  "overnight-real-adapter-pressure-green.tap.txt": {
+    "rawSha256": "8c50dc0d82b438ce0a7e4cffc46c8f761d7329170d45cac9128bc3fd7a426eaf",
+    "redactedSha256": "a8e4a2eb2380c882ce8a138a99b750c56d96f6cbe5087d735ba4b8ad1e80e2d8",
+    "bytes": 2509
+  },
+  "overnight-real-adapter-pressure-red.tap.txt": {
+    "rawSha256": "998a43b6123dbb679a3ab855ad3a7abf44995e01396a2524cae6e67496e40bcf",
+    "redactedSha256": "9040fd4f74d36dfbcc36da3d1e193448525277aef33bcedf419b8c52edcedfb7",
+    "bytes": 3844
+  },
+  "overnight-real-adapter-replay-red.tap.txt": {
+    "rawSha256": "f9f73aa428d8a57cb16534e18c8d16968785c28a6a9df233113b3eab2ca2b96d",
+    "redactedSha256": "9bd363da2e01d0056f26f666b61938a63d2bd1516d02cd829506a57c3c3938df",
+    "bytes": 3735
+  },
+  "overnight-real-adapter-typecheck.tap.txt": {
+    "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redactedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "overnight-real-adapter-writer-handoff.md": {
+    "rawSha256": "f36b7e2dbab0a08cd42545524f83e0af90181cc3dd90ae8f9a40a1e104c7f761",
+    "redactedSha256": "5257f505db2e529981375bf385a27d35fca41d9795f03f71af591dfdb08c1b1f",
+    "bytes": 3207
+  },
+  "overnight-real-adapter-writer-sha256.txt": {
+    "rawSha256": "09ce079ed2f452fd187d01880324717c49adf67a1454a48ae0aee4a54a9c2e6f",
+    "redactedSha256": "2949a27e97b8ab821442c8d38e6d591e9eb917300affaee23a526890f2a3555e",
+    "bytes": 359
+  },
+  "overnight-windows-lifecycle-before-candidate-1.tap.txt": {
+    "rawSha256": "da2fd1972eb4500503bbd32dad74f34d364b37b810cd3a5c93f6ce518a3beb1c",
+    "redactedSha256": "25a7381e5eb6b5a0f76802c2e2da4d6b07cbad6ea1a73708942d02bb2080ec6a",
+    "bytes": 8832
+  },
+  "overnight-windows-lifecycle-before-candidate-1-supervisor.json": {
+    "rawSha256": "0dbb0e8be2405e2af8745f5ae9c3786c00f3d32443e8a48061223683ec6a1ad8",
+    "redactedSha256": "0dbb0e8be2405e2af8745f5ae9c3786c00f3d32443e8a48061223683ec6a1ad8",
+    "bytes": 52608
+  },
+  "overnight-windows-lifecycle-clean-fixture-candidate-1.tap.txt": {
+    "rawSha256": "d6868014d65f9fddf2fef41db345db061743a5aa7d456d0894ac2497147d2f86",
+    "redactedSha256": "8bc10e3de7d5911c257fc10346ef9507808fe6a3d8092641ef37097577f186de",
+    "bytes": 2118
+  },
+  "overnight-windows-lifecycle-clean-fixture-recovered-candidate-1.tap.txt": {
+    "rawSha256": "85bb03cecc6012a781b30c423a7f5be23323d3ace5c923c57ffa9c0ce854a098",
+    "redactedSha256": "2f6812233e06ceccb9b9625ad2c8f0f9a826a133bf1d4318ece016980c0f4cde",
+    "bytes": 2784
+  },
+  "overnight-windows-lifecycle-clean-fixture-recovered-candidate-1-supervisor.json": {
+    "rawSha256": "99251b87d028b8db6fc1b0b973a6b20318657ba4a46a61b73de8205b29be72b3",
+    "redactedSha256": "99251b87d028b8db6fc1b0b973a6b20318657ba4a46a61b73de8205b29be72b3",
+    "bytes": 68914
+  },
+  "overnight-real-adapter-paced-tail-unit.tap.txt": {
+    "rawSha256": "16ca5af9adf3a2eb4fbf8386e7e2fd2a9b31d6efbe41616743badcc9969d7409",
+    "redactedSha256": "16ca5af9adf3a2eb4fbf8386e7e2fd2a9b31d6efbe41616743badcc9969d7409",
+    "bytes": 1480
+  },
+  "overnight-real-adapter-paced-tail-typecheck.tap.txt": {
+    "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redactedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "overnight-real-adapter-tail-only-unit.tap.txt": {
+    "rawSha256": "cdbdf28f34ded8794df9a3374f25b21de65f50fa5d9227197cdedc70b023ffd3",
+    "redactedSha256": "cdbdf28f34ded8794df9a3374f25b21de65f50fa5d9227197cdedc70b023ffd3",
+    "bytes": 1480
+  },
+  "overnight-real-adapter-tail-only-typecheck.tap.txt": {
+    "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redactedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "overnight-windows-real-adapter-tail-only.tap.txt": {
+    "rawSha256": "5914adf1dbb7a575bb507100a2dbafd6592a71c2f175d4303a9fef3595adb1a0",
+    "redactedSha256": "4afce8763ad74c864be1877e60c867d2a9dd2dc8cbfbc2fb283eb0d80c38af9f",
+    "bytes": 2824
+  },
+  "overnight-windows-real-adapter-tail-only.json": {
+    "rawSha256": "63cf63980da0c4ea96ec67f7a9f7a3f42b91abdeb6aec3dbf4813298dd245bb6",
+    "redactedSha256": "823cc3f77cdc2d8e87d98bee0b5fd6aacb024856d63c36ec08e3545417aa406e",
+    "bytes": 3661
+  },
+  "overnight-real-adapter-unit-supervisor.py": {
+    "rawSha256": "5f29f5d675e17f7fd7e2d42a319405de3a613b6d7c483edbf6759aec4edb47b2",
+    "redactedSha256": "5f29f5d675e17f7fd7e2d42a319405de3a613b6d7c483edbf6759aec4edb47b2",
+    "bytes": 2484
+  },
+  "overnight-c6-windows-ci-117475879935.tap.txt": {
+    "rawSha256": "8dd54f23fab979cf1996c459d7d2bf4f5eeff48fb3ac2821698bce9cb079a3f8",
+    "redactedSha256": "1b362a684b1619c30f6494adb29df1117a7556a622ff9bc82c135f17e2037945",
+    "bytes": 515391
+  },
+  "overnight-real-adapter-consumer-gated-unit.tap.txt": {
+    "rawSha256": "9d93b9093b531c5bba67a718fa3e468ba0cf606f065e75492e55d2fc1165acc8",
+    "redactedSha256": "9d93b9093b531c5bba67a718fa3e468ba0cf606f065e75492e55d2fc1165acc8",
+    "bytes": 1563
+  },
+  "overnight-real-adapter-consumer-gated-typecheck.tap.txt": {
+    "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redactedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "overnight-real-adapter-feed-assert-first-unit.tap.txt": {
+    "rawSha256": "a27db63963f58d16ea689906f6525ea3d8c609d7a77b8abee9c216f9636d35e8",
+    "redactedSha256": "a27db63963f58d16ea689906f6525ea3d8c609d7a77b8abee9c216f9636d35e8",
+    "bytes": 1563
+  },
+  "overnight-real-adapter-feed-assert-first-typecheck.tap.txt": {
+    "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redactedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "overnight-c6-pr-windows-ci-117475892798.tap.txt": {
+    "rawSha256": "5b72ebd8318f28bc2bf875b9e0f818ac9f80658101bed6543baab2bcaebd2e4c",
+    "redactedSha256": "7d71731f85d660a1236463e6c08cc187c48d93e241b47310c52d1b45a14fbc9e",
+    "bytes": 515939
+  },
+  "overnight-windows-real-adapter-consumer-gated.tap.txt": {
+    "rawSha256": "0515be85e7fe65fdadfed2e83d11e383b1736515ed85482bfb8eb9b57697ccf3",
+    "redactedSha256": "0515be85e7fe65fdadfed2e83d11e383b1736515ed85482bfb8eb9b57697ccf3",
+    "bytes": 1564
+  },
+  "overnight-windows-real-adapter-consumer-gated.json": {
+    "rawSha256": "2fbc3b65496af755b5baf34aff705a593234c55e3fbaa53b79711db585411fe8",
+    "redactedSha256": "05350eae169ab5f0923654d47d5d0c946634c02465b1ecf654ebcf84847dd18c",
+    "bytes": 3583
+  },
+  "overnight-windows-real-adapter-feed-assert-first.tap.txt": {
+    "rawSha256": "adbfd0b563e59b27ebef873bcfc9da75224fed49ef058f86bd9b62de27eb0e12",
+    "redactedSha256": "adbfd0b563e59b27ebef873bcfc9da75224fed49ef058f86bd9b62de27eb0e12",
+    "bytes": 1564
+  },
+  "overnight-windows-real-adapter-feed-assert-first.json": {
+    "rawSha256": "960c5174c1d9202c014a7bd43288e26c7aff77f7dc1eb65f302e30747ec5c2c1",
+    "redactedSha256": "720c7b2b071ff622ea15959f26a9286028849dec83dc3dc791e1b43eee413b43",
+    "bytes": 3842
+  },
+  "overnight-real-adapter-gated-unit-supervisor.py": {
+    "rawSha256": "c39c74a275ec4eb7144dfe5f12dc3fabc469278d2928de216ef00069962ba9aa",
+    "redactedSha256": "c39c74a275ec4eb7144dfe5f12dc3fabc469278d2928de216ef00069962ba9aa",
+    "bytes": 2533
+  },
+  "overnight-real-adapter-final-unit-supervisor.py": {
+    "rawSha256": "3d8ed416c2158e5476ed5cda739e0c2fce9a0c818bb11efdceb9f5446cff7ebe",
+    "redactedSha256": "3d8ed416c2158e5476ed5cda739e0c2fce9a0c818bb11efdceb9f5446cff7ebe",
+    "bytes": 2536
+  }
+}

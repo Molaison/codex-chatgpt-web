@@ -1,0 +1,16 @@
+10 |     const waiter = this.waiters.shift();
+11 |     if (waiter) {
+12 |       waiter({ value, done: false });
+13 |       return;
+14 |     }
+15 |     if (this.buffered.length >= this.maxBuffered) throw new Error("Adapter event backlog exceeded");
+                                                                 ^
+error: Adapter event backlog exceeded
+      at push (<user-home>/mol184185-live-20261017-1000/overnight-install/src/event-queue.ts:15:61)
+      at <anonymous> (<user-home>/mol184185-live-20261017-1000/overnight-install/src/server.ts:826:13)
+      at async responseRequest (<user-home>/mol184185-live-20261017-1000/overnight-install/src/server.ts:863:9)
+      at async track (<user-home>/mol184185-live-20261017-1000/overnight-install/src/server.ts:235:30)
+POST - http://127.0.0.1:43085/v1/responses failed
+OVERNIGHT_QUEUE {"scenario":"count-json","platform":"linux","bun":"1.4.0","revision":"34cbb9a40b4bd1bd767d134a7065e66c2432a676","inputs":{"count":10001,"bytesPerMessage":256,"stream":false},"physicalModelSubmissions":0,"emitted":10000,"emitErrors":[{"index":10000,"error":"Error: Adapter event backlog exceeded"}],"unhandledRejections":[],"upstreamCalls":0,"adapterCalls":1,"receivedBytes":51033,"paused":true,"resumed":true,"samples":[{"stage":"before","activeHttp":0,"activeBrowser":0,"accepting":true,"rss":157437952,"pid":3263468},{"stage":"paused-after-adapter","activeHttp":0,"activeBrowser":0,"accepting":true,"rss":158707712,"pid":3263468},{"stage":"after-read","activeHttp":0,"activeBrowser":0,"accepting":true,"rss":158961664,"pid":3263468}],"rssSamples":[{"elapsedMs":27,"phase":"awaiting-headers","rss":166617088,"receivedBytes":0},{"elapsedMs":53,"phase":"paused","rss":166617088,"receivedBytes":0},{"elapsedMs":78,"phase":"paused","rss":159907840,"receivedBytes":0},{"elapsedMs":103,"phase":"paused","rss":159907840,"receivedBytes":0},{"elapsedMs":129,"phase":"paused","rss":159891456,"receivedBytes":0},{"elapsedMs":154,"phase":"paused","rss":159891456,"receivedBytes":0},{"elapsedMs":179,"phase":"paused","rss":158711808,"receivedBytes":0},{"elapsedMs":204,"phase":"paused","rss":158711808,"receivedBytes":0},{"elapsedMs":229,"phase":"paused","rss":158711808,"receivedBytes":0},{"elapsedMs":254,"phase":"paused","rss":158711808,"receivedBytes":0},{"elapsedMs":279,"phase":"paused","rss":158711808,"receivedBytes":0},{"elapsedMs":305,"phase":"reading","rss":158961664,"receivedBytes":51033},{"elapsedMs":312,"phase":"parsed","rss":158961664,"receivedBytes":51033},{"elapsedMs":313,"phase":"cleanup","rss":158961664,"receivedBytes":51033}],"rssStart":159514624,"httpStatus":500,"pauseAt":1792260748211,"bytesAtPause":0,"bytesWhilePaused":0,"adapterFinishedWhilePaused":true,"responseReadableLengthWhilePaused":51033,"resumeRateBytesPerSecond":null,"resumeAt":1792260748462,"terminalTypes":[],"doneSentinels":0,"errorFrames":[],"nonJsonResponsePreview":"<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>Internal Server Error</title>\n  </head>\n  <body>\n    <!-- The bracketed placeholders below are filled in by DevErrorPage.rs; keep prettier aw","terminalCount":0,"processAlive":true,"rssPeak":166617088,"cleaned":true}
+
+Bun v1.4.0 (Linux x64)

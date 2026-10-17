@@ -83,6 +83,7 @@ test("explicit browser-turn cancellation aborts and removes every registered ses
   expect(sessions.activeCount()).toBe(1);
   expect(sessions.clear()).toBe(2);
   expect(cancelled).toBe(2);
+  await sessions.waitForPhysicalSettlement();
   expect(sessions.activeCount()).toBe(0);
 });
 

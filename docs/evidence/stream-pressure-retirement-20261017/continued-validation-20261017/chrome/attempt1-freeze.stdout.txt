@@ -1,0 +1,1 @@
+{"fixtureSha256":"f7cc6ecd1eb30ef7babdfad7fdb37da42fae4dbff9559661b47547430582d241","chromeSha256":"36a30716f0994b377f1ce6b47cfe35399b9719e31d597fe0ea0d8f3b62aed532","sourceAggregate":"7393026493a12483a151b43c67e6105f344caee7bafbf6bd33cefd99b833db46","sourceFiles":102,"dependencies":102,"manifestSha256":"cb3620ec45cb304b4cf22f04a22173522c7a1a47f5f72ccc1b69f05c57bf76ac"}

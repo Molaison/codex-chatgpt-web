@@ -1,0 +1,21 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests\chatgpt-web-harness.test.ts:
+[chatgpt-web] browser_settled {"traceId":"14bcdf046f4e","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) adapter liveness covers every path through a turn > a turn blocked waiting for the previous owner to retire still proves it is alive [12259.12ms]
+[chatgpt-web] browser_settled {"traceId":"0c2496279581","outcome":"final","compaction":true}
+(pass) adapter liveness covers every path through a turn > a compaction turn proves it is alive while the summarizing browser turn runs [12004.17ms]
+
+tests\server-lifecycle.test.ts:
+(pass) authenticated lifecycle control cancels orphaned browser turns [19.17ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown","code":"client_cancelled","retryable":false}
+(pass) targeted cancellation preserves peer turns and its cause: user close [8.75ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown","code":"browser_surface_bootstrap_timeout","retryable":false}
+(pass) targeted cancellation preserves peer turns and its cause: browser_surface_bootstrap_timeout [8.13ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown","code":"helper_heartbeat_expired","retryable":false}
+(pass) targeted cancellation preserves peer turns and its cause: helper_heartbeat_expired [6.54ms]
+(pass) authenticated lifecycle control aborts active alpha/search before acknowledging cancellation [7.99ms]
+(pass) authenticated lifecycle control aborts active images/generations before acknowledging cancellation [6.58ms]
+[chatgpt-web] broker trace=dev-lifecycle registered tokenHash=977a85b5057c
+[chatgpt-web] broker_retired {"traceId":"dev-lifecycle","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":0,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) lifecycle drain and cancellation include browser turns owned by the external DEV driver [1183.94ms]

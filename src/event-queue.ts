@@ -1,3 +1,7 @@
+export class EventQueueOverflowError extends Error {
+  constructor() { super("Adapter event backlog exceeded"); }
+}
+
 export class AsyncEventQueue<T> implements AsyncIterable<T> {
   private readonly buffered: T[] = [];
   private readonly waiters: Array<(result: IteratorResult<T>) => void> = [];
@@ -12,8 +16,18 @@ export class AsyncEventQueue<T> implements AsyncIterable<T> {
       waiter({ value, done: false });
       return;
     }
-    if (this.buffered.length >= this.maxBuffered) throw new Error("Adapter event backlog exceeded");
+    if (this.buffered.length >= this.maxBuffered) throw new EventQueueOverflowError();
     this.buffered.push(value);
+  }
+
+  /** Replace undelivered output with one failure, even when ordinary capacity is full. */
+  fail(value: T): void {
+    if (this.closed) return;
+    this.buffered.length = 0;
+    const waiter = this.waiters.shift();
+    if (waiter) waiter({ value, done: false });
+    else this.buffered.push(value);
+    this.close();
   }
 
   close(): void {
@@ -37,6 +51,7 @@ export class AsyncEventQueue<T> implements AsyncIterable<T> {
         return new Promise(resolve => this.waiters.push(resolve));
       },
       return: () => {
+        this.buffered.length = 0;
         this.close();
         return Promise.resolve({ value: undefined, done: true });
       },

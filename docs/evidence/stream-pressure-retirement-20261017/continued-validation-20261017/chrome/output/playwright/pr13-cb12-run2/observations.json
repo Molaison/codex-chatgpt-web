@@ -1,0 +1,135 @@
+[
+  {
+    "mode": "shutdown",
+    "starts": 1,
+    "simulatedSubmissions": 1,
+    "physicalModelSubmissions": 0,
+    "http": [
+      {
+        "label": "prefix-before-detach-or-cancel",
+        "httpStatus": 200,
+        "streaming": true,
+        "terminalCount": 0,
+        "doneCount": 0,
+        "terminals": []
+      }
+    ],
+    "healthPhases": [
+      {
+        "phase": "shutdown-waits-real-child",
+        "status": "ok",
+        "version": "6.1.10",
+        "accepting_turns": false,
+        "active_http_turns": 0,
+        "active_browser_turns": 1
+      }
+    ],
+    "manualPhases": [
+      {
+        "phase": "shutdown-physical-retirement-pending",
+        "value": {
+          "pid": 37000,
+          "alive": true,
+          "exitObserved": false
+        }
+      },
+      {
+        "phase": "shutdown-refused-while-child-alive",
+        "value": {
+          "httpStatus": 409,
+          "result": {
+            "status": "refused",
+            "accepting_turns": false,
+            "active_http_turns": 0,
+            "active_browser_turns": 1
+          }
+        }
+      },
+      {
+        "phase": "shutdown-listener-refused-after-child-close-before-explicit-stop",
+        "value": {
+          "origin": "http://127.0.0.1:53281",
+          "refused": true,
+          "code": "ECONNREFUSED",
+          "message": "connect ECONNREFUSED 127.0.0.1:53281",
+          "pid": 37000,
+          "alive": false,
+          "exitObserved": true
+        }
+      }
+    ],
+    "cleanupPort": {
+      "origin": "http://127.0.0.1:53281",
+      "refused": true,
+      "code": "ECONNREFUSED",
+      "message": "connect ECONNREFUSED 127.0.0.1:53281"
+    },
+    "owners": [
+      {
+        "number": 1,
+        "pid": 37000,
+        "spawnAt": 782.3606,
+        "exitAt": 3829.6576,
+        "exitObserved": true,
+        "pidAliveAfterCleanup": false,
+        "spawnargs": [
+          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+          "--disable-field-trial-config",
+          "--disable-background-networking",
+          "--disable-background-timer-throttling",
+          "--disable-backgrounding-occluded-windows",
+          "--disable-back-forward-cache",
+          "--disable-breakpad",
+          "--disable-client-side-phishing-detection",
+          "--disable-component-extensions-with-background-pages",
+          "--disable-component-update",
+          "--no-default-browser-check",
+          "--disable-default-apps",
+          "--disable-dev-shm-usage",
+          "--disable-edgeupdater",
+          "--disable-extensions",
+          "--disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion",
+          "--enable-features=CDPScreenshotNewSurface",
+          "--allow-pre-commit-input",
+          "--disable-hang-monitor",
+          "--disable-ipc-flooding-protection",
+          "--disable-popup-blocking",
+          "--disable-prompt-on-repost",
+          "--disable-renderer-backgrounding",
+          "--disable-updater-scheduler",
+          "--force-color-profile=srgb",
+          "--metrics-recording-only",
+          "--no-first-run",
+          "--password-store=basic",
+          "--use-mock-keychain",
+          "--no-service-autorun",
+          "--export-tagged-pdf",
+          "--disable-search-engine-choice-screen",
+          "--unsafely-disable-devtools-self-xss-warnings",
+          "--edge-skip-compat-layer-relaunch",
+          "--disable-infobars",
+          "--disable-search-engine-choice-screen",
+          "--disable-sync",
+          "--enable-unsafe-swiftshader",
+          "--headless",
+          "--hide-scrollbars",
+          "--mute-audio",
+          "--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4",
+          "--disable-gpu",
+          "--disable-background-networking",
+          "--disable-component-update",
+          "--disable-sync",
+          "--no-first-run",
+          "--no-default-browser-check",
+          "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost",
+          "--user-data-dir=<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\pr13-cb12-run2-owned\\tmp\\pr13-local-chrome-suite-hf3j0Q\\tmp\\playwright_chromiumdev_profile-XXoX7O",
+          "--remote-debugging-pipe",
+          "--no-startup-window"
+        ],
+        "domDeltaCount": 1,
+        "rejectedRequests": 0,
+        "browserVersion": "155.0.8059.80"
+      }
+    ]
+  }
+]

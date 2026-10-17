@@ -1,0 +1,41 @@
+{
+  "actualExceptionCaptured": true,
+  "originalExceptions": [
+    {
+      "name": "Error",
+      "code": "ENOENT",
+      "message": "ENOENT: no such file or directory, stat '<user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest-data/dynamic/8'",
+      "stack": "Error: ENOENT: no such file or directory, stat '<user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest-data/dynamic/8'\n    at statSync (unknown)\n    at size (file://<user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest.ts:3:170)\n    at size (file://<user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest.ts:3:134)\n    at <user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest.ts:22:53\n    at processTicksAndRejections (native:7:39)"
+    },
+    {
+      "name": "Error",
+      "code": "ENOENT",
+      "message": "ENOENT: no such file or directory, stat '<user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest-data/dynamic/2'",
+      "stack": "Error: ENOENT: no such file or directory, stat '<user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest-data/dynamic/2'\n    at statSync (unknown)\n    at size (file://<user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest.ts:3:170)\n    at size (file://<user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest.ts:3:134)\n    at <user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest.ts:22:53\n    at processTicksAndRejections (native:7:39)"
+    },
+    {
+      "name": "Error",
+      "code": "ENOENT",
+      "message": "ENOENT: no such file or directory, stat '<user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest-data/dynamic/33'",
+      "stack": "Error: ENOENT: no such file or directory, stat '<user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest-data/dynamic/33'\n    at statSync (unknown)\n    at size (file://<user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest.ts:3:170)\n    at size (file://<user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest.ts:3:134)\n    at <user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest.ts:22:53\n    at processTicksAndRejections (native:7:39)"
+    },
+    {
+      "name": "Error",
+      "code": "ENOENT",
+      "message": "ENOENT: no such file or directory, stat '<user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest-data/dynamic/24'",
+      "stack": "Error: ENOENT: no such file or directory, stat '<user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest-data/dynamic/24'\n    at statSync (unknown)\n    at size (file://<user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest.ts:3:170)\n    at size (file://<user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest.ts:3:134)\n    at <user-home>/mol184185-live-20261017-1000/overnight-pressure/windows-ci-evidence/overnight-cli-candidate-monitor-selftest.ts:22:53\n    at processTicksAndRejections (native:7:39)"
+    }
+  ],
+  "oldAttempts": 2522,
+  "newAttempts": 2522,
+  "optionalSkips": 293,
+  "correctedDiskStatSurvivesDeletion": true,
+  "RssGuardAvailable": true,
+  "RssGuardFailureStops": true,
+  "proxyRssBytes": 39149568,
+  "childExit": 0,
+  "childStderr": "",
+  "realModelCalls": 0,
+  "cliInvocations": 0,
+  "limitation": "Captured exception is from an isolated real filesystem churn self-test; the previous run catch discarded its exception, so its exact original cause remains unknown."
+}

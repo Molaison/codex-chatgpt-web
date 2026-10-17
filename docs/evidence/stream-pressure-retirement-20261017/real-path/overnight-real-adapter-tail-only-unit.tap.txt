@@ -1,0 +1,14 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/server-real-adapter-pressure.test.ts:
+[chatgpt-web] browser_settled {"traceId":"afe06c2009e9","outcome":"final","compaction":false,"submission":"accepted"}
+REAL_ADAPTER_PRESSURE {"stream":false,"starts":1,"simulatedSends":1,"physicalModelSubmissions":0,"results":[{"attempt":"feed","httpStatus":200,"terminalCount":1,"status":"completed","errorNotifications":0},{"attempt":"exact-replay","httpStatus":502,"terminalCount":1,"status":"failed","error":{"message":"Adapter event backlog exceeded","type":"server_error","code":"adapter_event_backlog_exceeded"},"retryable":false,"errorNotifications":1}]}
+(pass) real adapter exact replay retains queue failure through observer wrapping, stream=false [182.67ms]
+[chatgpt-web] browser_settled {"traceId":"97576b0b7548","outcome":"final","compaction":false,"submission":"accepted"}
+REAL_ADAPTER_PRESSURE {"stream":true,"starts":1,"simulatedSends":1,"physicalModelSubmissions":0,"results":[{"attempt":"feed","httpStatus":200,"terminalCount":1,"status":"completed","errorNotifications":0},{"attempt":"exact-replay","httpStatus":200,"terminalCount":1,"status":"failed","error":{"message":"Adapter event backlog exceeded","type":"server_error","code":"adapter_event_backlog_exceeded"},"retryable":false,"errorNotifications":1}]}
+(pass) real adapter exact replay retains queue failure through observer wrapping, stream=true [55.76ms]
+
+ 2 pass
+ 0 fail
+ 28 expect() calls
+Ran 2 tests across 1 file. [685.00ms]

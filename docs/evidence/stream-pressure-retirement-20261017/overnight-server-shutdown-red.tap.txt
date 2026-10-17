@@ -1,0 +1,26 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/server-physical-shutdown.test.ts:
+[chatgpt-web] browser_settled {"traceId":"shutdown-physical-trace","outcome":"final","compaction":false,"submission":"unknown"}
+(pass) a drained runtime refuses shutdown until an interrupted helper physically exits [12.51ms]
+[chatgpt-web] browser_settled {"traceId":"shutdown-physical-trace","outcome":"final","compaction":false,"submission":"unknown"}
+14 |     mode: "read-only", browser, physicalSettlement, trace: new ChatGptTraceFeed(), text: new ChatGptTextFeed(),
+15 |     cancel() { cancellations++; releaseBrowser("cancelled"); },
+16 |   }), "shutdown-physical-trace", "shutdown-physical-owner", "shutdown_turn_001", "shutdown_thread_001");
+17 |   const server = startServer(config, { fetchUpstream: async () => { throw new Error("upstream forbidden"); } });
+18 |   const base = `http://127.0.0.1:${server.port}`;
+19 |   const health = async () => await (await fetch(base + "/healthz")).json() as any;
+                                               ^
+TypeError: Unable to connect. Is the computer able to access the url?
+  path: "http://127.0.0.1:37909/healthz",
+ errno: 0,
+  code: "ConnectionRefused"
+
+      at async <anonymous> (<user-home>/mol184185-live-20261017-1000/overnight-pressure/tests/server-physical-shutdown.test.ts:19:43)
+      at async <anonymous> (<user-home>/mol184185-live-20261017-1000/overnight-pressure/tests/server-physical-shutdown.test.ts:62:20)
+(fail) signal shutdown keeps its listener open until cancelled helper cleanup settles [12.59ms]
+
+ 1 pass
+ 1 fail
+ 9 expect() calls
+Ran 2 tests across 1 file. [485.00ms]

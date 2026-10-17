@@ -1,0 +1,47 @@
+{
+  "priorActualCliInvocations": 1,
+  "thisRunCliCap": 1,
+  "cumulativeCliCap": 2,
+  "cumulativeHttpCap": 4,
+  "optionalDiskSkips": 0,
+  "limits": {
+    "proxyRssBytes": 536870912,
+    "processTreeRssBytes": 2147483648,
+    "perCaseMs": 45000,
+    "suiteMs": 115000,
+    "logicalTurns": 1,
+    "httpAttempts": 3
+  },
+  "limitComparison": "Candidate uses parent original separate proxy512MiB/tree2GiB limits. Baseline independently retained its self-selected lower aggregate512MiB stop; this candidate does not reinterpret baseline as product regression.",
+  "proxyPeakRssBytes": 215519232,
+  "commit": "f60bd7793af9897a6bdddd22aff75e7a346c4fb2",
+  "fixture": "actual CLI + startServer + real createChatGptWebAdapter/session/replay; worker.run only substituted; local custom HTTP provider, not native built-in installation acceptance",
+  "realModelCalls": 0,
+  "model": "chatgpt-web/gpt-5.6-luna",
+  "logicalTurns": 1,
+  "httpAttempts": 1,
+  "workerStarts": 1,
+  "maxActive": 1,
+  "peakRssBytes": 910020608,
+  "diskBytes": 85908366,
+  "durationMs": 10720,
+  "cases": [
+    {
+      "case": "exec",
+      "exit": 0,
+      "timeout": false,
+      "httpAttempts": 1,
+      "workerStarts": 1,
+      "final": [
+        "OVERNIGHT_CANARY_1"
+      ],
+      "errors": []
+    }
+  ],
+  "cleanup": {
+    "proxyStopped": true,
+    "runtimeStopped": true,
+    "workerRestored": true,
+    "children": 0
+  }
+}

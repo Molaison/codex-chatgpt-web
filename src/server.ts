@@ -29,7 +29,7 @@ import { rememberCompactionContinuation } from "./adapters/chatgpt-web/compactio
 import { bridgeToResponsesSSE, buildResponseJSON, formatErrorResponse } from "./bridge";
 import type { AppConfig } from "./config";
 import { providerConfig } from "./config";
-import { AsyncEventQueue } from "./event-queue";
+import { AsyncEventQueue, EventQueueOverflowError } from "./event-queue";
 import { readJsonRequestBody } from "./http-body";
 import { httpStatusFromTerminalError } from "./lib/errors";
 import { createHash } from "node:crypto";
@@ -809,30 +809,42 @@ export async function responseRequest(
   const abort = new AbortController();
   if (req.signal.aborted) abort.abort();
   else req.signal.addEventListener("abort", () => abort.abort(), { once: true });
+  let failed = false;
+  const fail = (error: unknown): void => {
+    if (failed) return;
+    failed = true;
+    const event: AdapterEvent = {
+      type: "error", message: error instanceof Error ? error.message : String(error),
+      ...(error instanceof ChatGptWebAdapterError ? {
+        status: error.status, errorType: error.errorType, code: error.code, retryable: error.retryable,
+      } : error instanceof EventQueueOverflowError ? {
+        status: 502, errorType: "server_error", code: "adapter_event_backlog_exceeded", retryable: false,
+      } : {}),
+    };
+    // A full queue cannot accept another ordinary event. Fail independently of capacity,
+    // discarding only output that has not reached the consumer; this turn cannot complete.
+    queue.fail(event);
+    try { options.onAdapterEvent?.(event); }
+    catch { /* An observer failure cannot replace or reject the already queued terminal. */ }
+  };
   const run = async () => {
-    try {
-      await adapter.runTurn!(parsed, { headers: req.headers, abortSignal: abort.signal }, event => {
+    await adapter.runTurn!(parsed, { headers: req.headers, abortSignal: abort.signal }, event => {
+      try {
         options.onAdapterEvent?.(event);
         queue.push(event);
-      });
-    } catch (error) {
-      const event: AdapterEvent = {
-        type: "error", message: error instanceof Error ? error.message : String(error),
-        ...(error instanceof ChatGptWebAdapterError ? {
-          status: error.status, errorType: error.errorType, code: error.code, retryable: error.retryable,
-        } : {}),
-      };
-      options.onAdapterEvent?.(event);
-      queue.push(event);
-    } finally {
-      queue.close();
-    }
+      } catch (error) {
+        // Preserve the writer's cause before an adapter treats it as observer detachment.
+        fail(error);
+        throw error;
+      }
+    });
   };
+  const produce = () => run().catch(fail).finally(() => queue.close());
   const maps = toolBridgeMaps(parsed);
   const responseModel = route.slug;
 
   if (parsed.stream) {
-    void run();
+    void produce();
     const stream = bridgeToResponsesSSE(
       queue,
       responseModel,
@@ -860,8 +872,9 @@ export async function responseRequest(
     });
   }
 
-  await run();
-  const events = await queue.collect();
+  const collected = queue.collect();
+  await produce();
+  const events = await collected;
   const json = buildResponseJSON(events, responseModel, {
     hideThinkingSummary: parsed.options.hideThinkingSummary,
     toolNsMap: maps.toolNsMap,
@@ -876,7 +889,8 @@ export async function responseRequest(
       code: error.code, retryable: error.retryable } }, { status: error.status });
   }
   const capacityRejected = events.some(event => event.type === "error" && event.code === "concurrency_limit_exceeded");
-  return Response.json(json, { status: capacityRejected ? 429 : 200 });
+  const backlogRejected = events.some(event => event.type === "error" && event.code === "adapter_event_backlog_exceeded");
+  return Response.json(json, { status: capacityRejected ? 429 : backlogRejected ? 502 : 200 });
 }
 
 export async function compactRequest(
@@ -1382,6 +1396,7 @@ export function startServer(
       const results = await Promise.allSettled([
         closeChatGptBrowserWorkers(),
         closeTurnBrokers(),
+        chatGptTurnSessions.waitForPhysicalSettlement(),
       ]);
       const failures = results
         .filter((result): result is PromiseRejectedResult => result.status === "rejected")

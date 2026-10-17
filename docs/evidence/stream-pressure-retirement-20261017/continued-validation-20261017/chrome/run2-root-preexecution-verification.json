@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "head": "cb12f370feb558002c7416ffe0087a9814e1b091",
+  "manifestSha256": "ae1b208bb3450fb061fc3d38b17631b30c2c2d1e7f81b31141ed364dbf3d2fcc",
+  "fixtureSha256": "444bd1ad73b2efbda5b5794705b85674413a2bb9e5920e013bdf0f9fb0bae924",
+  "sourceClosureCount": 103,
+  "scope": "Only shutdown rerun, fixed exact name regex; run1 kept; current production sources unchanged",
+  "command": [
+    "python",
+    "supervise-pr13-chrome.py",
+    "--execute-reviewed",
+    "--run",
+    "2",
+    "--case",
+    "shutdown"
+  ],
+  "reviewer": "root nonauthor fixture review"
+}

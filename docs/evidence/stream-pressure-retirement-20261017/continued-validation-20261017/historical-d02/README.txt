@@ -1,0 +1,1 @@
+Sanitized evidence. UUIDs are stable pseudonyms. Backend/browser, real CLI, transport fixtures, and offline tests are distinct. Files in code/ are archived exact task harness bytes; copy them to their recorded source-worktree location to reproduce. No account cookies, auth files, tokens, or production databases are included. No additional live model calls are authorized.

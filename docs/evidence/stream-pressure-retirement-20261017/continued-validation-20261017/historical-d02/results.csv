@@ -1,0 +1,61 @@
+case,version,execution_class,input_file,expected,observed_http,observed_status,observed_text,verdict,send_activation_delta,physical_post_count,error,evidence
+admission-next,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,admission-next-request.json,DRAIN-MOL185 continuation,200,completed,DRAIN-MOL185,observed; see evidence,1,not independently observed,,admission-next-result.json
+admission-refused,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,admission-refused-request.json,503 exact not_submitted/admission proof; zero Send,503,,,observed; see evidence,0,not independently observed,server_draining,admission-refused-result.json
+admission-retry,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,admission-retry-request.json,DRAIN READY completed after exact retry,200,completed,DRAIN READY,observed; see evidence,1,not independently observed,,admission-retry-result.json
+after-partial-recovery,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,after-partial-recovery-request.json,retained full output + suffix/terminal; no duplicate submission,200,completed,ORCHID-MOL184,observed; see evidence,1,not independently observed,,after-partial-recovery-result.json
+after-reconnect,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,after-reconnect-request.json,retained full output + suffix/terminal; no duplicate submission,200,completed,ORCHID-MOL184,observed; see evidence,1,not independently observed,,after-reconnect-result.json
+baseline-continue,main 3be25ae,real backend/browser integration; not CLI,baseline-continue-request.json,ORCHID-MOL184 + terminal,200,completed,ORCHID-MOL184,observed; see evidence,1,not independently observed,,baseline-continue-result.json
+baseline-seed,main 3be25ae,real backend/browser integration; not CLI,baseline-seed-request.json,MOL185 READY completed,200,completed,MOL185 READY,observed; see evidence,1,not independently observed,,baseline-seed-result.json
+branch-stale,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,branch-stale-request.json,409 explicit head conflict; zero Send,409,,,observed; see evidence,0,not independently observed,previous_response_identity_mismatch,branch-stale-result.json
+continue-stream,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,continue-stream-request.json,ORCHID-MOL184 + explicit terminal,200,completed,ORCHID-MOL184,observed; see evidence,1,not independently observed,,continue-stream-result.json
+cpr-ambiguous,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,cpr-ambiguous-request.json,reject ambiguous new no-ID instruction; do not silently replay,200,completed,CPR IDENTITY READY,FAIL,0,not independently observed,,cpr-ambiguous-result.json
+cpr-retry,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,cpr-retry-request.json,same original completed response without new Send,409,,,FAIL,0,not independently observed,request_identity_conflict,cpr-retry-result.json
+cpr-seed,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,cpr-seed-request.json,CPR IDENTITY READY completed,200,completed,CPR IDENTITY READY,observed; see evidence,1,not independently observed,,cpr-seed-result.json
+disconnect,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,disconnect-request.json,retained full output + suffix/terminal; no duplicate submission,200,,"MOL185 PREFIX  
+01 ORCHID-MOL184  
+02 ORCHID-MOL184  
+03 ORCHID-MOL184  
+04 ORCHID-MOL184  
+05 ORCHID-MOL184  
+06 ORCHID-MOL184  
+07 ORCHID-",observed; see evidence,1,not independently observed,,disconnect-result.json
+expiry-first,PR6+PR7 d02a881/tree d5162b3,"real-browser-seeded, test-owned SQLite expiry injection; not CLI",expiry-first-request.json,409 temporary_history_expired on first/repeat/restart; zero Send,409,,,observed; see evidence,0,not independently observed,temporary_history_expired,expiry-first-result.json
+expiry-repeat,PR6+PR7 d02a881/tree d5162b3,"real-browser-seeded, test-owned SQLite expiry injection; not CLI",expiry-repeat-request.json,409 temporary_history_expired on first/repeat/restart; zero Send,409,,,observed; see evidence,0,not independently observed,temporary_history_expired,expiry-repeat-result.json
+expiry-restart-first,PR6+PR7 d02a881/tree d5162b3,"real-browser-seeded, test-owned SQLite expiry injection; not CLI",expiry-restart-first-request.json,409 temporary_history_expired on first/repeat/restart; zero Send,409,,,observed; see evidence,0,not independently observed,temporary_history_expired,expiry-restart-first-result.json
+expiry-restart-repeat,PR6+PR7 d02a881/tree d5162b3,"real-browser-seeded, test-owned SQLite expiry injection; not CLI",expiry-restart-repeat-request.json,409 temporary_history_expired on first/repeat/restart; zero Send,409,,,observed; see evidence,0,not independently observed,temporary_history_expired,expiry-restart-repeat-result.json
+failed-promotion-refused,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,failed-promotion-refused-request.json,pre-admission rejection retains temp marker; zero Send,503,,,observed; see evidence,0,not independently observed,server_draining,failed-promotion-refused-result.json
+identity-ambiguous,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,identity-ambiguous-request.json,409 instruction_identity_required; zero Send,409,,,observed; see evidence,0,not independently observed,instruction_identity_required,identity-ambiguous-result.json
+identity-retry,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,identity-retry-request.json,same id; zero new Send,200,completed,IDENTITY READY,observed; see evidence,0,not independently observed,,identity-retry-result.json
+identity-seed,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,identity-seed-request.json,IDENTITY READY completed,200,completed,IDENTITY READY,observed; see evidence,1,not independently observed,,identity-seed-result.json
+identity-stable-one,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,identity-stable-one-request.json,new execution for explicit ID one,200,completed,IDENTITY READY,observed; see evidence,1,not independently observed,,identity-stable-one-result.json
+identity-stable-two,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,identity-stable-two-request.json,new execution for explicit ID two,200,completed,IDENTITY READY,observed; see evidence,1,not independently observed,,identity-stable-two-result.json
+midstream-reconnect,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,midstream-reconnect-request.json,retained full output + suffix/terminal; no duplicate submission,200,completed,"MOL185 PREFIX  
+001 ORCHID-MOL184 ABCDEFGHIJKLMNOPQRSTUVWXYZ  
+002 ORCHID-MOL184 ABCDEFGHIJKLMNOPQRSTUVWXYZ  
+003 ORCHID-MOL184 ABCDEFGHIJKL",observed; see evidence,0,not independently observed,,midstream-reconnect-result.json
+midstream,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,midstream-request.json,retained full output + suffix/terminal; no duplicate submission,200,,"MOL185 PREFIX  
+001 ORCHID-MOL184 ABCDEFGHIJKLMNOPQRSTUVWXYZ  
+002 ORCHID-MOL184 ABCDEFGHIJKLMNOPQRSTUVWXYZ  
+003 ORCHID-MOL184 ABCDEFGHIJKL",observed; see evidence,1,not independently observed,,midstream-result.json
+new-independent,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,new-independent-request.json,UNKNOWN; no old context,200,completed,UNKNOWN,observed; see evidence,1,not independently observed,,new-independent-result.json
+paragraph-disconnect,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,paragraph-request.json,retained full output + suffix/terminal; no duplicate submission,200,,"MOL185 PREFIX
+
+1. ORCHID-MOL184 ABCDEFGHIJKLMNOPQRSTUVWXYZ ORCHID-MOL184 ABCDEFGHIJKLMNOPQRSTUVWXYZ ORCHID-MOL184 ABCDEFGHIJKLMNOPQRSTUVWXYZ",observed; see evidence,1,not independently observed,,paragraph-disconnect-result.json
+paragraph-reconnect,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,paragraph-reconnect-request.json,retained full output + suffix/terminal; no duplicate submission,200,completed,"MOL185 PREFIX
+
+1. ORCHID-MOL184 ABCDEFGHIJKLMNOPQRSTUVWXYZ ORCHID-MOL184 ABCDEFGHIJKLMNOPQRSTUVWXYZ ORCHID-MOL184 ABCDEFGHIJKLMNOPQRSTUVWXYZ",observed; see evidence,0,not independently observed,,paragraph-reconnect-result.json
+persistent-next,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,persistent-next-request.json,ORCHID-MOL184 in saved conversation,200,completed,ORCHID-MOL184,observed; see evidence,1,not independently observed,,persistent-next-result.json
+promotion,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,promotion-request.json,ORCHID-MOL184; clear temp state only after complete,200,completed,ORCHID-MOL184,observed; see evidence,1,not independently observed,,promotion-result.json
+reconnect,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,reconnect-request.json,retained full output + suffix/terminal; no duplicate submission,200,completed,"MOL185 PREFIX  
+01 ORCHID-MOL184  
+02 ORCHID-MOL184  
+03 ORCHID-MOL184  
+04 ORCHID-MOL184  
+05 ORCHID-MOL184  
+06 ORCHID-MOL184  
+07 ORCHID-",observed; see evidence,0,not independently observed,,reconnect-result.json
+seed,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,seed-request.json,MOL185 READY completed,200,completed,MOL185 READY,observed; see evidence,1,not independently observed,,seed-result.json
+seed-retry,PR6+PR7 d02a881/tree d5162b3,real backend/browser integration; not CLI,seed-retry-request.json,same id/output; zero new Send,200,completed,MOL185 READY,observed; see evidence,0,not independently observed,,seed-retry-result.json
+CLI-01,PR6+PR7 d02a881/tree d5162b3; actual CLI0.162.0; existing6.1.8 external broker,actual Codex CLI -> candidate project proxy -> real ChatGPT browser + actual local tool,cli-auth-zstd-command.json,one actual tool effect; counter 0->1; result + final; exit 0,,"CLI exit 0, turn.completed",MOL185\_TOOL\_EFFECT 1,PASS,1,not independently observed; conservative budget charge 2,one intentional transport disconnect in CLI-02; recovered,cli-auth-zstd-events.jsonl
+CLI-02,PR6+PR7 d02a881/tree d5162b3; actual CLI0.162.0; existing6.1.8 external broker,actual Codex CLI -> candidate project proxy -> real ChatGPT browser + actual local tool,cli-repeat-command.json,resume identical new instruction; counter 1->2 only; actual result-stream loss; automatic recovery; exit 0,,"CLI exit 0, turn.completed",MOL185\_TOOL\_EFFECT 2,PASS,1,not independently observed; conservative budget charge 3,one intentional transport disconnect in CLI-02; recovered,cli-repeat-events.jsonl
+CLI-03,PR6+PR7 d02a881/tree d5162b3; actual CLI0.162.0; existing6.1.8 external broker,actual Codex CLI -> candidate project proxy -> real ChatGPT browser + actual local tool,cli-change-command.json,"resume changed instruction; no tools; COUNTERS 1,2; CURRENT 2; effect remains2; exit0",,"CLI exit 0, turn.completed","COUNTERS 1,2; CURRENT 2",PASS,1,not independently observed; conservative budget charge 1,one intentional transport disconnect in CLI-02; recovered,cli-change-events.jsonl

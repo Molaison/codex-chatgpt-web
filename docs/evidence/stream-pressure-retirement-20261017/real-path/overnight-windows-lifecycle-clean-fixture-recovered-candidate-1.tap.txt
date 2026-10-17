@@ -1,0 +1,34 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests\chatgpt-web-harness.test.ts:
+[chatgpt-web] browser_settled {"traceId":"e5bc78d6c239","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) adapter liveness covers every path through a turn > a turn blocked waiting for the previous owner to retire still proves it is alive [12266.25ms]
+[chatgpt-web] browser_settled {"traceId":"d15d6cf9e8ed","outcome":"final","compaction":true}
+(pass) adapter liveness covers every path through a turn > a compaction turn proves it is alive while the summarizing browser turn runs [12002.70ms]
+
+tests\server-lifecycle.test.ts:
+(pass) authenticated lifecycle control cancels orphaned browser turns [28.73ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown","code":"client_cancelled","retryable":false}
+(pass) targeted cancellation preserves peer turns and its cause: user close [9.27ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown","code":"browser_surface_bootstrap_timeout","retryable":false}
+(pass) targeted cancellation preserves peer turns and its cause: browser_surface_bootstrap_timeout [7.68ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown","code":"helper_heartbeat_expired","retryable":false}
+(pass) targeted cancellation preserves peer turns and its cause: helper_heartbeat_expired [5.25ms]
+(pass) authenticated lifecycle control aborts active alpha/search before acknowledging cancellation [10.34ms]
+(pass) authenticated lifecycle control aborts active images/generations before acknowledging cancellation [6.16ms]
+[chatgpt-web] broker trace=dev-lifecycle registered tokenHash=c7f4ddc04247
+[chatgpt-web] broker_retired {"traceId":"dev-lifecycle","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":0,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) lifecycle drain and cancellation include browser turns owned by the external DEV driver [101.28ms]
+(pass) authenticated shutdown requires a verified idle drain [29.86ms]
+
+tests\server-physical-shutdown.test.ts:
+[chatgpt-web] browser_settled {"traceId":"shutdown-physical-trace","outcome":"final","compaction":false,"submission":"unknown"}
+(pass) a drained runtime refuses shutdown until an interrupted helper physically exits [7.63ms]
+[chatgpt-web] browser_settled {"traceId":"shutdown-physical-trace","outcome":"final","compaction":false,"submission":"unknown"}
+(pass) signal shutdown keeps its listener open until cancelled helper cleanup settles [18.07ms]
+
+ 12 pass
+ 141 filtered out
+ 0 fail
+ 64 expect() calls
+Ran 12 tests across 3 files. [25.03s]

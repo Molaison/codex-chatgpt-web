@@ -1,0 +1,74 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/server-real-adapter-pressure.test.ts:
+[chatgpt-web] browser_settled {"traceId":"4350d70a974f","outcome":"final","compaction":false,"submission":"accepted"}
+REAL_ADAPTER_PRESSURE {"stream":false,"starts":1,"simulatedSends":1,"physicalModelSubmissions":0,"results":[{"attempt":"feed","httpStatus":200,"terminalCount":1,"status":"completed","errorNotifications":0},{"attempt":"exact-replay","httpStatus":200,"terminalCount":1,"status":"failed","error":{"message":"ChatGPT web turn aborted","type":"server_error","code":"upstream_server_error"},"errorNotifications":1}]}
+49 |           terminalCount: r.terminalCount, status: r.response?.status, error: r.response?.error,
+50 |           retryable: r.response?.retryable, errorNotifications: r.notifications.length })) }));
+51 |       expect(starts).toBe(1); expect(sends).toBe(1);
+52 |       expect(browserSignal?.aborted).toBe(false);
+53 |       for (const result of results) {
+54 |         expect(result.httpStatus).toBe(stream ? 200 : 502);
+                                       ^
+error: expect(received).toBe(expected)
+
+Expected: 502
+Received: 200
+
+      at <anonymous> (<user-home>/mol184185-live-20261017-1000/overnight-pressure/tests/server-real-adapter-pressure.test.ts:54:35)
+(fail) real adapter retains typed queue failure through observer wrapping and exact replay, stream=false [190.19ms]
+[chatgpt-web] browser_settled {"traceId":"dcdab3bf9d80","outcome":"final","compaction":false,"submission":"accepted"}
+REAL_ADAPTER_PRESSURE {"stream":true,"starts":1,"simulatedSends":1,"physicalModelSubmissions":0,"results":[{"attempt":"feed","httpStatus":200,"terminalCount":1,"status":"completed","errorNotifications":0},{"attempt":"exact-replay","httpStatus":200,"terminalCount":1,"status":"failed","error":{"message":"ChatGPT web turn aborted","type":"server_error","code":"upstream_server_error"},"errorNotifications":1}]}
+51 |       expect(starts).toBe(1); expect(sends).toBe(1);
+52 |       expect(browserSignal?.aborted).toBe(false);
+53 |       for (const result of results) {
+54 |         expect(result.httpStatus).toBe(stream ? 200 : 502);
+55 |         expect(result.terminalCount).toBe(1);
+56 |         expect(result.response).toMatchObject({ status: "failed", error: { code: "adapter_event_backlog_exceeded" }, retryable: false });
+                                     ^
+error: expect(received).toMatchObject(expected)
+
+  {
+-   "error": {
+-     "code": "adapter_event_backlog_exceeded",
++   "created_at": 1792262578,
++   "end_turn": true,
++   "id": "resp_c5898d353af648e6a0e32e64ab316578",
++   "model": "chatgpt-web/gpt-5.6-sol-instant",
++   "object": "response",
++   "output": [
++     {
++       "content": [
++         {
++           "annotations": [],
++           "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx... (9822 bytes truncated) ...xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
++           "type": "output_text",
++         },
++       ],
++       "id": "msg_026d4b7a69a14147ac6197a4b2085cbd",
++       "phase": "final_answer",
++       "role": "assistant",
++       "status": "completed",
++       "type": "message",
++     },
++   ],
++   "status": "completed",
++   "usage": {
++     "input_tokens": 8852,
++     "output_tokens": 1260,
++     "total_tokens": 10112,
+    },
+-   "retryable": false,
+-   "status": "failed",
+  }
+
+- Expected  - 4
++ Received  + 26
+
+      at <anonymous> (<user-home>/mol184185-live-20261017-1000/overnight-pressure/tests/server-real-adapter-pressure.test.ts:56:33)
+(fail) real adapter retains typed queue failure through observer wrapping and exact replay, stream=true [53.68ms]
+
+ 0 pass
+ 2 fail
+ 10 expect() calls
+Ran 2 tests across 1 file. [692.00ms]

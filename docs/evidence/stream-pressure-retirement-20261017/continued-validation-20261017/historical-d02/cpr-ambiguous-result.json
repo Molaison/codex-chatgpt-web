@@ -1,0 +1,17 @@
+{
+  "op": "cpr-ambiguous",
+  "http": 200,
+  "id": "resp_2f3ea5d19ec646fc9b733da0f8f5844d",
+  "status": "completed",
+  "text": "CPR IDENTITY READY",
+  "durationMs": 27,
+  "sendBefore": {
+    "activated": 13,
+    "submitted": 13
+  },
+  "sendAfter": {
+    "activated": 13,
+    "submitted": 13
+  },
+  "reality": "real candidate AF_UNIX CPR provider -> private fixture auth bridge -> candidate pool/runtime/helper -> real browser; shared Rust gateway not exercised"
+}

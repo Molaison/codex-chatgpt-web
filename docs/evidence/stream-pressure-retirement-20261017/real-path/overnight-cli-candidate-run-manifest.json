@@ -1,0 +1,45 @@
+{
+  "commit": "ee43d5568725a78be0f8d9af8ae053dc07dbd6f0",
+  "scope": "Candidate-only controlled custom-provider HTTP fixture; not installed built-in-provider/authenticated browser acceptance",
+  "baselineUntouched": true,
+  "actualCliInvocations": 1,
+  "actualHttpAttempts": 1,
+  "actualWorkerStarts": 1,
+  "sendActivatedCallbacks": 1,
+  "submittedCallbacks": 1,
+  "textDeltaCallbacks": 1,
+  "actualModelCalls": 0,
+  "cliEventTypes": {
+    "thread.started": 1,
+    "turn.started": 1,
+    "item.completed": 1,
+    "turn.completed": 1
+  },
+  "outcomes": {
+    "exec": "MONITOR_ABORTED: controlled canary observed, but process exit=null after monitor failure; not a full passing exec",
+    "resume": "NOT_RUN: second reserved logical slot incremented before stop check; no child was spawned and no HTTP request occurred"
+  },
+  "counterClarification": "Raw summary.logicalTurns=2 is reservation count, not two executed CLI turns; preserve raw output without rewriting. Only one CLI invocation actually ran.",
+  "setupFailure": "Python script-generation SyntaxError attempt preserved separately; 0CLI/0HTTP/0model in setup failure.",
+  "monitorFailure": {
+    "recorded": "monitor error",
+    "exceptionDetail": "not captured by original catch; root cause not proven",
+    "staticRisk": "size() recursively stats a CLI-owned mutable temp tree without ENOENT protection, and can stop on deletion races; do not assert this as independently reproduced cause"
+  },
+  "resources": {
+    "limits": {
+      "proxyRssBytes": 536870912,
+      "processTreeRssBytes": 2147483648,
+      "perCaseMs": 45000,
+      "suiteMs": 115000,
+      "logicalTurns": 2,
+      "httpAttempts": 4
+    },
+    "BunProxyPeakRssBytes": 218083328,
+    "treePeakRssBytes": 919928832,
+    "bothRssLimitsExceeded": false,
+    "interpretation": "Neither original separate proxy512MiB nor process-tree2GiB cap was breached. Baseline uses its own lower aggregate512MiB limit and remains separately retained. This failure is fixture monitor failure, not a product memory leak.",
+    "samples": "Per-PID proxy/owned child RSS snapshots retained; transient ps monitor child is included in tree samples."
+  },
+  "remaining": "No completed resume comparison; no app-server or rerun attempted after stop."
+}

@@ -1,0 +1,20 @@
+{
+  "op": "cpr-retry",
+  "http": 409,
+  "text": "",
+  "error": {
+    "code": "request_identity_conflict",
+    "type": "qa_pool_error",
+    "message": "This request identity was already used for a different payload"
+  },
+  "durationMs": 15,
+  "sendBefore": {
+    "activated": 13,
+    "submitted": 13
+  },
+  "sendAfter": {
+    "activated": 13,
+    "submitted": 13
+  },
+  "reality": "real candidate AF_UNIX CPR provider -> private fixture auth bridge -> candidate pool/runtime/helper -> real browser; shared Rust gateway not exercised"
+}

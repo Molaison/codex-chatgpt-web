@@ -1,0 +1,1 @@
+{"result": "HARNESS_WAIT_ABORTED", "reason": "Exit listener was registered after finite filesystem actor could exit. No CLI or model started.", "taskSelftestPidsStopped": [3441481]}

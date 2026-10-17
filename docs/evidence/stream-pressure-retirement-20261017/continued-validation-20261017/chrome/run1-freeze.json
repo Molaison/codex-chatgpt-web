@@ -1,0 +1,1513 @@
+{
+  "preparedAt": "2026-10-17T20:00:20.185Z",
+  "status": "frozen for read-only review; NO Chrome/test execution authorized by this file",
+  "sourceCommit": "cb12f370feb558002c7416ffe0087a9814e1b091",
+  "repo": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate",
+  "boundary": "Real local Chrome, production server/adapter/journal/registry and DOM response loop; worker.run plus preparation/model-selection/submission/binding replaced. Controlled character relay is synthetic. No ChatGPT/helper/model acceptance.",
+  "fixture": {
+    "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\tests\\pr13-local-chrome.fixture.test.ts",
+    "bytes": 30498,
+    "sha256": "ed1f90f25530bb7e78df113214531d222f70d96469aa1864966a9d5bc2c37955"
+  },
+  "freezer": {
+    "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\freeze-pr13-chrome.cjs",
+    "bytes": 5396,
+    "sha256": "d984b9d0937c6ce376a8388dacadcf50fa9cff0aeb310e153841dfd3d1e980fa"
+  },
+  "readme": {
+    "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\README.zh-CN.md",
+    "bytes": 6023,
+    "sha256": "d83381e640fd2c14e842156f6c55b883d7217b3cc8d009f4def94e4f6c5b9440"
+  },
+  "attempt0": [
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt0-pr13-local-chrome.fixture.test.ts",
+      "bytes": 25592,
+      "sha256": "0cf29e49a4b01be89a4479021ea3e0ab2785220e94b940c5666131a985b994fb"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt0-freeze.json",
+      "bytes": 57122,
+      "sha256": "55a6e2657a360de7e98ea145685a7bbb75f49aa2693ee3436f6d3475a18a9738"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt0-freeze-pr13-chrome.cjs",
+      "bytes": 4706,
+      "sha256": "36eb20be5dfdffaa8692a53732bc5f6c9a91e946667899f265f858e7b5066d80"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt0-README.zh-CN.md",
+      "bytes": 4772,
+      "sha256": "c7a74f37042561f50c65fe05a8fc9e1dcfd1088e200dde5b271914f4b13e2a26"
+    }
+  ],
+  "priorPreparations": [
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt1-before-detach-health-pr13-local-chrome.fixture.test.ts",
+      "bytes": 30232,
+      "sha256": "f7cc6ecd1eb30ef7babdfad7fdb37da42fae4dbff9559661b47547430582d241"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt1-before-detach-health-freeze.json",
+      "bytes": 64147,
+      "sha256": "5521330e09ceb1a564309b4683c4cc14665b0a846ea124d9c5c850676c6fee25"
+    }
+  ],
+  "semanticTypecheck": {
+    "kind": "TypeScript semantic typecheck; no fixture/test/browser execution",
+    "typescript": "5.9.3",
+    "bunTypes": "1.4.0",
+    "fixtureSHA256": "ed1f90f25530bb7e78df113214531d222f70d96469aa1864966a9d5bc2c37955",
+    "command": "cd <YWL_TASK>/pr13-chrome-typecheck && <YWL_HOME>/.local/lib/codex-chatgpt-web/cpr-native-retry-20261017-qa-1/runtime/runtime/bun node_modules/typescript/bin/tsc --project tsconfig.json --pretty false",
+    "config": {
+      "compilerOptions": {
+        "target": "ES2023",
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
+        "strict": true,
+        "skipLibCheck": true,
+        "noEmit": true,
+        "types": [
+          "bun-types"
+        ]
+      },
+      "files": [
+        "tests/pr13-local-chrome.fixture.test.ts",
+        "src/domino.d.ts",
+        "src/turndown-plugin-gfm.d.ts"
+      ]
+    },
+    "exitCode": 0,
+    "seconds": 4.0450665999997,
+    "productionSource": "<YWL_TASK>/overnight-pressure/src",
+    "runtimeDependencies": "<YWL_TASK>/dependency-overlay"
+  },
+  "staticCheckArtifacts": [
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt1-static-syntax.json",
+      "bytes": 722,
+      "sha256": "1b80b9ee17f20e458a004bf8652a30fc8ee4742c1d80862c0497250e314931ab"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt1-static-syntax.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt1-static-syntax.stdout.txt",
+      "bytes": 94,
+      "sha256": "2e5473764c8da33123b64a9f78f81b260aa0a4fe606fd0fd562f0457a9cdc99d"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt1-typecheck-command.txt",
+      "bytes": 229,
+      "sha256": "06d8c753416cb37f633db8d6fbdc6a4a57b7406dae0b2e3a0d974741563e83ce"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt1-typecheck-copy.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt1-typecheck-copy.stdout.txt",
+      "bytes": 65,
+      "sha256": "4669047a31e6e7801b5496615764f474ea3616a6b0b128c35572e8a25793be7f"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt1-typecheck.json",
+      "bytes": 1040,
+      "sha256": "b2522f2fd54eb57b8cd966f6a007cebc8f0963365f7931d312a7531bf799b6d3"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt1-typecheck.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt1-typecheck.stdout.txt",
+      "bytes": 2385,
+      "sha256": "54ff8ea6d1fed51457a2d18571eba9e6aeb880ec6d579aaf383f52fe340267fa"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt2-typecheck-command.txt",
+      "bytes": 229,
+      "sha256": "06d8c753416cb37f633db8d6fbdc6a4a57b7406dae0b2e3a0d974741563e83ce"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt2-typecheck-copy.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt2-typecheck-copy.stdout.txt",
+      "bytes": 65,
+      "sha256": "7fee099408793c0c9f7f96ceecf4d015adce9d816b076cc750ce8498ebf234e5"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt2-typecheck.json",
+      "bytes": 1100,
+      "sha256": "08baa04685cafbaaebf5058f94217721e9a4e1c9874ca9c7db06889fe6044c20"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt2-typecheck.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt2-typecheck.stdout.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt3-typecheck-command.txt",
+      "bytes": 229,
+      "sha256": "06d8c753416cb37f633db8d6fbdc6a4a57b7406dae0b2e3a0d974741563e83ce"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt3-typecheck-copy.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt3-typecheck-copy.stdout.txt",
+      "bytes": 65,
+      "sha256": "6a3db905e27372d2f38e9b24531d5eb07ff1808a1c1bf074253f5587cc3420fa"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt3-typecheck.json",
+      "bytes": 1098,
+      "sha256": "5396c8ceeaecadbfde1d825cb0019d108d5e73e218a5df1d22525afc28ca5fc3"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt3-typecheck.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-chrome-fixture\\attempt3-typecheck.stdout.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "chrome": {
+    "versionFromReadOnlyWindowsPEMetadata": "155.0.8059.80",
+    "path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "bytes": 4600472,
+    "sha256": "36a30716f0994b377f1ce6b47cfe35399b9719e31d597fe0ea0d8f3b62aed532",
+    "engine": {
+      "path": "C:\\Program Files\\Google\\Chrome\\Application\\155.0.8059.80\\chrome.dll",
+      "bytes": 305356952,
+      "sha256": "7cc644c8a146d804ac175ff59277124cd63a4ccf15ea75f796e90f06e4dadfcd"
+    }
+  },
+  "node": {
+    "version": "v22.15.0",
+    "path": "C:\\Program Files\\nodejs\\node.exe",
+    "bytes": 84456080,
+    "sha256": "77bdff912b1c569b3e693fe126f619337c3e9d73dafbc4d0bf1d4f1f6a145761"
+  },
+  "bun": {
+    "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-current-runtime\\runtime\\bun.exe",
+    "bytes": 88825944,
+    "sha256": "627d2e4775c24bdedee2cd7ccc18dcadae061e5345274ab6e3c4c797927bfb8f"
+  },
+  "sourceClosureMethod": "Conservative superset: every source file present under src plus optional launcher/electron and root package.json/bun.lock; dependency package metadata separately recorded. Optional missing roots are explicit.",
+  "optionalSourceRoots": [
+    {
+      "path": "launcher/electron",
+      "present": false
+    }
+  ],
+  "sourceAggregate": "5bd036d77c788acd707070cec0134d40e11f374f484fcb7044563b65aeed73c9",
+  "sourceClosure": [
+    {
+      "path": "bun.lock",
+      "bytes": 22802,
+      "sha256": "298a89f9a9f050fbb7c4c839cc56966c1cb214c0369bc98221c6a262c6adb6a0"
+    },
+    {
+      "path": "package.json",
+      "bytes": 3157,
+      "sha256": "955d3bde550b8226cb0ee827d9749d04ac1bd224d35e45fee87f06449d5d00ac"
+    },
+    {
+      "path": "src/adapters/base.ts",
+      "bytes": 419,
+      "sha256": "8441cdd6621d8fcd700383a07c01a234029b3adea854fc6f79119bdcc58ea4f2"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/adapter-error.ts",
+      "bytes": 3089,
+      "sha256": "ac704fef6ee4a0acf2b23f3e3a8086aa5e4c72538f595ee2f303477d5605bf76"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/attachment-upload.ts",
+      "bytes": 8123,
+      "sha256": "516d8825e2180c14a1d2665973709ba71549c42357765db9263c713fedfcf5fd"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/browser-diagnostic-history.ts",
+      "bytes": 3275,
+      "sha256": "0b3e873082c7e8d6e79f6296d00fc2edd8509b6888e38a43734e4cfa6fa286fd"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/browser-helper-main.ts",
+      "bytes": 25167,
+      "sha256": "e7c45ad6cf74457d36a56a8b6c23264cd16ec6061c43cdca6f0ea9c2d5574c0b"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/browser-helper-prompt-selection.ts",
+      "bytes": 951,
+      "sha256": "72e0293b5aad62d99525e3e8552f5ddc1b702dab8520837a2128ea5e4dc6a96f"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/browser-response-structure.ts",
+      "bytes": 3947,
+      "sha256": "b23b0e37284b234c1e33149a45a5a9d5bad91fd035a19cdf6719dd045e012abc"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/browser-user-message.ts",
+      "bytes": 2634,
+      "sha256": "8b9f2ec47b25d4003016d61b7d28ce8b152f21f445e30018b3b3f9647afcc493"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/browser-worker.ts",
+      "bytes": 304781,
+      "sha256": "3404914203b7f80e29eb9b10a0cb15997efb7f30009fbb05a8590b7181bcb2aa"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/codex-rollout-environment.ts",
+      "bytes": 28013,
+      "sha256": "efd5a06fcca2853b755c672216cadaa9b1cec79452ac88ef9f7edee40bb141a0"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/compaction-continuation.ts",
+      "bytes": 5743,
+      "sha256": "6ec8730833da88e81e76bd1a52663259aa0b7e5b2071eddf9c567d2cfc29dc90"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/compaction-handoff.ts",
+      "bytes": 22701,
+      "sha256": "ac2f99da3d146ee01cb0a9233f5886eb2aa205f65cceb95b423da18b71491fd8"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/compaction-transaction.ts",
+      "bytes": 5515,
+      "sha256": "f391d1fc43aee6a9dba17ceb10ac52f081481f9b5ae5d87f692085f3a48db77a"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/concurrency.ts",
+      "bytes": 386,
+      "sha256": "9268ada0a29be9d9023cf223e565bdb9dfe9df0a1600af3bd8334df49ee9576d"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/conversation-key.ts",
+      "bytes": 5689,
+      "sha256": "2343ec708d7788bcaee8f272e2d15344c714045d7dc76c2d83c05ab33cfeb829"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/conversation-persistence.ts",
+      "bytes": 8982,
+      "sha256": "eb2613e56a7628f3ee2287af0c849fe56c7101eca392a361a446b463896346c8"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/downloads.ts",
+      "bytes": 4604,
+      "sha256": "f7e8c7417818f9dbecb6b9b24d0c81987dfad9ab2669bbd9bd0fd2e0a739b37a"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/environment.ts",
+      "bytes": 50523,
+      "sha256": "b6490832da9671a0a8f463e12cdd4f68fa1ec7283b7bf3dbd39867d5c7805dd3"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/index.ts",
+      "bytes": 81270,
+      "sha256": "0f5ffb688af811e2fe5e4b1f0348f7c88fad5152cecc5b9225cb495f530b0fd0"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/input-tokens.ts",
+      "bytes": 2612,
+      "sha256": "0861aa2d56a1bbb992b6ba59c2bf40695a8a20f9d5abb8ef3bfa730f2c3a97b6"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/launcher-helper-client.ts",
+      "bytes": 33299,
+      "sha256": "214587f6a4586143d1e091f101a4c18e71ec66d26ab256d9b373ced2e33e881e"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/limits.ts",
+      "bytes": 4675,
+      "sha256": "2cd7ff471250f13db8cb5f357d262675f6a26597e2284caca1df46863070810a"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/markdown.ts",
+      "bytes": 24290,
+      "sha256": "6fe375bd8e3916db2abed39093b217f542d7592db86b82ba878907d52478fa17"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/mcp-http.ts",
+      "bytes": 14119,
+      "sha256": "75601feb9351eb0ee9f9a8abcc5ac5b74fe49347c06d61b888860e026f7c6805"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/mcp-main.ts",
+      "bytes": 2370,
+      "sha256": "5173ddd65c38f35a263ae5d60975b1bef46d713b4106d46c51f5a1e66fbebfe9"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/mcp-observation.ts",
+      "bytes": 3558,
+      "sha256": "9f50b6512bdea241605628b917e72719593531e0b782a7d99e0c9be1b598d377"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/mcp-server.ts",
+      "bytes": 45250,
+      "sha256": "686ae11003cde1c59b7b9689be5701099782bb449df2da64346723fb35e0c75f"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/model-selection.ts",
+      "bytes": 5399,
+      "sha256": "ba7a09080da2839392a9b59afe8c89f4fb9e32d3b159c93c94f2e49baead5eb0"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/model.ts",
+      "bytes": 2890,
+      "sha256": "95330db2ec89c0c58fb59050f1946b7326efa5d37f6c8225fc6fd6d8e7cc1611"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/native-compaction-control.ts",
+      "bytes": 4209,
+      "sha256": "3cdbf2502c105f3c036fa4e927446fc108a0632be6592e619f499d1813b178c9"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/output-validation.ts",
+      "bytes": 1951,
+      "sha256": "f8e7e2c1fde027d0388a8a83241884c93729a41f2c3932b5d92e630a77db29fc"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/process-line-writer.ts",
+      "bytes": 1193,
+      "sha256": "727b115fc87663fdf476ec5af6fbb4763093d14da706780b9067dc180c0af91d"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/prompt.ts",
+      "bytes": 51402,
+      "sha256": "f9a88059521ef116f2c1cd14de3e365ab073a81cff3135d4101219ae64a477a2"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/qa-conversation-key.ts",
+      "bytes": 457,
+      "sha256": "3fcef03efb2d68a9c2b0967be3dac08e93c107daa4f80e6c81fb3a980a178cbd"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/response-images.ts",
+      "bytes": 7279,
+      "sha256": "60616e8911269f9e1fe6d6049552dd03480adc07384a997243db452a660874a8"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/retry-policy.ts",
+      "bytes": 2275,
+      "sha256": "70c49df9b0baa80e997fd3c25c8efe50062f54e2cf49c863654df15a89a188e9"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/rich-widget.ts",
+      "bytes": 4533,
+      "sha256": "fed97fdab57958a06b50d4a809453ddf04456252fbfbcb5f53685e4efff183db"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/rolling-checkpoint.ts",
+      "bytes": 15766,
+      "sha256": "6e8e624f555cd42f1a5e32ab222b8494d1bdccf5f6e503e9557548845f283365"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/skill-attachments.ts",
+      "bytes": 2652,
+      "sha256": "eec8b77fb38954240375e862e7ed5a17d84426cc0f971c70c800061e302ff817"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/thread-environment.ts",
+      "bytes": 17050,
+      "sha256": "da09814c87c78e8c4116fc0d5dd1d08eaaf54a7554feeb5f13e52aabc06dde49"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/turn-broker.ts",
+      "bytes": 72053,
+      "sha256": "2f4d8459d01dd382cb9b859acb6b48c05e7f0ff108a5a53044d531807c08b36b"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/turn-execution.ts",
+      "bytes": 36576,
+      "sha256": "47de43e2dac9821d457bbca24909c396c54cda9571d46094787a2a4c4090290f"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/turn-progress.ts",
+      "bytes": 11801,
+      "sha256": "906e63e3e9cbb85478a02c7605babc14a166b617b8f97e660109c8f8ece5263e"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/ui-labels.ts",
+      "bytes": 2973,
+      "sha256": "3ffe3bba94951f7fe7aa98cb686ed8121f3ef5c0cca09c3bcc4fbb5f51ac3346"
+    },
+    {
+      "path": "src/adapters/chatgpt-web/usage.ts",
+      "bytes": 7583,
+      "sha256": "52a2218fccbb01d5295e4521344acebc1349d008a9c7bf1a2685ef0803d7c615"
+    },
+    {
+      "path": "src/adapters/image.ts",
+      "bytes": 416,
+      "sha256": "daabf37ff2147c319020e5675743e0ef1c8757bf29bb451a255f171a6ed471fb"
+    },
+    {
+      "path": "src/bridge.ts",
+      "bytes": 50225,
+      "sha256": "636f37ef9eabb4af1779f99d10339d12f0052d220ff4a6f75774ebdace339438"
+    },
+    {
+      "path": "src/browser-login.ts",
+      "bytes": 18571,
+      "sha256": "4381fcc81cfffcdb71038d0005c166c7363cd8e8aea87baacdbc23870f07d002"
+    },
+    {
+      "path": "src/chatgpt-session.ts",
+      "bytes": 19653,
+      "sha256": "23544b65a727fd0696bc3951f000ac21a9506c59448b8e966ddc96de2cc08c0c"
+    },
+    {
+      "path": "src/chatgpt-web-models.ts",
+      "bytes": 27821,
+      "sha256": "4779a15aa463aab2fd2eaea542e7f8a18859e224b208de93177a74c153bfd58e"
+    },
+    {
+      "path": "src/cli.ts",
+      "bytes": 30091,
+      "sha256": "4e6097aa643bc5330da34ab7d0dc31f7f7b27da60db8c0a131ce21b32066d3a5"
+    },
+    {
+      "path": "src/codex-integration-document.ts",
+      "bytes": 30935,
+      "sha256": "f358623998662de2673f66e8ba6cb88f2b9f8d7c897965a7686fc5495b27792b"
+    },
+    {
+      "path": "src/codex-integration-journal.ts",
+      "bytes": 8946,
+      "sha256": "c2398376d99a387f166fe2ba7f318eec5b2224c0fd2aba6a90814c2c84648ab7"
+    },
+    {
+      "path": "src/codex-integration-route.ts",
+      "bytes": 24183,
+      "sha256": "0d48f695ef10567732b9b516551d6ae554f10b98f7811aeafbecffc80e986a2a"
+    },
+    {
+      "path": "src/codex-integration-shared.ts",
+      "bytes": 12148,
+      "sha256": "a47beb9c179eb2f8bd2e8e566900ce3752e6a8b75adc6e1bbabc37ccc7aebca1"
+    },
+    {
+      "path": "src/codex-integration.ts",
+      "bytes": 22922,
+      "sha256": "ae84a4b0312113da0f240d6bfa2cd1af887bc518a9117e90b976f3019f864356"
+    },
+    {
+      "path": "src/codex-interrupt-hook.ts",
+      "bytes": 18683,
+      "sha256": "bdb5afaf587d2283df5795d4ae7ad6db08978f8f080a4c1fe74dcc234dc3109c"
+    },
+    {
+      "path": "src/composer-predictions.ts",
+      "bytes": 2400,
+      "sha256": "b78952916da49b3c6d084b44cea59ac60e2296e475ef1b52b3b7822ff176a195"
+    },
+    {
+      "path": "src/config.ts",
+      "bytes": 32340,
+      "sha256": "7853bab5e67cf5f05092a27f70ede372cca6cabfde0d7c14ebefbc4504133512"
+    },
+    {
+      "path": "src/dev-chat/cli.ts",
+      "bytes": 20747,
+      "sha256": "aba5dcafaebf3db3459e0744eb8f10616bff2fb284d4fff7d247b45036cda975"
+    },
+    {
+      "path": "src/dev-chat/constants.ts",
+      "bytes": 188,
+      "sha256": "9283b1e0cb36794d4b3adb9f08fdaf667a1bc0600b130fc026ec82608ad77389"
+    },
+    {
+      "path": "src/dev-chat/driver.ts",
+      "bytes": 25376,
+      "sha256": "cff9e3d4d55be144f8ce44191d6585b8cda47579a08547c1f9e1564fc69d7bdb"
+    },
+    {
+      "path": "src/dev-chat/profile.ts",
+      "bytes": 8607,
+      "sha256": "76f098cc6fee783821135eee8393b9098d6d22551d1847188b8ae3ab0d3ccef3"
+    },
+    {
+      "path": "src/dev-chat/session.ts",
+      "bytes": 11771,
+      "sha256": "19c2274f0bd7087803016b6e10d748361c104187b435bf1eecb360dcd1394358"
+    },
+    {
+      "path": "src/dev-chat/transport.ts",
+      "bytes": 1751,
+      "sha256": "88c9ccb3d05642765e2115087b96f20018011590eb09b40e1e7424e49955f44b"
+    },
+    {
+      "path": "src/doctor.ts",
+      "bytes": 11684,
+      "sha256": "180624c556cfdb244e423544592195616b9bfeaf96ba3617a2d0b0986cf5f506"
+    },
+    {
+      "path": "src/domino.d.ts",
+      "bytes": 116,
+      "sha256": "6dc26d3df1a4d78854ba16c99a37c52cd64c3205d367c389cfd5d4133deb15ea"
+    },
+    {
+      "path": "src/download-gateway.ts",
+      "bytes": 8088,
+      "sha256": "f59bf180e565aa58f8df3587ed469415b93c73e772b09171d14300db05489095"
+    },
+    {
+      "path": "src/event-queue.ts",
+      "bytes": 1838,
+      "sha256": "2995a648b8047ad310e4a875e0d38f49c4db71e2c55dda0b2fb1dd996eb6893b"
+    },
+    {
+      "path": "src/generated-files.ts",
+      "bytes": 9643,
+      "sha256": "cd78e7b2680c81d1f9e77d148bd781fcb030835490dfa491c2a4015ccda6ce68"
+    },
+    {
+      "path": "src/http-body.ts",
+      "bytes": 1313,
+      "sha256": "de03e4dd84d4732b9d1c6a7fa448bef6b318b50e3ef3b4a8b826896ae6189400"
+    },
+    {
+      "path": "src/launcher-browser-host.ts",
+      "bytes": 34177,
+      "sha256": "502de9467f92de4a0b2979d0c477bc5b6e632e16af049f4c3adce4dba533b08e"
+    },
+    {
+      "path": "src/lib/errors.ts",
+      "bytes": 10299,
+      "sha256": "1e9ecf1edffbe63d1c190bc060639bd394596253eb3ff809d523e229232d5939"
+    },
+    {
+      "path": "src/lib/token-estimate.ts",
+      "bytes": 1743,
+      "sha256": "a00a81c847d0e264b66b0c5f11187a191d8e62d7bf3fff154cb575912799e2f6"
+    },
+    {
+      "path": "src/model-catalog.ts",
+      "bytes": 10154,
+      "sha256": "acbe75da80818be647367946884f300cad10e5e8f9dff8a0d3ef9dd2dc50c3f0"
+    },
+    {
+      "path": "src/native-network.ts",
+      "bytes": 2484,
+      "sha256": "d6ff1f4d13d67c54e72c92d5d1cb20c2eadcf6688c7d1df48c73c6f27d164b5e"
+    },
+    {
+      "path": "src/native-passthrough.ts",
+      "bytes": 12044,
+      "sha256": "9da225f9581e19914ed192ba4ccaf17c6b99f4eafa78aa6d30b426d164b4f22e"
+    },
+    {
+      "path": "src/paper-history.ts",
+      "bytes": 4322,
+      "sha256": "09edf709b0d3500d7a16a946a77f6f469c4b12195d400c2e1740f9ac6a9e628b"
+    },
+    {
+      "path": "src/paper-recovery.ts",
+      "bytes": 13800,
+      "sha256": "4d0370038024c749fdd29f82bff1e92d1765c1d8e72f4123a81bace664299cbd"
+    },
+    {
+      "path": "src/paper-registry.ts",
+      "bytes": 16952,
+      "sha256": "f12aa2490a65b40438bfe89e2d5abb95cd66a43371e5b583d9200dfc73f9a781"
+    },
+    {
+      "path": "src/process.ts",
+      "bytes": 1567,
+      "sha256": "788126f540921897b9d978af25b8b4de992ec2b088d1cb908c2ea1b330fc3e6a"
+    },
+    {
+      "path": "src/qa-pool-receipts.ts",
+      "bytes": 4296,
+      "sha256": "652dc732d2959b003a647b4ede90a676b04c9061979d662135cd4d25a544690c"
+    },
+    {
+      "path": "src/qa-pool.ts",
+      "bytes": 44753,
+      "sha256": "99580cf74b96ffec8a06b44bc50ea0a858c8ca864f22aa39c33bf3ac7f48c990"
+    },
+    {
+      "path": "src/responses/compaction.ts",
+      "bytes": 11443,
+      "sha256": "f4812623ce5a803acc2e837fe87566e3b0a94f3259948146b809a19c18b5dbdf"
+    },
+    {
+      "path": "src/responses/delegation.ts",
+      "bytes": 1232,
+      "sha256": "ebcd5a26d42073cff871f0157dc23b398e2188f616e2a081316ec2553bf49a7c"
+    },
+    {
+      "path": "src/responses/native-context.ts",
+      "bytes": 656,
+      "sha256": "d40f6f1cf59c02e292fdc8ffa3e1409436ed50cef3325ed5bb83866db895fdd6"
+    },
+    {
+      "path": "src/responses/parser.ts",
+      "bytes": 31137,
+      "sha256": "25fa80cbe558e2c0478bd89d54c7d3fb2b0a4af40099889f9f513336d21bc391"
+    },
+    {
+      "path": "src/responses/reasoning-envelope.ts",
+      "bytes": 2200,
+      "sha256": "5df8453122d8816358a013b6b96d4e53a0d2d3820a741754fc68622feebc3fe8"
+    },
+    {
+      "path": "src/responses/saved-chat-aliases.ts",
+      "bytes": 8257,
+      "sha256": "c7d7d416fc597613c039f4e258014019953058bb651ffd0aab2c93252fe0cf8e"
+    },
+    {
+      "path": "src/responses/schema.ts",
+      "bytes": 7213,
+      "sha256": "8be73a8ebd278e1254fe615327eb85bed636f35d51ad752053f549fb3e2d1653"
+    },
+    {
+      "path": "src/responses/state.ts",
+      "bytes": 9747,
+      "sha256": "b432b1d1beb54877a74f28e6ec0f951ed548a3c5fffe5d1ef4c3f02b56102c0b"
+    },
+    {
+      "path": "src/server.ts",
+      "bytes": 60573,
+      "sha256": "c5c75ddc3a83702309f5204d5e729bf55df6bf8423117ae69ad2239415178455"
+    },
+    {
+      "path": "src/service.ts",
+      "bytes": 11573,
+      "sha256": "a9026e84b3fd825ade6c9d69faaf208faef83662b504d12f64ef2dbcff2b0542"
+    },
+    {
+      "path": "src/setup.ts",
+      "bytes": 32612,
+      "sha256": "5e71fa3ff5253321d2b81e99e9fd39e51f2ee8c2bd9971700d6e1713846ffb0c"
+    },
+    {
+      "path": "src/stall-timeout.ts",
+      "bytes": 1019,
+      "sha256": "3be4873187e20953627e3d9b59f65a52194756eb947384075b35ab9d0ce6a9f0"
+    },
+    {
+      "path": "src/tunnel-service.ts",
+      "bytes": 5685,
+      "sha256": "b8c50e4bdf4943117990bbb7e60f1ed431a5ae1031b70917f98f3507f48428ad"
+    },
+    {
+      "path": "src/tunnel.ts",
+      "bytes": 20259,
+      "sha256": "258180fbc37d06ad9ffd856fcc7c49d40437aac6d0e9cc935aefddcff3f96943"
+    },
+    {
+      "path": "src/turndown-plugin-gfm.d.ts",
+      "bytes": 134,
+      "sha256": "ea990b5626ea8873e7b47591225d19b6b4c3816331cd5fc4980118779768bfd5"
+    },
+    {
+      "path": "src/types.ts",
+      "bytes": 13331,
+      "sha256": "3d944182b5850e3dcc383bcf1a381e3bd6c47e78440ecfd24c35fda74c970f82"
+    },
+    {
+      "path": "src/usage/totals.ts",
+      "bytes": 545,
+      "sha256": "c2f05d79c896c9719dade24b0d31f2824abf86e7e77aacb3843f7fd32d2d8c13"
+    },
+    {
+      "path": "src/version.ts",
+      "bytes": 33,
+      "sha256": "1a08b7a2cb063a6d11e518b3c25828667240b6da7e0adeb95996157ffa9e9b81"
+    }
+  ],
+  "inputs": [
+    {
+      "path": "tests/fixtures/chatgpt-dil-smoke.html",
+      "bytes": 1050,
+      "sha256": "848a24b7f7db7204bb0ddeb701e8b614d0929a0728e4cb9bc37fb7ae28d52388"
+    },
+    {
+      "path": "tests/qa-file-only-completion.test.ts",
+      "bytes": 13648,
+      "sha256": "5a5efb739a53fa6e6414887e1314014508e1cb80056c5d4625c00a4e40e69366"
+    },
+    {
+      "path": "tests/browser-turn-binding.test.ts",
+      "bytes": 22469,
+      "sha256": "a051e667b4d78a80354cbe67481378d2cbbb892891f2608f7a1b3aef9ec5b4f7"
+    },
+    {
+      "path": "tests/server-real-adapter-pressure.test.ts",
+      "bytes": 7152,
+      "sha256": "4673cf28f692265e20559422c8424128edac7bd85d14fdbba002acc9a5967a28"
+    },
+    {
+      "path": "tests/server-physical-shutdown.test.ts",
+      "bytes": 4112,
+      "sha256": "c3a5705084a43f10fcde9e18bc21b42f86608a102292d77add6f75a33f9fd58e"
+    },
+    {
+      "path": "tests/turn-execution-retirement.test.ts",
+      "bytes": 10727,
+      "sha256": "b09d6f5a5130cf348df206373b6e76840e75ef2f2a3c51eac212ab318bb65dee"
+    }
+  ],
+  "dependencies": [
+    {
+      "name": "@hono/node-server",
+      "version": "2.1.3",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\@hono\\node-server\\package.json",
+      "bytes": 3154,
+      "sha256": "691e145574aa58bf7457dcd5d94a9176b101f91d922c8c672dc469989bf757f0"
+    },
+    {
+      "name": "@mixmark-io/domino",
+      "version": "2.2.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\@mixmark-io\\domino\\package.json",
+      "bytes": 519,
+      "sha256": "2190c3aeea2de40b2a9afcbee22d0603e91b1a490ab2e24387b251e75a5ab77a"
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "version": "1.32.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\@modelcontextprotocol\\sdk\\package.json",
+      "bytes": 6511,
+      "sha256": "0216319ea53177f7ed419d660b2f52ccc7e3327e57f9ee2ef03225ff543aeae4"
+    },
+    {
+      "name": "accepts",
+      "version": "2.0.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\accepts\\package.json",
+      "bytes": 1157,
+      "sha256": "c579f3f992d488ac2f4ae751df8fd4169f034f4b6f6716f9a3ddfaf130993d63"
+    },
+    {
+      "name": "ajv",
+      "version": "8.20.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\ajv\\package.json",
+      "bytes": 4405,
+      "sha256": "1f9033ee5a6515e7d76938b7072941862d1ed228a6879cc7fe10cdeb75107989"
+    },
+    {
+      "name": "ajv-formats",
+      "version": "3.0.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\ajv-formats\\package.json",
+      "bytes": 1897,
+      "sha256": "402fb4bcfa457f0226813f3976ac42839dd619907c075c108efba8600d7edb69"
+    },
+    {
+      "name": "body-parser",
+      "version": "2.3.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\body-parser\\package.json",
+      "bytes": 1767,
+      "sha256": "ae841913f51a2b463ba86e011564784654dad953352dc972baf59f87da4b2d36"
+    },
+    {
+      "name": "bytes",
+      "version": "3.1.2",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\bytes\\package.json",
+      "bytes": 959,
+      "sha256": "99b21c09ce812dc76a06cd87c4753247cb9615c6a8501c5a5a9d9caa22ea2d12"
+    },
+    {
+      "name": "call-bind-apply-helpers",
+      "version": "1.0.2",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\call-bind-apply-helpers\\package.json",
+      "bytes": 2480,
+      "sha256": "59639b628c6846f674857c6a613fd47e2e4d2a24036cdf0f7a62ac634f4c8a5f"
+    },
+    {
+      "name": "call-bound",
+      "version": "1.0.4",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\call-bound\\package.json",
+      "bytes": 2507,
+      "sha256": "dcc8abb3c4ad3774234272149020cb36d7b1a3d377a419454d1e7adb368dd9c3"
+    },
+    {
+      "name": "chromium-bidi",
+      "version": "12.1.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\chromium-bidi\\package.json",
+      "bytes": 5729,
+      "sha256": "6d20a42c37cc7418d80468deb0ec926e613281d872ddcc8b3b74626597f49249"
+    },
+    {
+      "name": "content-disposition",
+      "version": "1.1.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\content-disposition\\package.json",
+      "bytes": 1039,
+      "sha256": "20ca1508f7b48509f2e5079ef94a84d56bc5d147d31f0310bf515a8c52ecf5f7"
+    },
+    {
+      "name": "content-type",
+      "version": "1.0.5",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\content-type\\package.json",
+      "bytes": 1075,
+      "sha256": "bd78a5427ffca1966621301edc6cac2146c8c1e137f122161ba90dca7ec89f77"
+    },
+    {
+      "name": "cookie",
+      "version": "0.7.2",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\cookie\\package.json",
+      "bytes": 1092,
+      "sha256": "7fa781bd142e7f38b66bff64b4e3a8be9e53e340e7ddaf27caebd00322602208"
+    },
+    {
+      "name": "cookie-signature",
+      "version": "1.2.2",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\cookie-signature\\package.json",
+      "bytes": 548,
+      "sha256": "c07dac3271d2ab772ac105f714c3f44bea5180a9a40bf95c2db8d6cb29bb28be"
+    },
+    {
+      "name": "cors",
+      "version": "2.8.6",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\cors\\package.json",
+      "bytes": 926,
+      "sha256": "b314218cdfc9e9442efd35c74c4176902c0bbd74700ba30d6055e70a76455174"
+    },
+    {
+      "name": "cross-spawn",
+      "version": "7.0.6",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\cross-spawn\\package.json",
+      "bytes": 1655,
+      "sha256": "2e106cd9b4ae4e34ead35218371a0d4e172da72515a4f8f97d69a2e1fe3dee82"
+    },
+    {
+      "name": "debug",
+      "version": "4.4.3",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\debug\\package.json",
+      "bytes": 1479,
+      "sha256": "ea8e33d63fe5f3a4c36609b6c3df8e2ef1f8b8ba2fc3a2e1e53cb27291f384af"
+    },
+    {
+      "name": "depd",
+      "version": "2.0.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\depd\\package.json",
+      "bytes": 1335,
+      "sha256": "5a3659bcc2e47b25ebf9f23f38eb9452a58920bfe4b59410bfa6fe84639a3b99"
+    },
+    {
+      "name": "devtools-protocol",
+      "version": "0.0.1666840",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\devtools-protocol\\package.json",
+      "bytes": 428,
+      "sha256": "2553ae0eacd59c0489df5e27a46e0ccb06c4a5713b0b969eb5f1e08df5b24f74"
+    },
+    {
+      "name": "dunder-proto",
+      "version": "1.0.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\dunder-proto\\package.json",
+      "bytes": 2108,
+      "sha256": "24df71008e4225c858f389dd2728b76cf66b752256d42a38ed7930aacae7fe2b"
+    },
+    {
+      "name": "ee-first",
+      "version": "1.1.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\ee-first\\package.json",
+      "bytes": 859,
+      "sha256": "a4eece6ff6b38bf7ac107323f381cc60500097a9cbdd473f5d5b45e68822cb89"
+    },
+    {
+      "name": "encodeurl",
+      "version": "2.0.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\encodeurl\\package.json",
+      "bytes": 1092,
+      "sha256": "5df10798f4b086da95c24180d7519fa4f68e2057a48e2ff6b76b91d6ffed1e9b"
+    },
+    {
+      "name": "es-define-property",
+      "version": "1.0.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\es-define-property\\package.json",
+      "bytes": 2129,
+      "sha256": "3a2cb30dae30a96705dcd9aa2d5fb190cf8200f27badccfa5a81a4374e5708b4"
+    },
+    {
+      "name": "es-errors",
+      "version": "1.3.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\es-errors\\package.json",
+      "bytes": 2174,
+      "sha256": "1a0a0bcccc76b915cb64073317312840cf6363e9144b96f406d0059774dd5278"
+    },
+    {
+      "name": "es-object-atoms",
+      "version": "1.1.2",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\es-object-atoms\\package.json",
+      "bytes": 2249,
+      "sha256": "e4b7882975d10c68457945c883e1060d0b058af5b1216215c872263f42e12fc9"
+    },
+    {
+      "name": "escape-html",
+      "version": "1.0.3",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\escape-html\\package.json",
+      "bytes": 434,
+      "sha256": "bd320a3e9d23249f5f7d3ce72f2fa426e28a6b2704bd2b281d0c92806a1f5223"
+    },
+    {
+      "name": "eslint-visitor-keys",
+      "version": "5.0.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\eslint-visitor-keys\\package.json",
+      "bytes": 1621,
+      "sha256": "13f8b0207958a2d504740826e8245bc2b023248136275550907a5569d8659242"
+    },
+    {
+      "name": "etag",
+      "version": "1.8.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\etag\\package.json",
+      "bytes": 1306,
+      "sha256": "836b9a5dd1c6af638f4602e83e2568277f9ab1f457db0b95d949c2a4ddb0462a"
+    },
+    {
+      "name": "eventsource",
+      "version": "3.0.7",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\eventsource\\package.json",
+      "bytes": 3334,
+      "sha256": "99cec0bc0f4919b5de13302b0ce28cb0dd966b316cd2c961e0e7c73f884f7524"
+    },
+    {
+      "name": "eventsource-parser",
+      "version": "3.1.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\eventsource-parser\\package.json",
+      "bytes": 2734,
+      "sha256": "dc49a3ed4248062335c63998cc4c2bc5e6cb7f2411d1c1a6dadb35d029f7e8bb"
+    },
+    {
+      "name": "express",
+      "version": "5.2.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\express\\package.json",
+      "bytes": 2731,
+      "sha256": "2980b885bad92f757a2d44674e905cf875867d5685111d8ab8f285635b11367d"
+    },
+    {
+      "name": "express-rate-limit",
+      "version": "8.6.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\express-rate-limit\\package.json",
+      "bytes": 3295,
+      "sha256": "c28c254caf6dacc787f6661f687d3da1f87446a5c25d3dd1caf8cf10d522654d"
+    },
+    {
+      "name": "fast-deep-equal",
+      "version": "3.1.3",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\fast-deep-equal\\package.json",
+      "bytes": 1496,
+      "sha256": "a5c63940db0260739be9e2ac67f3aac268df4db5770420ee4e34e493152f97d2"
+    },
+    {
+      "name": "fast-uri",
+      "version": "3.1.8",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\fast-uri\\package.json",
+      "bytes": 1983,
+      "sha256": "30cad05aad3d3596513706451dbfc7e0422f9c1d00f2903ecc34580327d54bc7"
+    },
+    {
+      "name": "fflate",
+      "version": "0.8.3",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\fflate\\package.json",
+      "bytes": 3543,
+      "sha256": "5922d8150b307bc0e4e441491c779c45379e9913d348848fca8d5cf02db4d134"
+    },
+    {
+      "name": "finalhandler",
+      "version": "2.1.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\finalhandler\\package.json",
+      "bytes": 1287,
+      "sha256": "42f5503e57f067caf49dda0353d766f8eb4616429d3c43234ba673ee8acd1196"
+    },
+    {
+      "name": "forwarded",
+      "version": "0.2.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\forwarded\\package.json",
+      "bytes": 1150,
+      "sha256": "550a78f64b6a76bc353d6a10152af5750613d0d910f8478943176c1a6196158a"
+    },
+    {
+      "name": "fresh",
+      "version": "2.0.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\fresh\\package.json",
+      "bytes": 1218,
+      "sha256": "3895d6c15a9e65c1cca20c675db7637423ec2d087bb221ef79e09ed2e7d34ec0"
+    },
+    {
+      "name": "function-bind",
+      "version": "1.1.2",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\function-bind\\package.json",
+      "bytes": 2262,
+      "sha256": "edb1c4faf4148e6e3d74ed8dbac1a1dc359a647ff4207aad4851396dc7a3559a"
+    },
+    {
+      "name": "get-intrinsic",
+      "version": "1.3.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\get-intrinsic\\package.json",
+      "bytes": 2576,
+      "sha256": "45b14763baacc59b0fd7b39e3ad983d5d2aaf7f5ed682f2fce9edb469826c999"
+    },
+    {
+      "name": "get-proto",
+      "version": "1.0.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\get-proto\\package.json",
+      "bytes": 2176,
+      "sha256": "73839e012ac7134a632c9d9fc6bdb700ac9ab5553cce39eb789ba2b65663e734"
+    },
+    {
+      "name": "gopd",
+      "version": "1.2.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\gopd\\package.json",
+      "bytes": 2070,
+      "sha256": "33ace32dc861f6da9d1fd9d0a44c66e8c6ff3b13358d070683c1c2978ff5f19f"
+    },
+    {
+      "name": "has-symbols",
+      "version": "1.1.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\has-symbols\\package.json",
+      "bytes": 2974,
+      "sha256": "5190268c0e3308d7446d1f7c036238f329f786938453e6017cb90980b3612e7a"
+    },
+    {
+      "name": "hasown",
+      "version": "2.0.4",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\hasown\\package.json",
+      "bytes": 2258,
+      "sha256": "40b750c55a8bacf2c5ac316f5299dd44d48acc101c189a00cd59d39376b5eb89"
+    },
+    {
+      "name": "hono",
+      "version": "4.13.12",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\hono\\package.json",
+      "bytes": 23674,
+      "sha256": "739a67ba4fb92d31c3d4e662ecaa499a21c1c4661f8d2a3786ca999e9f8c8d3b"
+    },
+    {
+      "name": "http-errors",
+      "version": "2.0.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\http-errors\\package.json",
+      "bytes": 1410,
+      "sha256": "d540721372bf8bf77b5fad31f6567a916e24d0aeeb78c81ba92b69feea9f1eef"
+    },
+    {
+      "name": "iconv-lite",
+      "version": "0.7.3",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\iconv-lite\\package.json",
+      "bytes": 2260,
+      "sha256": "f24ad03476d51470a5b069e65b03ef6383d615897ffe2239edf22584ea0e3d03"
+    },
+    {
+      "name": "inherits",
+      "version": "2.0.4",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\inherits\\package.json",
+      "bytes": 581,
+      "sha256": "be645800bc94fd8de29c8ae91690549b316cc437100108aeea7b2f347693cc80"
+    },
+    {
+      "name": "ip-address",
+      "version": "10.7.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\ip-address\\package.json",
+      "bytes": 2304,
+      "sha256": "11729ddd9c5991514091e445e92bbd1326c5e7a1503d1a3266bc309f23325d40"
+    },
+    {
+      "name": "ipaddr.js",
+      "version": "1.9.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\ipaddr.js\\package.json",
+      "bytes": 719,
+      "sha256": "fc1071893728a0e78fa40ce0dbe04c5a1021179fdcb5b229f274e3556d6a87cd"
+    },
+    {
+      "name": "is-promise",
+      "version": "4.0.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\is-promise\\package.json",
+      "bytes": 576,
+      "sha256": "ae7a1bff928cb99f0b828f8a8236f623828f5f48ce930268ac5726554e083b50"
+    },
+    {
+      "name": "isexe",
+      "version": "2.0.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\isexe\\package.json",
+      "bytes": 786,
+      "sha256": "395c2af9abeeaafe7391974c1eacfb2a2bdeef187f21c3f5582c49e0368e59bf"
+    },
+    {
+      "name": "jose",
+      "version": "6.2.4",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\jose\\package.json",
+      "bytes": 5633,
+      "sha256": "25d0c4953fd08fa978a2ed9bc1fb9bccae33d4dfd0d4a3ee3f232dad68c0f769"
+    },
+    {
+      "name": "json-schema-traverse",
+      "version": "1.0.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\json-schema-traverse\\package.json",
+      "bytes": 1004,
+      "sha256": "156fb24af02845c190701360d06dfda35ef04282e34a734289ea9535ad9819ae"
+    },
+    {
+      "name": "json-schema-typed",
+      "version": "8.0.2",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\json-schema-typed\\package.json",
+      "bytes": 1124,
+      "sha256": "8d04cdd834382b5b4e7d3e00fbc1da5654c430d04934c3031fe8f2d79a1625d9"
+    },
+    {
+      "name": "math-intrinsics",
+      "version": "1.1.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\math-intrinsics\\package.json",
+      "bytes": 2670,
+      "sha256": "39d74aa5a354153130706286dd60a2d8409ce0c8f66546eff2edcac0afff17e1"
+    },
+    {
+      "name": "media-typer",
+      "version": "1.1.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\media-typer\\package.json",
+      "bytes": 1036,
+      "sha256": "532b2af00ae4de1bb2853f233a1ee6d3c19703d18d2c4e173cdc59f7a01e1bba"
+    },
+    {
+      "name": "merge-descriptors",
+      "version": "2.0.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\merge-descriptors\\package.json",
+      "bytes": 961,
+      "sha256": "36d6d2cd304c06d5b690625af7ecc07995d5e220eba014ee3818af8c51421fed"
+    },
+    {
+      "name": "mime-db",
+      "version": "1.54.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\mime-db\\package.json",
+      "bytes": 1530,
+      "sha256": "33bdbb99915697ac01df12490b9d479a55529123842e67975e6d76d0010aa142"
+    },
+    {
+      "name": "mime-types",
+      "version": "3.0.2",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\mime-types\\package.json",
+      "bytes": 1266,
+      "sha256": "644fc05ded7d8a20c069a07c7c61373593d4859c91b1386f544cbf247e39820c"
+    },
+    {
+      "name": "mitt",
+      "version": "3.0.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\mitt\\package.json",
+      "bytes": 2313,
+      "sha256": "99966ad2891dfe56614f039f5d03ada4bda6dba810952272ae57359abb527b91"
+    },
+    {
+      "name": "ms",
+      "version": "2.1.3",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\ms\\package.json",
+      "bytes": 732,
+      "sha256": "1a6b4d9739790c0b94ab96c8cc0507e281c164c311ff4fbf5e57fb8d26290b40"
+    },
+    {
+      "name": "negotiator",
+      "version": "1.0.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\negotiator\\package.json",
+      "bytes": 1080,
+      "sha256": "a33b5a293825b22957629dafe778ea4164e577499418cd907d937b874f27675a"
+    },
+    {
+      "name": "object-assign",
+      "version": "4.1.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\object-assign\\package.json",
+      "bytes": 764,
+      "sha256": "5990bbffa235fc675debd925d50f6c3f48a2b4526d8c9f7555cadec9029d0d7f"
+    },
+    {
+      "name": "object-inspect",
+      "version": "1.13.4",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\object-inspect\\package.json",
+      "bytes": 2841,
+      "sha256": "21c5c63f653705f44a60f5fe93752b231caf6ff07b01805740bd89b71b2d6d8a"
+    },
+    {
+      "name": "on-finished",
+      "version": "2.4.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\on-finished\\package.json",
+      "bytes": 1057,
+      "sha256": "c812eca4b0dee2317cb446124cb27ae8e5b993c8fdd0144886b629ef6ef53fc1"
+    },
+    {
+      "name": "once",
+      "version": "1.4.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\once\\package.json",
+      "bytes": 574,
+      "sha256": "33840d74c14c94bfb75c76374765b635531b1eacb88d7f1f2f380c94d0ea1328"
+    },
+    {
+      "name": "parseurl",
+      "version": "1.3.3",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\parseurl\\package.json",
+      "bytes": 1180,
+      "sha256": "98c7b953c844cac7c0be2d5abc6559c6fd3a6075fd159b04c0f1bf46145bfed2"
+    },
+    {
+      "name": "path-key",
+      "version": "3.1.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\path-key\\package.json",
+      "bytes": 650,
+      "sha256": "25594dab72681c910d9cc919263a4daf27d77a75e0d2c26a4d958d6d6b798f86"
+    },
+    {
+      "name": "path-to-regexp",
+      "version": "8.4.2",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\path-to-regexp\\package.json",
+      "bytes": 1399,
+      "sha256": "3c37dce1e0587231f7c9f63e137dd0ed4d6f25552c89b5b5939c6a3d36113634"
+    },
+    {
+      "name": "pkce-challenge",
+      "version": "5.0.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\pkce-challenge\\package.json",
+      "bytes": 1648,
+      "sha256": "74fd5b54078ebad49e15421f928d285f63926caae3220356d95a9afc6fa0e417"
+    },
+    {
+      "name": "playwright-core",
+      "version": "1.62.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\playwright-core\\package.json",
+      "bytes": 876,
+      "sha256": "4556ebbf21a31c5e8dabb49c991ec291c5f00ffcad8b18cda45e4070b8a473bd"
+    },
+    {
+      "name": "proxy-addr",
+      "version": "2.0.8",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\proxy-addr\\package.json",
+      "bytes": 1281,
+      "sha256": "b2e305ca817ae4e8b088e07f38c5df1d7ad77aa3473809e4c37a9a1c83600225"
+    },
+    {
+      "name": "qs",
+      "version": "6.16.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\qs\\package.json",
+      "bytes": 3192,
+      "sha256": "69d58ca5abcff9be3f6becc70940caa76d8ec1b72ef7d2d735305c16cb877dca"
+    },
+    {
+      "name": "range-parser",
+      "version": "1.3.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\range-parser\\package.json",
+      "bytes": 1297,
+      "sha256": "3461c9c15204b32f459c97920bb678e42341e9e9675e4b748907ce4de740f26d"
+    },
+    {
+      "name": "raw-body",
+      "version": "3.0.2",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\raw-body\\package.json",
+      "bytes": 1275,
+      "sha256": "3072f77ab429d8b89e78c85e0cdefb6e3ef554a9fb19443d006a892a74361e78"
+    },
+    {
+      "name": "require-from-string",
+      "version": "2.0.2",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\require-from-string\\package.json",
+      "bytes": 511,
+      "sha256": "c0002f7d4c7d7e2a885cf0f97226344902417c3a0980f2beca41962d2bc1f6d8"
+    },
+    {
+      "name": "router",
+      "version": "2.2.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\router\\package.json",
+      "bytes": 1142,
+      "sha256": "b77062595f89476fab6acbcde5fa8dfac3be7d7b9b0b0b69d48c84ebc13c9a06"
+    },
+    {
+      "name": "safer-buffer",
+      "version": "2.1.2",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\safer-buffer\\package.json",
+      "bytes": 822,
+      "sha256": "4247a3a63c45a6a7ced1557fe4dd9d2a163af4915d594b95e5867b69a53edb52"
+    },
+    {
+      "name": "send",
+      "version": "1.2.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\send\\package.json",
+      "bytes": 1669,
+      "sha256": "303cfb195f13651e5174c23310e6a71e319b4bf85f9afe9e16b16567cbab02f8"
+    },
+    {
+      "name": "serve-static",
+      "version": "2.2.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\serve-static\\package.json",
+      "bytes": 1193,
+      "sha256": "4f2884fa761dee155f31cb960d792c2900dbaa6aecbe6ebcc3bcfd7e754706b8"
+    },
+    {
+      "name": "setprototypeof",
+      "version": "1.2.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\setprototypeof\\package.json",
+      "bytes": 1264,
+      "sha256": "5b39ddf23d2c12a751cb4af2ce12dd5c87314350be7526fff69b4a3ff2a2d538"
+    },
+    {
+      "name": "shebang-command",
+      "version": "2.0.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\shebang-command\\package.json",
+      "bytes": 558,
+      "sha256": "44de390ae5ed6c5f9758b8b9c90b93fa53977d5361731600429f1de08f4b3f30"
+    },
+    {
+      "name": "shebang-regex",
+      "version": "3.0.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\shebang-regex\\package.json",
+      "bytes": 582,
+      "sha256": "b8018c6b8cc9900dfd1ac18a54956ba34c453fdc2da5e5fe555ee8f04133a1c5"
+    },
+    {
+      "name": "side-channel",
+      "version": "1.1.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\side-channel\\package.json",
+      "bytes": 2362,
+      "sha256": "14da3b013c3762da85cfd8b173290285394dfa41870bc4a1e8243aaa38316f2a"
+    },
+    {
+      "name": "side-channel-list",
+      "version": "1.0.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\side-channel-list\\package.json",
+      "bytes": 2258,
+      "sha256": "90f0c08c6c17f4a3fa3dd61873223957b89da4201f01dc0c8b95b0b9e6a2a59a"
+    },
+    {
+      "name": "side-channel-map",
+      "version": "1.0.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\side-channel-map\\package.json",
+      "bytes": 2336,
+      "sha256": "914a8bd732b82523d95bb697eec3e6d95badc5eb13b196fb0772e59354a3ab25"
+    },
+    {
+      "name": "side-channel-weakmap",
+      "version": "1.0.2",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\side-channel-weakmap\\package.json",
+      "bytes": 2447,
+      "sha256": "8c11f0a1c6cfa549588d991a5cb1b04d62953277ed29f47463d415d5946388a8"
+    },
+    {
+      "name": "statuses",
+      "version": "2.0.2",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\statuses\\package.json",
+      "bytes": 1440,
+      "sha256": "dc2508da5568ba768d94b73126cd20a5df934bc0c651ad681022236484ca156c"
+    },
+    {
+      "name": "tiktoken",
+      "version": "1.0.22",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\tiktoken\\package.json",
+      "bytes": 3616,
+      "sha256": "aa9ac5822add55718d3f6cff328c2b06e9226db770947575fd4e10868caad02d"
+    },
+    {
+      "name": "toidentifier",
+      "version": "1.0.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\toidentifier\\package.json",
+      "bytes": 1142,
+      "sha256": "f34c59f784d43da6e633390d85d14ca60539b4676159444f313c62fcfc3b68dc"
+    },
+    {
+      "name": "toml-eslint-parser",
+      "version": "1.0.3",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\toml-eslint-parser\\package.json",
+      "bytes": 3232,
+      "sha256": "8e6e9e8d0bf35de715ad4cd6c3a2f3dcd041f919f16f5653d3a9628a5cc1fcc3"
+    },
+    {
+      "name": "turndown",
+      "version": "7.2.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\turndown\\package.json",
+      "bytes": 1810,
+      "sha256": "d0b7a4ddc4a58defa9e090f145ea33428989635d412964eee59387e51610492f"
+    },
+    {
+      "name": "turndown-plugin-gfm",
+      "version": "1.0.2",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\turndown-plugin-gfm\\package.json",
+      "bytes": 1432,
+      "sha256": "f09037fb0ca31e3c83ce301a836d9dfa70081c8de7bde70eaf8f5d22d3606a53"
+    },
+    {
+      "name": "type-is",
+      "version": "2.1.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\type-is\\package.json",
+      "bytes": 1333,
+      "sha256": "87b5f716ec743cdf6d610487698c8558a608b6e0adac522e1a4315b94b081694"
+    },
+    {
+      "name": "unpipe",
+      "version": "1.0.0",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\unpipe\\package.json",
+      "bytes": 770,
+      "sha256": "28b717f978d2a4fc72cd08236931443b63fe6586102df3d1967e2b21ea8c5e11"
+    },
+    {
+      "name": "vary",
+      "version": "1.1.2",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\vary\\package.json",
+      "bytes": 1215,
+      "sha256": "73edaee964d527117a9f69d6360fbe6cec534abd9127794be01a6af58a139daa"
+    },
+    {
+      "name": "which",
+      "version": "2.0.2",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\which\\package.json",
+      "bytes": 1043,
+      "sha256": "43010039ed5e89f7186960be682b3cb5cda5ab6cdfb06cbfd4f081cf0e7b4260"
+    },
+    {
+      "name": "wrappy",
+      "version": "1.0.2",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\wrappy\\package.json",
+      "bytes": 606,
+      "sha256": "712ac9c4c3cef8bc79f42cf6075ff18551f4cb768f35158214fd643853ad7abc"
+    },
+    {
+      "name": "zod",
+      "version": "4.4.3",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\zod\\package.json",
+      "bytes": 3796,
+      "sha256": "c630bd10b52dcf71c112a2bf78dbf2734b9db58d62de663b8d86c2ec2c8cda2e"
+    },
+    {
+      "name": "zod-to-json-schema",
+      "version": "3.25.1",
+      "path": "<WIN_WORKSPACE>\\.codex-tasks\\20261017-windows-ci-crash\\overnight-source-candidate\\node_modules\\zod-to-json-schema\\package.json",
+      "bytes": 2934,
+      "sha256": "25c60695ad0be6bfd2ecd87782b41a47081eabfc3e76909587952769b102944e"
+    }
+  ],
+  "safeguards": {
+    "chromiumSandbox": true,
+    "disabledGpu": true,
+    "freshTemporaryProfile": true,
+    "wsHost": "127.0.0.1",
+    "serverHost": "127.0.0.1",
+    "externalPageRequests": "abort all",
+    "modelSubmissions": 0,
+    "installation": false,
+    "productionEdits": false
+  },
+  "plannedResources": {
+    "concurrency": 1,
+    "maxLiveOwnedChrome": 1,
+    "caseTimeoutSeconds": 30,
+    "suiteDeadlineSeconds": 180,
+    "proxyRssMiB": 512,
+    "treeMiB": 2048,
+    "diskMiB": 2048
+  },
+  "notYetRun": [
+    "All four Chrome fixture tests",
+    "Windows sandbox launch",
+    "HTTP/Chrome lifecycle assertions",
+    "Screenshots"
+  ]
+}

@@ -1,0 +1,199 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests\chatgpt-web-harness.test.ts:
+(pass) adapter liveness covers every path through a turn > a turn blocked waiting for the previous owner to retire still proves it is alive [12556.60ms]
+(pass) adapter liveness covers every path through a turn > a compaction turn proves it is alive while the summarizing browser turn runs [12004.58ms]
+
+tests\server-lifecycle.test.ts:
+716 |     const unauthorized = await fetch(`http://127.0.0.1:${server.port}/admin/cancel-turns`, {
+717 |       method: "POST",
+718 |       headers: { authorization: "Bearer invalid" },
+719 |     });
+720 |     expect(unauthorized.status).toBe(401);
+721 |     expect(chatGptTurnSessions.activeCount()).toBe(1);
+                                                    ^
+error: expect(received).toBe(expected)
+
+Expected: 1
+Received: 3
+
+      at <anonymous> (<user-home>\Documents\Codex\2026-10-17\task\.codex-tasks\20261017-windows-ci-crash\overnight-source-candidate\tests\server-lifecycle.test.ts:721:47)
+(fail) authenticated lifecycle control cancels orphaned browser turns [37.22ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown","code":"client_cancelled","retryable":false}
+787 |         authorization: `Bearer ${config.controlToken}`,
+788 |       },
+789 |       body: JSON.stringify({ traceId: "trace_target", ...(reason ? { reason } : {}) }),
+790 |     });
+791 |     expect(response.status).toBe(200);
+792 |     expect(await response.json()).toMatchObject({
+                                        ^
+error: expect(received).toMatchObject(expected)
+
+  {
+-   "active_browser_turns": 2,
++   "active_browser_turns": 4,
++   "active_http_turns": 0,
+    "cancelled_broker_turns": 0,
+    "cancelled_browser_turns": 1,
++   "cancelled_compaction_runs": 0,
+    "status": "ok",
+    "trace_id": "trace_target",
+  }
+
+- Expected  - 1
++ Received  + 3
+
+      at <anonymous> (<user-home>\Documents\Codex\2026-10-17\task\.codex-tasks\20261017-windows-ci-crash\overnight-source-candidate\tests\server-lifecycle.test.ts:792:35)
+(fail) targeted cancellation preserves peer turns and its cause: user close [21.44ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown","code":"browser_surface_bootstrap_timeout","retryable":false}
+787 |         authorization: `Bearer ${config.controlToken}`,
+788 |       },
+789 |       body: JSON.stringify({ traceId: "trace_target", ...(reason ? { reason } : {}) }),
+790 |     });
+791 |     expect(response.status).toBe(200);
+792 |     expect(await response.json()).toMatchObject({
+                                        ^
+error: expect(received).toMatchObject(expected)
+
+  {
+-   "active_browser_turns": 1,
++   "active_browser_turns": 3,
++   "active_http_turns": 0,
+    "cancelled_broker_turns": 0,
+    "cancelled_browser_turns": 1,
++   "cancelled_compaction_runs": 0,
+    "status": "ok",
+    "trace_id": "trace_target",
+  }
+
+- Expected  - 1
++ Received  + 3
+
+      at <anonymous> (<user-home>\Documents\Codex\2026-10-17\task\.codex-tasks\20261017-windows-ci-crash\overnight-source-candidate\tests\server-lifecycle.test.ts:792:35)
+(fail) targeted cancellation preserves peer turns and its cause: browser_surface_bootstrap_timeout [7.13ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown","code":"helper_heartbeat_expired","retryable":false}
+787 |         authorization: `Bearer ${config.controlToken}`,
+788 |       },
+789 |       body: JSON.stringify({ traceId: "trace_target", ...(reason ? { reason } : {}) }),
+790 |     });
+791 |     expect(response.status).toBe(200);
+792 |     expect(await response.json()).toMatchObject({
+                                        ^
+error: expect(received).toMatchObject(expected)
+
+  {
+-   "active_browser_turns": 1,
++   "active_browser_turns": 3,
++   "active_http_turns": 0,
+    "cancelled_broker_turns": 0,
+    "cancelled_browser_turns": 1,
++   "cancelled_compaction_runs": 0,
+    "status": "ok",
+    "trace_id": "trace_target",
+  }
+
+- Expected  - 1
++ Received  + 3
+
+      at <anonymous> (<user-home>\Documents\Codex\2026-10-17\task\.codex-tasks\20261017-windows-ci-crash\overnight-source-candidate\tests\server-lifecycle.test.ts:792:35)
+(fail) targeted cancellation preserves peer turns and its cause: helper_heartbeat_expired [6.80ms]
+1062 |     const cancelled = await fetch(`${endpoint}/admin/cancel-turns`, {
+1063 |       method: "POST",
+1064 |       headers: { authorization: `Bearer ${config.controlToken}` },
+1065 |     });
+1066 |     expect(cancelled.status).toBe(200);
+1067 |     expect(await cancelled.json()).toMatchObject({
+                                          ^
+error: expect(received).toMatchObject(expected)
+
+  {
+-   "active_browser_turns": 0,
++   "active_browser_turns": 2,
+    "active_http_turns": 0,
++   "cancelled_browser_turns": 0,
++   "cancelled_compaction_runs": 0,
+    "cancelled_http_turns": 1,
+    "status": "ok",
+  }
+
+- Expected  - 1
++ Received  + 3
+
+      at <anonymous> (<user-home>\Documents\Codex\2026-10-17\task\.codex-tasks\20261017-windows-ci-crash\overnight-source-candidate\tests\server-lifecycle.test.ts:1067:36)
+(fail) authenticated lifecycle control aborts active alpha/search before acknowledging cancellation [16.32ms]
+1062 |     const cancelled = await fetch(`${endpoint}/admin/cancel-turns`, {
+1063 |       method: "POST",
+1064 |       headers: { authorization: `Bearer ${config.controlToken}` },
+1065 |     });
+1066 |     expect(cancelled.status).toBe(200);
+1067 |     expect(await cancelled.json()).toMatchObject({
+                                          ^
+error: expect(received).toMatchObject(expected)
+
+  {
+-   "active_browser_turns": 0,
++   "active_browser_turns": 2,
+    "active_http_turns": 0,
++   "cancelled_browser_turns": 0,
++   "cancelled_compaction_runs": 0,
+    "cancelled_http_turns": 1,
+    "status": "ok",
+  }
+
+- Expected  - 1
++ Received  + 3
+
+      at <anonymous> (<user-home>\Documents\Codex\2026-10-17\task\.codex-tasks\20261017-windows-ci-crash\overnight-source-candidate\tests\server-lifecycle.test.ts:1067:36)
+(fail) authenticated lifecycle control aborts active images/generations before acknowledging cancellation [6.68ms]
+[chatgpt-web] broker trace=dev-lifecycle registered tokenHash=33aa5f105f4a
+[chatgpt-web] broker_retired {"traceId":"dev-lifecycle","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":0,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+1128 |       () => "resolved",
+1129 |       error => error instanceof Error ? error.message : String(error),
+1130 |     );
+1131 | 
+1132 |     const drain = await fetch(`${endpoint}/admin/drain`, { method: "POST", headers: authorization });
+1133 |     expect(await drain.json()).toMatchObject({ active_browser_turns: 1, accepting_turns: false });
+                                      ^
+error: expect(received).toMatchObject(expected)
+
+  {
+    "accepting_turns": false,
+-   "active_browser_turns": 1,
++   "active_browser_turns": 3,
++   "active_http_turns": 0,
++   "status": "ok",
+  }
+
+- Expected  - 1
++ Received  + 3
+
+      at <anonymous> (<user-home>\Documents\Codex\2026-10-17\task\.codex-tasks\20261017-windows-ci-crash\overnight-source-candidate\tests\server-lifecycle.test.ts:1133:32)
+(fail) lifecycle drain and cancellation include browser turns owned by the external DEV driver [22.84ms]
+1342 | 
+1343 |     const shutdown = await fetch(`${endpoint}/admin/shutdown`, {
+1344 |       method: "POST",
+1345 |       headers: authorization,
+1346 |     });
+1347 |     expect(shutdown.status).toBe(200);
+                                   ^
+error: expect(received).toBe(expected)
+
+Expected: 200
+Received: 409
+
+      at <anonymous> (<user-home>\Documents\Codex\2026-10-17\task\.codex-tasks\20261017-windows-ci-crash\overnight-source-candidate\tests\server-lifecycle.test.ts:1347:29)
+(fail) authenticated shutdown requires a verified idle drain [8.93ms]
+
+tests\server-physical-shutdown.test.ts:
+[chatgpt-web] browser_settled {"traceId":"shutdown-physical-trace","outcome":"final","compaction":false,"submission":"unknown"}
+(fail) a drained runtime refuses shutdown until an interrupted helper physically exits [5001.61ms]
+  ^ this test timed out after 5000ms.
+[chatgpt-web] browser_settled {"traceId":"shutdown-physical-trace","outcome":"final","compaction":false,"submission":"unknown"}
+(fail) signal shutdown keeps its listener open until cancelled helper cleanup settles [5001.34ms]
+  ^ this test timed out after 5000ms.
+
+ 2 pass
+ 141 filtered out
+ 10 fail
+ 32 expect() calls
+Ran 12 tests across 3 files. [35.99s]

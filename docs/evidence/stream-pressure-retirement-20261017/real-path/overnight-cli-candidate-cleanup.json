@@ -1,0 +1,10 @@
+{
+  "at": "2026-10-17T18:39:08.431243Z",
+  "readOnlyVerification": true,
+  "taskProcessesRemaining": [],
+  "fixturePortsClosed": {
+    "proxyPort": true,
+    "runtimePort": true
+  },
+  "noAdditionalTestOrKillPerformed": true
+}

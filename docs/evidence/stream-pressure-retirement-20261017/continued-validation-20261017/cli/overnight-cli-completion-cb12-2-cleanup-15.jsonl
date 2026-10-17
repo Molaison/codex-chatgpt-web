@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a14b6c-04f9-7403-acee-d9e027aaa407"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"OVERNIGHT_ANSWER_cleanup-15_8fa5af7be83c4890958fb6ce27f3804b"}}
+{"type":"turn.completed","usage":{"input_tokens":14677,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":36,"reasoning_output_tokens":0}}

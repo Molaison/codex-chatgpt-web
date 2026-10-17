@@ -1,0 +1,1 @@
+{"check":"static syntax only; fixture not imported/executed","bun":"1.4.0","status":"passed"}

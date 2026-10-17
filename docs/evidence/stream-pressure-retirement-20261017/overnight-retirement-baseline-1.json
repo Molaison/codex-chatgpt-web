@@ -1,0 +1,66 @@
+{
+  "platform": "linux",
+  "bun": "1.4.0",
+  "revision": "34cbb9a40b4bd1bd767d134a7065e66c2432a676",
+  "physicalModelSubmissions": 0,
+  "cancelCalls": 1,
+  "upstreamCalls": 0,
+  "adapterCalls": 0,
+  "samples": [
+    {
+      "stage": "before-interrupt",
+      "activeHttp": 0,
+      "activeBrowser": 1,
+      "accepting": true,
+      "physicalSettled": false,
+      "rss": 158003200
+    },
+    {
+      "stage": "interrupted-physical-pending",
+      "activeHttp": 0,
+      "activeBrowser": 0,
+      "accepting": true,
+      "physicalSettled": false,
+      "rss": 159563776
+    },
+    {
+      "stage": "draining-physical-pending",
+      "activeHttp": 0,
+      "activeBrowser": 0,
+      "accepting": false,
+      "physicalSettled": false,
+      "rss": 159563776
+    },
+    {
+      "stage": "after-physical-release",
+      "activeHttp": 0,
+      "activeBrowser": 0,
+      "accepting": false,
+      "physicalSettled": true,
+      "rss": 159563776
+    }
+  ],
+  "interrupt": {
+    "status": 200,
+    "body": {
+      "status": "ok",
+      "cancelled_http_turns": 0,
+      "cancelled_browser_turns": 1,
+      "cancelled_compaction_runs": 0
+    }
+  },
+  "drain": {
+    "status": 200,
+    "body": {
+      "status": "ok",
+      "accepting_turns": false,
+      "active_http_turns": 0,
+      "active_browser_turns": 0
+    },
+    "physicalSettled": false
+  },
+  "registryFindAfterCancel": false,
+  "retirementResolvedBeforeRelease": false,
+  "retirementResolvedAfterRelease": true,
+  "cleaned": true
+}

@@ -1,0 +1,13 @@
+{
+  "rootPid": 3608,
+  "rootExit": 0,
+  "membersAfterRootExit": [
+    28588,
+    29296
+  ],
+  "membersAfterOwnedJobTerminate": [],
+  "status": "PASS",
+  "errors": [],
+  "guardSha256": "083685dad1a6d0f1859f70ea30d17ad6f913e347d546d13bfecda6265c0f9e63",
+  "boundary": "Only two new isolated Python processes, zero Chrome/HTTP/CLI/model; intentional private-job descendant cleanup"
+}

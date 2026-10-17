@@ -1,0 +1,492 @@
+{
+  "outcome": "passed",
+  "headBeforeAndAfter": "cb12f370feb558002c7416ffe0087a9814e1b091",
+  "frozenInputsBeforeAndAfterMatch": true,
+  "frozenInputCount": 123,
+  "logicalTurns": 25,
+  "responsesHttp": 27,
+  "workerStarts": 25,
+  "sendActivated": 25,
+  "submitted": 25,
+  "nativeProcesses": 24,
+  "physicalModelSubmissions": 0,
+  "externalUpstreamCalls": 0,
+  "nativeInitialize": {
+    "userAgent": "offline-cli-completion/0.162.0 (Rocky Linux 8.10.0; x86_64) unknown (offline-cli-completion; 1)",
+    "codexHome": "<YWL_TASK>/windows-ci-evidence/overnight-cli-completion-cb12-2-data/codex-home",
+    "platformFamily": "unix",
+    "platformOs": "linux"
+  },
+  "resume": {
+    "rawWireHasOldCanary": true,
+    "compiledContextHasOldCanary": true,
+    "previousResponseId": null
+  },
+  "reconnect": {
+    "fault": "accepted_partial_sse_eof",
+    "flushedEofs": 2,
+    "httpAttempts": 3,
+    "stableNativeIdentity": true,
+    "stableInputSha256": "95ae0dd46d300cf830970bdba4d9374a4f7a7ad1b84cd2eb1a73dee3b0eec55f",
+    "workerStarts": 1,
+    "sendActivated": 1,
+    "ownerAbortedBeforeCleanup": false,
+    "physicalNicFailureTested": false
+  },
+  "interrupt": {
+    "productionHookNativeTrusted": true,
+    "trustedHash": "sha256:10907b29e6b2ffddcc1fb26b7a3ce3fee87673b5e8a8982c441a0f862c5019fb",
+    "targetInterrupted": true,
+    "peerUnaffectedAndCompleted": true,
+    "sameNativeAppServerProcess": true,
+    "stubWorkerPeakInThisCase": 2
+  },
+  "cleanupCycles": {
+    "planned": 20,
+    "attempted": 20,
+    "passed": 20,
+    "failed": 0,
+    "perCycleCsv": "overnight-cli-completion-cb12-2-cycle-cleanup.csv"
+  },
+  "resources": {
+    "elapsedMs": 218627,
+    "proxyPeakRssBytes": 226279424,
+    "treePeakRssBytes": 577159168,
+    "diskBytes": 99682757,
+    "sampleCount": 1123,
+    "rawCurve": "overnight-cli-completion-cb12-2-guard.json",
+    "csvCurve": "overnight-cli-completion-cb12-2-resource-curve.csv",
+    "interpretation": "Finite 20-cycle observation only; no absolute no-leak guarantee."
+  },
+  "cleanup": {
+    "allOwnedRecordedPids": [
+      3874165,
+      3874342,
+      3874498,
+      3874500,
+      3874501,
+      3874588,
+      3874589,
+      3874590,
+      3874601,
+      3874645,
+      3875473,
+      3875628,
+      3875630,
+      3875631,
+      3875633,
+      3877253,
+      3877409,
+      3877410,
+      3877411,
+      3878622,
+      3878780,
+      3878783,
+      3878784,
+      3878786,
+      3878868,
+      3879092,
+      3879243,
+      3879248,
+      3879254,
+      3880247,
+      3880401,
+      3880404,
+      3880405,
+      3881472,
+      3881626,
+      3881631,
+      3881634,
+      3881637,
+      3882661,
+      3882820,
+      3882823,
+      3882824,
+      3882826,
+      3883872,
+      3884040,
+      3884043,
+      3884049,
+      3885630,
+      3885785,
+      3885787,
+      3885788,
+      3885790,
+      3886977,
+      3887132,
+      3887135,
+      3887136,
+      3888059,
+      3888213,
+      3888216,
+      3888217,
+      3889348,
+      3889503,
+      3889506,
+      3889507,
+      3889508,
+      3890531,
+      3890796,
+      3890798,
+      3890799,
+      3890800,
+      3892171,
+      3892425,
+      3892428,
+      3892429,
+      3892431,
+      3893198,
+      3893359,
+      3893361,
+      3893364,
+      3894585,
+      3894748,
+      3894752,
+      3894753,
+      3895617,
+      3895772,
+      3895774,
+      3895775,
+      3896836,
+      3896991,
+      3896994,
+      3896995,
+      3898132,
+      3898288,
+      3898291,
+      3898294,
+      3899934,
+      3900089,
+      3900091,
+      3900092,
+      3900223,
+      3900377,
+      3900379,
+      3900387,
+      3900389,
+      3900472,
+      3900625,
+      3900629,
+      3900636,
+      3900638,
+      3901728,
+      3901884,
+      3901886,
+      3901889,
+      3901890
+    ],
+    "pidsStillPresent": [],
+    "ports": {
+      "runtime": 38685,
+      "proxy": 41385
+    },
+    "posthocListenEntries": [],
+    "portsClosedByRealScriptChecks": true,
+    "lingeringBeforeSupervisorCleanup": [],
+    "monitorKillWasNeeded": false,
+    "healthFinal": {
+      "stage": "final-cleanup",
+      "at": "2026-10-17T19:52:54.987Z",
+      "http": 0,
+      "browser": 0,
+      "rss": 212189184,
+      "nativeChildren": 0
+    },
+    "steps": [
+      {
+        "name": "clear-and-physical-settlement",
+        "ok": true
+      },
+      {
+        "name": "flush-state",
+        "ok": true
+      },
+      {
+        "name": "health-zero-before-stop",
+        "ok": true
+      },
+      {
+        "name": "proxy-stop",
+        "ok": true
+      },
+      {
+        "name": "workers-close",
+        "ok": true
+      },
+      {
+        "name": "broker-close",
+        "ok": true
+      },
+      {
+        "name": "runtime-stop",
+        "ok": true
+      },
+      {
+        "name": "runtime-port-closed",
+        "ok": true
+      },
+      {
+        "name": "proxy-port-closed",
+        "ok": true
+      }
+    ]
+  },
+  "denominator": {
+    "stageExecutionAttempts": 2,
+    "setupFailures": 1,
+    "businessCasesFailed": 0,
+    "ledgerLogicalTurns": 25,
+    "ledgerResponsesHttp": 27,
+    "run1Retained": true,
+    "run1LogicalTurns": 0,
+    "run1ResponsesHttp": 0
+  },
+  "rawNativeProtocolArtifacts": [
+    {
+      "name": "overnight-cli-completion-cb12-2-app-server.jsonl",
+      "bytes": 16184,
+      "sha256": "0331f0e5f300b8184f6b768e576d410164419f28f5a92c72081ec500171b171f"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-app-server.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-01.jsonl",
+      "bytes": 400,
+      "sha256": "44dd559dd1056ee289c5976dd49b7e7febfc2d7228b01996e4f3d305eeddf241"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-01.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-02.jsonl",
+      "bytes": 400,
+      "sha256": "68a154630902907a4fdf5a23c327c8894406eee919237473c4ae49113256232a"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-02.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-03.jsonl",
+      "bytes": 400,
+      "sha256": "43c3c90598fce496ede34ec4147538e7b7d520a4f698076b8fb3292227cae3a3"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-03.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-04.jsonl",
+      "bytes": 400,
+      "sha256": "5afff723cde6f319db52fa58d5efc1107ff97d226e07d86facff8b1a196aa325"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-04.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-05.jsonl",
+      "bytes": 400,
+      "sha256": "8890c234158c068a4d3f195110796c269df027c62b0454adf240e4fd1b3c1ea3"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-05.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-06.jsonl",
+      "bytes": 400,
+      "sha256": "f5de4c496a2a810f98f8699f25045a06d62da5c6b2d2a6488149a653b1e3d056"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-06.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-07.jsonl",
+      "bytes": 400,
+      "sha256": "b12ebef03b792ed7af50c02f6f90fbf32286ea503eadab6bd7414d0ce0e675fb"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-07.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-08.jsonl",
+      "bytes": 400,
+      "sha256": "c4d255167abc082aca6e5d4e63685f7cf16bdd9d5fa6d7606ecd3b92e40a27e6"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-08.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-09.jsonl",
+      "bytes": 400,
+      "sha256": "3aac659636ef2091e3ec669fe413d6b8c96470a00d5fa2fe7c4923b04988a246"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-09.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-10.jsonl",
+      "bytes": 400,
+      "sha256": "0e70fccfdae85b1d0ee4427e96ca05d00f1adbf6725959e3206829feee275689"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-10.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-11.jsonl",
+      "bytes": 400,
+      "sha256": "6b73106d951b29e8ae68cc334844e3cd74c99b4f3c59f05155ce40e3121f54c9"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-11.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-12.jsonl",
+      "bytes": 400,
+      "sha256": "99216a9e768d99ef63242dd0929df062dd4a315522a4fe7244f821949f671c7a"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-12.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-13.jsonl",
+      "bytes": 400,
+      "sha256": "5573163cd65c0a3c2dd18edfc78689b1665237cbc1fd7815ed002bc02b615042"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-13.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-14.jsonl",
+      "bytes": 400,
+      "sha256": "f809ab8f2141ab8eda400046bd5988719016f4867b80422b803047451eacef26"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-14.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-15.jsonl",
+      "bytes": 400,
+      "sha256": "d8b54be57b21bf6ec87cab6ef9a73f56085d2fdd44d4c9fcc2a66c70e54fd6c3"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-15.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-16.jsonl",
+      "bytes": 400,
+      "sha256": "e99a88f80de3271a335a5b7b1f1f8ad5fc6b7852bb5252aceb314c78627600cd"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-16.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-17.jsonl",
+      "bytes": 400,
+      "sha256": "f6477e3a82b0f342ca95c2a2b427f5b0eef6477ea44d30c603b30b9470527075"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-17.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-18.jsonl",
+      "bytes": 400,
+      "sha256": "94e836a5531ac2c4a28257cff66047a7ed885d867e3474cc5c99169f7d8fa153"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-18.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-19.jsonl",
+      "bytes": 400,
+      "sha256": "5cb802c4a2870e01d76c2a93846297b0c5028c762adf9ca7ccaf02857927e6b6"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-19.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-20.jsonl",
+      "bytes": 400,
+      "sha256": "1037ce1d904466c2ebae7ee0c98f3d5c2beedfe74064e7e6db846507b8669b2b"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-cleanup-20.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-exec.jsonl",
+      "bytes": 394,
+      "sha256": "7c70e898b7e46f970c3822adf02087882d24a37de3ac9ff6193c8a1c6ce5c48e"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-exec.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-reconnect.jsonl",
+      "bytes": 659,
+      "sha256": "18a1abf1b61652a1a77f1bd2d9d8a0dd05e3c2e591f968dfc1d2746838cf842d"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-reconnect.stderr",
+      "bytes": 39,
+      "sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-resume.jsonl",
+      "bytes": 396,
+      "sha256": "1c60afc05597c8b177bcfcf36754f8f46414aca5ae84a392ba49cc20822e71d8"
+    },
+    {
+      "name": "overnight-cli-completion-cb12-2-resume.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "captureLimits": [
+    "Native CLI stdout/stderr and app-server stdout/stderr are preserved verbatim.",
+    "HTTP bodies/headers are represented by native identity, SHA256, terminal and fault metadata; complete raw HTTP wire bytes were not recorded.",
+    "App-server stdin RPC write bytes were not separately recorded; exact frozen script, actual IDs, prompts and child arguments are retained.",
+    "Uses isolated custom provider and real production adapter with only worker.run substituted. No real browser/model or built-in-provider installation acceptance."
+  ]
+}

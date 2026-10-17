@@ -1,0 +1,63 @@
+{
+  "scenario": "retirement",
+  "platform": "win32",
+  "variant": "candidate",
+  "pid": 191716,
+  "timestampUtc": "2026-10-17T18:33:55Z",
+  "exitCode": 0,
+  "stopReason": null,
+  "elapsedMs": 513,
+  "samples": [
+    {
+      "ms": 33,
+      "rss": 1654784,
+      "treeRss": 1654784
+    },
+    {
+      "ms": 89,
+      "rss": 36044800,
+      "treeRss": 36044800
+    },
+    {
+      "ms": 145,
+      "rss": 59174912,
+      "treeRss": 59174912
+    },
+    {
+      "ms": 201,
+      "rss": 61898752,
+      "treeRss": 61898752
+    },
+    {
+      "ms": 256,
+      "rss": 80670720,
+      "treeRss": 80670720
+    },
+    {
+      "ms": 314,
+      "rss": 89522176,
+      "treeRss": 89522176
+    },
+    {
+      "ms": 373,
+      "rss": 124354560,
+      "treeRss": 124354560
+    },
+    {
+      "ms": 431,
+      "rss": 146591744,
+      "treeRss": 146591744
+    },
+    {
+      "ms": 487,
+      "rss": 150949888,
+      "treeRss": 150949888
+    }
+  ],
+  "rssPeak": 150949888,
+  "cpuBusyThreads": 0,
+  "cpuBurstUpperSeconds": 0,
+  "physicalModelSubmissions": 0,
+  "childExited": true,
+  "stressExited": true
+}
