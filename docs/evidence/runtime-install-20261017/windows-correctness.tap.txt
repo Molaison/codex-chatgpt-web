@@ -1,0 +1,94 @@
+TAP version 13
+# Subtest: packaged runtime is installed once into a durable versioned directory
+ok 1 - packaged runtime is installed once into a durable versioned directory
+  ---
+  duration_ms: 67.1364
+  type: 'test'
+  ...
+# Subtest: packaged runtime installation rejects a platform or version mismatch
+ok 2 - packaged runtime installation rejects a platform or version mismatch
+  ---
+  duration_ms: 17.7267
+  type: 'test'
+  ...
+# Subtest: packaged runtime rejects a missing executable before creating durable state
+ok 3 - packaged runtime rejects a missing executable before creating durable state
+  ---
+  duration_ms: 15.5765
+  type: 'test'
+  ...
+# Subtest: packaged runtime rejects a missing nested dependency: app/node_modules/zod/v4/index.js
+ok 4 - packaged runtime rejects a missing nested dependency: app/node_modules/zod/v4/index.js
+  ---
+  duration_ms: 15.9513
+  type: 'test'
+  ...
+# Subtest: packaged runtime rejects a missing nested dependency: app/node_modules/nested-dependency/dist/runtime/worker.js
+ok 5 - packaged runtime rejects a missing nested dependency: app/node_modules/nested-dependency/dist/runtime/worker.js
+  ---
+  duration_ms: 17.1496
+  type: 'test'
+  ...
+# Subtest: packaged runtime rejects same-count content corruption
+ok 6 - packaged runtime rejects same-count content corruption
+  ---
+  duration_ms: 16.0679
+  type: 'test'
+  ...
+# Subtest: packaged runtime source wait accepts a delayed final dependency within its bound
+ok 7 - packaged runtime source wait accepts a delayed final dependency within its bound
+  ---
+  duration_ms: 75.1122
+  type: 'test'
+  ...
+# Subtest: packaged runtime source wait fails closed when materialization exceeds its bound
+ok 8 - packaged runtime source wait fails closed when materialization exceeds its bound
+  ---
+  duration_ms: 59.8628
+  type: 'test'
+  ...
+# Subtest: packaged runtime repairs same-size corruption in an installed dependency
+ok 9 - packaged runtime repairs same-size corruption in an installed dependency
+  ---
+  duration_ms: 96.7454
+  type: 'test'
+  ...
+# Subtest: packaged runtime transactionally repairs an incomplete installed bundle
+ok 10 - packaged runtime transactionally repairs an incomplete installed bundle
+  ---
+  duration_ms: 86.6242
+  type: 'test'
+  ...
+# Subtest: failed candidate validation preserves the previous validated runtime
+ok 11 - failed candidate validation preserves the previous validated runtime
+  ---
+  duration_ms: 86.6188
+  type: 'test'
+  ...
+# Subtest: invalid promoted runtime leaves no installed runtime
+ok 12 - invalid promoted runtime leaves no installed runtime
+  ---
+  duration_ms: 49.9577
+  type: 'test'
+  ...
+# Subtest: invalid promoted runtime restores the previous runtime
+ok 13 - invalid promoted runtime restores the previous runtime
+  ---
+  duration_ms: 86.2783
+  type: 'test'
+  ...
+# Subtest: packaged runtime replaces stale files when a release is refreshed under the same version
+ok 14 - packaged runtime replaces stale files when a release is refreshed under the same version
+  ---
+  duration_ms: 86.33
+  type: 'test'
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 920.0134

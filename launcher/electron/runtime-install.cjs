@@ -243,6 +243,7 @@ function ensurePackagedRuntime({ app, coreHome, resourcesPath }) {
   const temporary = `${destination}.tmp-${process.pid}-${Date.now()}`;
   const previous = `${destination}.previous-${process.pid}-${Date.now()}`;
   let previousMoved = false;
+  let installedRuntimeRoot;
   try {
     fs.cpSync(source, temporary, {
       recursive: true,
@@ -257,7 +258,7 @@ function ensurePackagedRuntime({ app, coreHome, resourcesPath }) {
     }
     try {
       renameAtomicFile(temporary, destination);
-      validateRuntimeBundle(destination, expectedIdentity);
+      installedRuntimeRoot = validateRuntimeBundle(destination, expectedIdentity);
     } catch (error) {
       fs.rmSync(destination, { recursive: true, force: true });
       if (previousMoved) {
@@ -285,7 +286,7 @@ function ensurePackagedRuntime({ app, coreHome, resourcesPath }) {
     }
   }
   try { fs.chmodSync(destination, 0o700); } catch {}
-  return validateRuntimeBundle(destination, expectedIdentity);
+  return installedRuntimeRoot;
 }
 
 module.exports = {
