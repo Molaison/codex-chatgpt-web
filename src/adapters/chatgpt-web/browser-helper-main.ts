@@ -37,6 +37,7 @@ interface RunMessage {
     deferTextUntilComplete?: BrowserTurn["deferTextUntilComplete"];
     reasoning?: string;
     modelFamily?: "5.6" | "6";
+    proModel?: boolean;
     capabilities: ChatGptWebCapabilities;
     nativeConnector?: boolean;
     resumeAvailable?: boolean;
@@ -241,6 +242,7 @@ async function run(message: RunMessage): Promise<void> {
     ...(message.turn.deferTextUntilComplete ? { deferTextUntilComplete: true } : {}),
     reasoning: message.turn.reasoning,
     ...(message.turn.modelFamily ? { modelFamily: message.turn.modelFamily } : {}),
+    ...(message.turn.proModel ? { proModel: true } : {}),
     capabilities: message.turn.capabilities,
     ...(message.turn.nativeConnector ? { nativeConnector: true } : {}),
     prepare: prepareSelected,

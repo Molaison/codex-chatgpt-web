@@ -1,0 +1,3 @@
+Command: bun node_modules/typescript/bin/tsc --noEmit
+
+TypeScript --noEmit passed

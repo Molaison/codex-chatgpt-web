@@ -2,7 +2,7 @@ import {readFileSync, existsSync, unlinkSync, chmodSync} from 'node:fs';
 import {timingSafeEqual,randomUUID} from 'node:crypto';
 import {zstdDecompressSync, gunzipSync} from 'node:zlib';
 import http from 'node:http';
-import {Transform} from 'node:stream';
+import {Transform,pipeline} from 'node:stream';
 import {StringDecoder} from 'node:string_decoder';
 import {normalizeCprRequest} from './cpr-session.mjs';
 const home=process.argv[2];
@@ -96,12 +96,21 @@ const serve=async(req,res)=>{
   }
   if(upstreamModel!==undefined)delete headers['accept-encoding'];
   const upstream=http.request({hostname:'127.0.0.1',port:config.port,path:req.url,method:req.method,headers},response=>{
-    if(upstreamModel===undefined){res.writeHead(response.statusCode,response.headers);response.pipe(res);return;}
-    const responseHeaders={...response.headers};delete responseHeaders['content-length'];
+    if(res.destroyed){response.destroy();return;}
+    const responseHeaders={...response.headers};
+    if(upstreamModel!==undefined)delete responseHeaders['content-length'];
     res.writeHead(response.statusCode,responseHeaders);
-    response.pipe(rewriteModelIdentity(upstreamModel,requestedModel)).pipe(res);
+    // A plain pipe does not propagate upstream response failures to the client.
+    // Own teardown of this response and its optional alias transform together;
+    // a partial response must close, never report completion or submit a retry.
+    const streams=upstreamModel===undefined?[response,res]:[response,rewriteModelIdentity(upstreamModel,requestedModel),res];
+    pipeline(streams,error=>{if(error)upstream.destroy();});
   });
-  upstream.on('error',()=>{if(res.headersSent)res.destroy();else reply(res,502,'Local browser runtime unavailable');});
+  upstream.on('error',()=>{
+    if(res.destroyed||res.writableEnded)return;
+    if(res.headersSent)res.destroy();else reply(res,502,'Local browser runtime unavailable');
+  });
+  res.on('error',()=>upstream.destroy());
   res.on('close',()=>upstream.destroy());upstream.end(body);
 };
 if(existsSync(socketPath))unlinkSync(socketPath);

@@ -224,6 +224,14 @@ export function chatGptInstructionLineage(parsed: CodexParsedRequest): ChatGptIn
   return { current, predecessors: new Set(revisions) };
 }
 
+/** JSON object order is not semantic; array positions and string contents remain exact. */
+function canonicalRoundInput(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalRoundInput);
+  if (!value || typeof value !== "object") return value;
+  const record = value as Record<string, unknown>;
+  return Object.fromEntries(Object.keys(record).sort().map(key => [key, canonicalRoundInput(record[key])]));
+}
+
 /** Exact canonical Responses request identity inside one long-lived browser execution. */
 export function chatGptTurnRoundKey(parsed: CodexParsedRequest): string {
   const identity = extractChatGptTurnIdentity(parsed);
@@ -237,7 +245,9 @@ export function chatGptTurnRoundKey(parsed: CodexParsedRequest): string {
     threadId: identity.threadId,
     turnId: identity.turnId,
     purpose: parsed._compactionRequest ? "compaction" : "response",
-    input: (body as { input: unknown[] }).input,
+    // Canonicalize only the observer-round journal identity. Physical execution and instruction
+    // lineage have separate ownership contracts and must not change with this replay repair.
+    input: canonicalRoundInput((body as { input: unknown[] }).input),
   });
 }
 

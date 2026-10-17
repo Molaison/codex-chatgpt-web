@@ -1,0 +1,193 @@
+{
+  "date": "2026-10-17",
+  "base_commit": "4548a557ba9b4cb71fb513806fb96bfbbc05d566",
+  "base_tree": "24868e79eb4348e87e97ccb7a323d20a3270f3bc",
+  "runtime": "Bun 1.4.0 (34cbb9a40)",
+  "frozen_sha256": {
+    "src/qa-pool.ts": "99580cf74b96ffec8a06b44bc50ea0a858c8ca864f22aa39c33bf3ac7f48c990",
+    "tests/qa-pool-request-receipts.test.ts": "5ffc05d5213f4ec58164a80fb9e3438453bb7aefb54f75a34fd36776df1e1b44",
+    "tests/qa-pool-admission-observer.test.ts": "c4b353516827f347c1886f5280d09ba4af348e0f9e9b54af9acacf37b9c5498b"
+  },
+  "runs": {
+    "author_focused": {
+      "command": "bun test tests/qa-pool-request-receipts.test.ts tests/qa-pool-admission-observer.test.ts tests/qa-pool-history-expiry.test.ts tests/qa-pool-observer-cleanup.test.ts tests/qa-pool.test.ts",
+      "exit": 0,
+      "pass": 89,
+      "fail": 0,
+      "assertions": 907,
+      "log": "pool-focused.log",
+      "log_sha256": "3a6931e73d7c13fb2e0ca83499434ac5215d176b540b39695d2a8579a41d4aaa"
+    },
+    "author_typecheck": {
+      "command": "bun node_modules/typescript/bin/tsc --noEmit",
+      "exit": 0,
+      "log": "typecheck.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "author_red": {
+      "command": "bun test tests/qa-pool-request-receipts.test.ts tests/qa-pool-admission-observer.test.ts -t 'ambiguous generated instruction|direct pool rejects ambiguous'",
+      "exit": 1,
+      "pass": 0,
+      "fail": 4,
+      "assertions": 8,
+      "log": "red-final.log",
+      "setup": "Isolated durable workspace; base qa-pool.ts, identical frozen tests, other production files unchanged.",
+      "log_sha256": "44b6fa8e4cb6d0b5147c6cd2b23969a7514ee758a7656509bd00c34142628c0f"
+    }
+  },
+  "independent_guard_verification": {
+    "decision": "pass within bounded offline scope",
+    "source_summary_sha256": "1ef5a550990c7ababd114c3db16dcf5e32f0b015e624b75bc990a66d32844f73",
+    "pr7_overlay_commit": "f1fde6f726112fff41a256ef4688712e7858293e",
+    "pr7_overlay_files": [
+      "deploy/cpr-provider.mjs",
+      "src/adapters/chatgpt-web/browser-worker.ts",
+      "src/adapters/chatgpt-web/index.ts",
+      "src/adapters/chatgpt-web/turn-broker.ts",
+      "src/adapters/chatgpt-web/turn-execution.ts",
+      "src/bridge.ts"
+    ],
+    "summary": {
+      "focused": "89 pass / 0 fail / 907 assertions",
+      "eleven": "8 pass / 3 known missing-ID failures / 77 assertions",
+      "proof": "6 pass / 36 assertions",
+      "steer": "2 pass / 6 assertions",
+      "targets": "3 pass / 14 assertions",
+      "typecheck": "exit0; only added nontracked diagnostic fixtures/probes excluded, canonical repository sources/tests/scripts included",
+      "storage": "91-page optional cache preservesR2 completecontext andnext200;40-page requiredhistory stayspending retry409; compaction androllback200"
+    },
+    "typecheck_command": "bun node_modules/typescript/bin/tsc --noEmit -p tsconfig-review.json",
+    "runs": {
+      "pr6-focused": {
+        "exit": 0,
+        "log": "/tmp/mol184-oct17-independent/guard-pr6-focused.log",
+        "sha256": "5527dba054e6969b47a96d5770e5b01c7fb7e6bd139bb6e29c9391feefc6e452"
+      },
+      "pr6-eleven": {
+        "exit": 1,
+        "log": "/tmp/mol184-oct17-independent/guard-pr6-eleven.log",
+        "sha256": "fcfe7220d7b5fdf6a905e49c02b9c170f05ae0ff9e5507b76ca211bd506382ae"
+      },
+      "pr6-proof": {
+        "exit": 0,
+        "log": "/tmp/mol184-oct17-independent/guard-pr6-proof.log",
+        "sha256": "27e1863be358b09fdccc99f82990a3f4055d5b089e7e80949c7646efdaafc0e3"
+      },
+      "pr6-risk": {
+        "exit": 0,
+        "log": "/tmp/mol184-oct17-independent/guard-pr6-risk.log",
+        "sha256": "1e5317f4e3d6f9be0e059050c960933cb03b475db90945c36cbb63455d9d4a04"
+      },
+      "pr6-capacity": {
+        "exit": 0,
+        "log": "/tmp/mol184-oct17-independent/guard-pr6-capacity.log",
+        "sha256": "944741443fef3ae38ee49df6d4bd0b4eb20c94381e78148a683647dc7cf76e23"
+      },
+      "pr6-steer": {
+        "exit": 0,
+        "log": "/tmp/mol184-oct17-independent/guard-pr6-steer.log",
+        "sha256": "911e2cf3fc64ec940f20c902da417ebe9b4abeb9bec4ab16570a8a6ee0c9111e"
+      },
+      "pr6-targets": {
+        "exit": 0,
+        "log": "/tmp/mol184-oct17-independent/guard-pr6-targets.log",
+        "sha256": "746da8502dc3b1dae45729e32cc6e15d2bc916bcebb41407c583f5056740d14d"
+      },
+      "pr6-typecheck": {
+        "exit": 0,
+        "log": "/tmp/mol184-oct17-independent/guard-pr6-typecheck.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "combined-focused": {
+        "exit": 0,
+        "log": "/tmp/mol184-oct17-independent/guard-combined-focused.log",
+        "sha256": "e4515a830813608a9b898348590dcd59c0812857b26530f25dc532baf42aa3ff"
+      },
+      "combined-eleven": {
+        "exit": 1,
+        "log": "/tmp/mol184-oct17-independent/guard-combined-eleven.log",
+        "sha256": "a4fc681efccacaa62ff784f60d97e2f19fa91d02e61365583ee9b909185b3359"
+      },
+      "combined-proof": {
+        "exit": 0,
+        "log": "/tmp/mol184-oct17-independent/guard-combined-proof.log",
+        "sha256": "48aa2dd84170953c50448a884da2b76095d06104521bc0f0f1bb8167def14d76"
+      },
+      "combined-risk": {
+        "exit": 0,
+        "log": "/tmp/mol184-oct17-independent/guard-combined-risk.log",
+        "sha256": "1e5317f4e3d6f9be0e059050c960933cb03b475db90945c36cbb63455d9d4a04"
+      },
+      "combined-capacity": {
+        "exit": 0,
+        "log": "/tmp/mol184-oct17-independent/guard-combined-capacity.log",
+        "sha256": "944741443fef3ae38ee49df6d4bd0b4eb20c94381e78148a683647dc7cf76e23"
+      },
+      "combined-steer": {
+        "exit": 0,
+        "log": "/tmp/mol184-oct17-independent/guard-combined-steer.log",
+        "sha256": "c5308b340fe09a0d4d11649f04c93645c8bc7bfca91a50e9d663f9845f406a29"
+      },
+      "combined-targets": {
+        "exit": 0,
+        "log": "/tmp/mol184-oct17-independent/guard-combined-targets.log",
+        "sha256": "36ec462decfc3d84ebfa1e6528dbb17111de3e1ddbd981b8fb3d4d288ae4eb45"
+      },
+      "combined-typecheck": {
+        "exit": 0,
+        "log": "/tmp/mol184-oct17-independent/guard-combined-typecheck.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "red": {
+        "exit": 1,
+        "result": "0 pass / 4 fail / 8 assertions; expected409 received200",
+        "log": "/tmp/mol184-oct17-independent/guard-red.log",
+        "sha256": "a86b37c0041b721da1f66f9d5718937049cb1615d5983f1acc837f7544631ed4"
+      }
+    },
+    "source_comparison": "No unexpected src/deploy differences in either isolated candidate."
+  },
+  "published_guard_ci": "not recorded",
+  "evidence_kind": "offline CPU; actual pool/SQLite/HTTP and runtime paths, mocked external execution; not installed-client or physical browser Send evidence",
+  "pre_guard_observation": {
+    "source_test_sha256": "19565fb5a6d4f35f6151916136c3dafe8a430b06228736d1e879e663241facbd",
+    "observation_file_sha256": "2213b752c82719fb314133a3570f1f7040590b064de1ee4f824527d18eb6d00b",
+    "direct_pool_without_caller_id": {
+      "status": 200,
+      "adapter_calls": 2,
+      "worker_starts": 1,
+      "execution_keys_same": true
+    },
+    "distinct_caller_ids_control": {
+      "status": 200,
+      "adapter_calls": 2,
+      "worker_starts": 2,
+      "execution_keys_same": false
+    }
+  },
+  "limits": [
+    "CPR missing-caller-ID retry diagnostics remain unresolved",
+    "CPR missing-caller-ID tool-round continuity remains unresolved",
+    "Already-persistent/no-cache and multi-message ambiguity outside this guard",
+    "Broader lifecycle run: 128 pass, 2 fail, 1 error with Unix broker/socket restrictions",
+    "Initial red run: two ephemeral-path configuration errors; superseded for behavior by final durable-workspace red, not erased"
+  ],
+  "persisted_evidence": {
+    "guard-red.log": {
+      "path": "docs/evidence/mol-184/identity-guard/guard-red.log",
+      "sha256": "a86b37c0041b721da1f66f9d5718937049cb1615d5983f1acc837f7544631ed4"
+    },
+    "guard-pr6-focused.log": {
+      "path": "docs/evidence/mol-184/identity-guard/guard-pr6-focused.log",
+      "sha256": "5527dba054e6969b47a96d5770e5b01c7fb7e6bd139bb6e29c9391feefc6e452"
+    },
+    "guard-pr6-typecheck.log": {
+      "path": "docs/evidence/mol-184/identity-guard/guard-pr6-typecheck.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "guard-independent-summary.json": {
+      "path": "docs/evidence/mol-184/identity-guard/guard-independent-summary.json",
+      "sha256": "1ef5a550990c7ababd114c3db16dcf5e32f0b015e624b75bc990a66d32844f73"
+    }
+  }
+}

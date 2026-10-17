@@ -1,0 +1,112 @@
+import { expect, spyOn, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { randomUUID } from "node:crypto";
+import { getEventListeners } from "node:events";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+// The deployed .mjs module has no declaration in the upstream repository.
+// @ts-expect-error checked by runtime integration below
+import { normalizeCprRequest } from "../deploy/cpr-session.mjs";
+import { createQaPool, normalizeQaPoolRequest } from "../src/qa-pool";
+import { receiptIdentity } from "../src/qa-pool-receipts";
+import { defaultConfig, providerConfig } from "../src/config";
+import { startServer } from "../src/server";
+import { createChatGptWebAdapter } from "../src/adapters/chatgpt-web/index";
+import { ChatGptBrowserWorker, type BrowserTurn } from "../src/adapters/chatgpt-web/browser-worker";
+import { chatGptTurnExecutionKey, chatGptTurnRoundKey } from "../src/adapters/chatgpt-web/turn-execution";
+import { TurnBroker } from "../src/adapters/chatgpt-web/turn-broker";
+import { flushResponseState } from "../src/responses/state";
+import { parseRequest } from "../src/responses/parser";
+
+const MODEL = "chatgpt-web/gpt-5.6-sol-instant";
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+function deferred() { let resolve!: () => void; const promise = new Promise<void>(r => { resolve = r; }); return {promise,resolve}; }
+async function bounded<T>(promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  try { return await Promise.race([promise, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("fixture timed out")), 3000); })]); }
+  finally { clearTimeout(timer!); }
+}
+const observations: unknown[] = [];
+function observe(value: unknown) { observations.push(value); console.log("DOT_ADMISSION " + JSON.stringify(value)); if (process.env.DOT_EVIDENCE_PATH) writeFileSync(process.env.DOT_EVIDENCE_PATH, JSON.stringify(observations,null,2)+"\n"); }
+
+// Real HTTP -> production CPR normalizer -> pool/SQLite -> real startServer
+// admission -> production Responses handler/adapter/registry. Only browser/model
+// execution is replaced. The Node Unix-socket provider wrapper is tested separately.
+function fixture(options: { holdFirst?: boolean; holdFirstHeaders?: boolean; afterAcceptedError?: object } = {}) {
+  const root = mkdtempSync(join(tmpdir(), "dot-cpr-admission-"));
+  const oldHome = process.env.CODEX_CHATGPT_WEB_HOME; process.env.CODEX_CHATGPT_WEB_HOME = root;
+  const signals = { SIGINT: process.listeners("SIGINT"), SIGTERM: process.listeners("SIGTERM") };
+  const key = "a".repeat(32), account = "account-"+randomUUID(), thread = "thread-"+randomUUID();
+  writeFileSync(join(root,"key"),key);
+  const config = {...defaultConfig(), port:0, accountId:account, browserHost:"launcher" as const,
+    browserHostDescriptorPath:join(root,"unused.json"), useSavedChats:false,
+    conversationStoreDirectory:join(root,"conversations"), brokerSocketPath:join(root,"broker.sock")};
+  const accepted = deferred(), release = deferred();
+  const starts: string[] = [], input: unknown[] = [], execution: string[] = [];
+  const worker = ChatGptBrowserWorker.forProvider(providerConfig(config));
+  const run = spyOn(worker,"run").mockImplementation(async (turn:BrowserTurn) => {
+    const prepared = await turn.prepare(); starts.push(prepared.text); prepared.release();
+    await turn.onSendActivated?.(); await turn.onSubmitted?.();
+    if (starts.length===1) { accepted.resolve(); if(options.holdFirst) await release.promise; }
+    const answer="ANSWER_"+starts.length; turn.onTextDelta(answer); return answer;
+  });
+  const runtime = startServer(config,{adapterFactory:provider => {
+    const adapter=createChatGptWebAdapter(provider);
+    return {...adapter, async runTurn(parsed,incoming,emit) { execution.push(chatGptTurnExecutionKey(parsed)); return adapter.runTurn!(parsed,incoming,emit); }};
+  }});
+  const backend = Bun.serve({hostname:"127.0.0.1",port:0,async fetch(req) {
+    input.push((await req.clone().json()).input);
+    const response = await fetch(new URL(new URL(req.url).pathname,runtime.url),{method:req.method,headers:req.headers,body:await req.arrayBuffer(),signal:req.signal});
+    if (options.afterAcceptedError && response.ok) {
+      // Infrastructure returns 503 only AFTER the actual runtime completed the work.
+      await response.text(); return Response.json({error:options.afterAcceptedError},{status:503});
+    }
+    return response;
+  }});
+  const poolConfig={host:"127.0.0.1",port:0,databasePath:join(root,"pool.sqlite"),clients:[{id:"test",keyFile:join(root,"key")}],accounts:[{id:account,origin:backend.url.origin,models:[MODEL],sessionModes:true}]};
+  let pool=createQaPool(poolConfig);
+  const observerSignals: AbortSignal[] = [];
+  let firstIngress = true;
+  const ingress=Bun.serve({hostname:"127.0.0.1",port:0,async fetch(req) {
+    const payload=normalizeCprRequest(await req.json(),Object.fromEntries(req.headers));
+    const forward=new Request(req.url,{method:"POST",headers:req.headers,body:JSON.stringify(payload),signal:req.signal});
+    observerSignals.push(forward.signal);
+    const holdHeaders = options.holdFirstHeaders && firstIngress; firstIngress = false;
+    const response = await pool.fetch(forward);
+    if (holdHeaders) {
+      // Deterministic downstream transport delay: the socket aborts before Bun
+      // is given this response body. No upstream lifecycle signal is fabricated.
+      await new Promise<void>(resolve => { if(req.signal.aborted) resolve(); else req.signal.addEventListener("abort",()=>resolve(),{once:true}); });
+    }
+    return response;
+  }});
+  const body=(turn:string,text="QUESTION",id?:string,stream=false):any=>({model:MODEL,stream,reasoning:{effort:"low-temporary"},input:[{type:"message",role:"user",...(id?{id}:{}),content:[{type:"input_text",text}]}],client_metadata:{"x-codex-turn-metadata":JSON.stringify({thread_id:thread,turn_id:turn})}});
+  const request=(payload:unknown,signal?:AbortSignal)=>fetch(new URL("/v1/responses",ingress.url),{method:"POST",headers:{authorization:"Bearer "+key,"content-type":"application/json"},body:JSON.stringify(payload),signal});
+  const sql=(query:string)=>{const db=new Database(poolConfig.databasePath);try{return db.query(query).get() as any;}finally{db.close();}};
+  const control=async(action:"drain"|"resume")=>{const r=await fetch(new URL("/admin/"+action,runtime.url),{method:"POST",headers:{authorization:"Bearer "+config.controlToken}}); expect(r.status).toBe(200); await r.text();};
+  return {body,request,accepted,release,starts,input,execution,sql,control,runtime,observerListenerCounts:()=>observerSignals.map(signal=>getEventListeners(signal,"abort").length),
+    restart:()=>{pool.close();pool=createQaPool(poolConfig);},
+    async close() { release.resolve(); await delay(20); pool.close(); ingress.stop(true);backend.stop(true);runtime.stop(true);run.mockRestore();
+      for(const signal of ["SIGINT","SIGTERM"] as const) for(const listener of process.listeners(signal)) if(!signals[signal].includes(listener)) process.removeListener(signal,listener);
+      await TurnBroker.forSocket(config.brokerSocketPath).close();flushResponseState();
+      if(oldHome===undefined) delete process.env.CODEX_CHATGPT_WEB_HOME; else process.env.CODEX_CHATGPT_WEB_HOME=oldHome;
+      rmSync(root,{recursive:true,force:true}); }
+  };
+}
+
+
+for(const callerIds of [false,true])test(`independent identical delta steering executes the new instruction, caller IDs ${callerIds}`,async()=>{
+ const f=fixture();try{
+  const firstBody=f.body("same-native-turn","SAME",callerIds?"instruction-one":undefined);
+  const firstNative=JSON.parse(firstBody.client_metadata["x-codex-turn-metadata"]);
+  firstBody.client_metadata["x-codex-turn-metadata"]=JSON.stringify({...firstNative,request_id:"request-one"});
+  const first=await f.request(firstBody);const firstResult=await first.json();expect(first.status).toBe(200);
+  const secondBody=f.body("same-native-turn","SAME",callerIds?"instruction-two":undefined);
+  secondBody.previous_response_id=firstResult.id;
+  secondBody.client_metadata["x-codex-turn-metadata"]=JSON.stringify({...firstNative,request_id:"request-two"});
+  const second=await f.request(secondBody);const secondResult=await second.json();
+  observe({case:"identical-delta-steering-diagnostic",callerIds,first:first.status,second:second.status,firstId:firstResult.id,secondId:secondResult.id,error:secondResult.error?.code,workerStarts:f.starts.length,adapterCalls:f.execution.length,executionKeysSame:f.execution.length===2?f.execution[0]===f.execution[1]:null,forwardedInput:f.input[1]});
+  expect(second.status).toBe(200);expect(f.starts).toHaveLength(2);
+ }finally{await f.close();}
+});
