@@ -1,3 +1,5 @@
+현재 ywl 소스 변형과 업스트림 체크포인트: [브랜치 안내](docs/ywl-source-branches.md).
+
 <p align="center">
   <img src="assets/readme/hero.svg" width="960" alt="웹 모델로 전환해도, Codex는 그대로. 내 ChatGPT 플랜. 내 작업 흐름. 모델의 가능성을 최대한.">
 </p>

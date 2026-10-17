@@ -12,7 +12,8 @@ const prompt = "Suggest the next user message. Return only JSON with a suggestio
 const base = {
   model: "chatgpt-web/gpt-6-pro", reasoning: { effort: "max" }, stream: false,
   client_metadata: { "x-codex-turn-metadata": JSON.stringify(metadata) },
-  input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }],
+  input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }],
+    internal_chat_message_metadata_passthrough: { turn_id: metadata.turn_id } }],
   text: { format: { type: "json_schema", name: "suggestion", strict: true,
     schema: { type: "object", properties: { suggestion: { type: ["string", "null"] } }, required: ["suggestion"], additionalProperties: false } } },
 };
@@ -97,7 +98,9 @@ test("excess image context skips predictions rather than omitting images", async
 test("prompt wording and inherited thread source do not reclassify real user turns", async () => {
   for (const client_metadata of [undefined, { "x-codex-turn-metadata": "not-json" },
     { "x-codex-turn-metadata": JSON.stringify({ ...metadata, turn_trigger: "user" }) }]) {
-    const { response, observed } = await send({ ...base, client_metadata });
+    // Full native tools are available only through an explicitly configured MCP transport.
+    const { response, observed } = await send({ ...base, client_metadata },
+      { ...defaultConfig("full"), proAvailable: true, mcpProvider: "external-http" });
     expect(response.status).toBe(200);
     expect(observed!.parsed).toMatchObject({ _chatgptModelFamily: "6", options: { reasoning: "max" } });
     expect(observed!.provider.chatgptWeb!.localToolsEnabled).toBe(true);

@@ -1,3 +1,5 @@
+現在の ywl ソース変種と上流チェックポイント：[ブランチガイド](docs/ywl-source-branches.md)。
+
 <p align="center">
   <img src="assets/readme/hero.svg" width="960" alt="Web モデルに切り替えても、Codex はそのまま。ChatGPT のプラン。いつものワークフロー。モデルの力を最大限に。">
 </p>

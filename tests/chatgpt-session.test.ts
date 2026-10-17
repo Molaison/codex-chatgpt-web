@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { runInNewContext } from "node:vm";
 import { ChatGptBrowserWorker } from "../src/adapters/chatgpt-web/browser-worker";
 import {
   CHATGPT_COMPOSER_SELECTOR,
@@ -10,6 +11,20 @@ import {
   chatGptNewChatUrl,
   detectChatGptAccountCapabilities,
 } from "../src/chatgpt-session";
+
+// Playwright evaluates callbacks in the page's window, not the test process.
+// Keep viewport reads and resizes observable instead of stubbing a fixed result.
+function effortTestPage<T extends object>(page: T, initial = { width: 1280, height: 900 }) {
+  let viewport = { ...initial };
+  return {
+    ...page,
+    evaluate: async (callback: Function) => runInNewContext(
+      `(${callback.toString()})()`,
+      { innerWidth: viewport.width, innerHeight: viewport.height },
+    ),
+    setViewportSize: async (size: { width: number; height: number }) => { viewport = { ...size }; },
+  };
+}
 
 test("saved chats start empty and cannot reuse an arbitrary conversation or a Temporary Chat", async () => {
   expect(chatGptNewChatUrl()).toBe("https://chatgpt.com/?temporary-chat=true");
@@ -82,21 +97,23 @@ test("effort activation binds the owned menu after the control opens", async () 
       return null;
     },
     click: async (options: unknown) => {
-      expect(options).toEqual({ timeout: 1 });
+      expect(options).toEqual({ force: true, timeout: 1 });
       opened = true;
     },
   };
-  const page = {
+  const page = effortTestPage({
     locator: (selector: string) => {
       if (selector === '[id="radix-effort-menu"]') return ownedMenu;
       return hiddenSurface;
     },
     keyboard: { press: async () => {} },
-  };
+  }, { width: 300, height: 200 });
 
   const activation = await activateChatGptEffortMenu(page as never, control as never, { settleMs: 0 });
   expect(activation.method).toBe("click");
   expect(activation.menu).toBe(ownedMenu as never);
+  expect(await page.evaluate(() => ({ width: innerWidth, height: innerHeight })))
+    .toEqual({ width: 1280, height: 900 });
 });
 
 test.each(["aria-expanded", "data-state"])("effort activation does not bind a closing menu (%s)", async attribute => {
@@ -114,7 +131,7 @@ test.each(["aria-expanded", "data-state"])("effort activation does not bind a cl
       : null,
     click: async () => { clicks++; opened = true; },
   };
-  const page = { locator: () => surface, keyboard: { press: async () => {} } };
+  const page = effortTestPage({ locator: () => surface, keyboard: { press: async () => {} } });
   const activation = await activateChatGptEffortMenu(page as never, control as never, { settleMs: 0 });
   expect(activation.method).toBe("click");
   expect(clicks).toBe(1);
@@ -148,7 +165,7 @@ test("effort activation retries one ghost click with a primary pointerdown", asy
       pointerOpened = true;
     },
   };
-  const page = {
+  const page = effortTestPage({
     locator: (selector: string) => {
       if (selector === '[id="radix-effort-menu"]') return ownedMenu;
       return hiddenSurface;
@@ -159,13 +176,13 @@ test("effort activation retries one ghost click with a primary pointerdown", asy
         ghostOpen = false;
       },
     },
-  };
+  });
 
   const activation = await activateChatGptEffortMenu(page as never, control as never, { settleMs: 0 });
   expect(activation.method).toBe("pointerdown");
   expect(activation.menu).toBe(ownedMenu as never);
   expect(events).toEqual([
-    ["click", { timeout: 1 }],
+    ["click", { force: true, timeout: 1 }],
     ["keyboard", "Escape"],
     ["pointerdown", { button: 0, buttons: 1, pointerType: "mouse", isPrimary: true }],
   ]);
@@ -183,10 +200,10 @@ test("effort activation fails closed when neither event exposes a structural sur
     click: async () => {},
     dispatchEvent: async () => {},
   };
-  const page = {
+  const page = effortTestPage({
     locator: () => hiddenSurface,
     keyboard: { press: async () => {} },
-  };
+  });
 
   await expect(activateChatGptEffortMenu(page as never, control as never, { settleMs: 0 }))
     .rejects.toThrow("did not expose its owned menu or structural slider");
