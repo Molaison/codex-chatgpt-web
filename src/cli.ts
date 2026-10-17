@@ -6,7 +6,7 @@ import { existsSync, rmSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { stdin, stdout } from "node:process";
 import { captureSystemBrowserLoginToFile, checkBrowserEngine, loginToChatGpt } from "./browser-login";
-import { defaultConfig, getConfigDir, getConfigPath, loadConfig, loadConfigForSetup } from "./config";
+import { defaultConfig, getConfigDir, getConfigPath, loadConfig, loadConfigForSetup, usesManagedMcpTunnel } from "./config";
 import {
   inspectLauncherBrowserHost,
   inspectLauncherBrowserHostLiveness,
@@ -49,7 +49,8 @@ Usage:
   codex-chatgpt-web dev chat NAME [--model MODEL] [MESSAGE]
   codex-chatgpt-web dev list
   codex-chatgpt-web serve
-  codex-chatgpt-web mcp [--broker-socket PATH]
+  codex-chatgpt-web mcp [--contract native|safe] [--broker-socket PATH]
+  codex-chatgpt-web mcp --transport http [--port 8788] [--public-origin https://HOST] [--contract native|safe] [--broker-socket PATH]
   codex-chatgpt-web service <status|install|start|restart|stop|cancel-turns>
   codex-chatgpt-web tunnel <status|start|restart|stop|key-import>
   codex-chatgpt-web open <tunnels|runtime-keys|connectors>
@@ -71,6 +72,7 @@ Setup options:
   --refresh-account-capabilities
                                Re-read the authenticated account's available Web models
   --tunnel-id ID               Existing OpenAI tunnel id (full mode)
+  --mcp-provider PROVIDER      openai-tunnel (default) or external-http (production Launcher Full)
   --runtime-key-file PATH      File containing a Tunnels Read+Use runtime key
   --replace-codex-route        Reversibly replace existing Responses or Voice route settings
   --subagent-protocol MODE     compatibility-v1 (default) or native (advanced)
@@ -82,6 +84,8 @@ Setup options:
   --retained-conversation      Reuse the browser chat between turns (default)
   --saved-chats                Keep task conversations in ChatGPT history
   --temporary-chats            Use Temporary Chat for task conversations (default)
+  --composer-predictions       Enable next-message suggestions using GPT-6 Sol Medium (default)
+  --no-composer-predictions    Disable next-message suggestions for Web models
   --skill-attachments         Experimental selected skills as text attachments
   --inline-skills             Keep selected skills inline (default)
   --standard-context           Disable experimental multi-message context
@@ -257,7 +261,10 @@ async function loginCommand(args: string[]): Promise<void> {
       ...defaultConfig(),
       chromeExecutablePath,
       storageStatePath,
-    }, { continuation: continuation.promise });
+    }, {
+      continuation: continuation.promise,
+      onBrowserReady: () => { stdout.write(`${JSON.stringify({ version: 1, type: "passkey-login-ready" })}\n`); },
+    });
   } finally {
     continuation.close();
   }
@@ -275,6 +282,13 @@ async function setupCommand(args: string[]): Promise<void> {
     mode: full ? "full" : "browser-only",
     ...(portRaw ? { port: Number(portRaw) } : {}),
   };
+  const mcpProvider = takeOption(args, "--mcp-provider");
+  if (mcpProvider !== undefined) {
+    if (mcpProvider !== "openai-tunnel" && mcpProvider !== "external-http") {
+      throw new Error("--mcp-provider must be openai-tunnel or external-http");
+    }
+    options.mcpProvider = mcpProvider;
+  }
   const automaticBrowserInteraction = takeFlag(args, "--automatic-browser-interaction");
   const manualBrowserInteraction = takeFlag(args, "--zero-risk-browser-interaction");
   if (automaticBrowserInteraction && manualBrowserInteraction) {
@@ -305,6 +319,10 @@ async function setupCommand(args: string[]): Promise<void> {
   if (runtimeKeyFile) options.runtimeKeyFile = runtimeKeyFile;
   options.forceLogin = takeFlag(args, "--login");
   options.autoApproveToolCalls = takeFlag(args, "--auto-approve-tool-calls");
+  const predictions = takeFlag(args, "--composer-predictions");
+  const noPredictions = takeFlag(args, "--no-composer-predictions");
+  if (predictions && noPredictions) throw new Error("Choose --composer-predictions or --no-composer-predictions");
+  if (predictions || noPredictions) options.composerPredictionsEnabled = predictions;
   const skillAttachments = takeFlag(args, "--skill-attachments");
   const inlineSkills = takeFlag(args, "--inline-skills");
   if (skillAttachments && inlineSkills) throw new Error("Choose --skill-attachments or --inline-skills");
@@ -332,6 +350,7 @@ async function setupCommand(args: string[]): Promise<void> {
   }
   if (zeroRiskPro || zeroRiskDefault) options.zeroRiskProEnabled = zeroRiskPro;
   options.replaceCodexRoute = takeFlag(args, "--replace-codex-route");
+  options.preserveDisconnectedRoute = takeFlag(args, "--preserve-disconnected-route");
   options.restartService = takeFlag(args, "--restart-service");
   assertNoArgs(args);
 
@@ -359,7 +378,8 @@ async function setupCommand(args: string[]): Promise<void> {
     && !reusableCredentials.runtimeKey
     && !existsSync(managedRuntimeKeyPath(interactionMode));
 
-  if (full && (needsTunnelId || needsRuntimeKey) && stdin.isTTY) {
+  const externalHttp = (options.mcpProvider ?? existing?.mcpProvider) === "external-http";
+  if (full && !externalHttp && (needsTunnelId || needsRuntimeKey) && stdin.isTTY) {
     stdout.write("Full mode needs an OpenAI tunnel and a runtime key with Tunnels Read + Use.\n");
     stdout.write("Tunnels: https://platform.openai.com/settings/organization/tunnels\n");
     stdout.write("Runtime keys: https://platform.openai.com/settings/organization/api-keys\n");
@@ -373,7 +393,9 @@ async function setupCommand(args: string[]): Promise<void> {
   stdout.write(`Setup complete: ${result.mode}\n`);
   stdout.write(`Config: ${result.configPath}\n`);
   if (result.connectorSetupRequired) {
-    stdout.write("One account-level step remains: attach the tunnel to the ChatGPT connector named in config.\n");
+    stdout.write(externalHttp
+      ? `External HTTP is unmanaged. Start the loopback MCP --contract ${interactionMode === "manual" ? "safe" : "native"} separately; HTTPS and ChatGPT connector registration remain unverified.\n`
+      : "One account-level step remains: attach the tunnel to the ChatGPT connector named in config.\n");
     stdout.write("Open: https://chatgpt.com/#settings/Plugins\n");
   }
   stdout.write("Restart the Codex app once so its native model catalog refreshes through the installed route.\n");
@@ -389,6 +411,7 @@ async function doctorCommand(args: string[]): Promise<void> {
 
 async function routeCommand(args: string[]): Promise<void> {
   const action = args.shift() ?? "status";
+  const forRuntimeRecovery = action === "disconnect" && takeFlag(args, "--for-runtime-recovery");
   assertNoArgs(args);
   const result = action === "status"
     ? (() => {
@@ -396,14 +419,16 @@ async function routeCommand(args: string[]): Promise<void> {
         return {
           installed: status.installed,
           active: status.active,
+          ...(status.journal && "reconnectOnStartup" in status.journal && status.journal.reconnectOnStartup
+            ? { reconnectOnStartup: true } : {}),
           ...(status.routeUrl ? { routeUrl: status.routeUrl } : {}),
           errors: status.errors,
         };
       })()
-    : action === "connect"
-      ? activateCodexIntegration()
+    : action === "connect" || action === "recover"
+      ? activateCodexIntegration({ recoveryOnly: action === "recover" })
       : action === "disconnect"
-        ? deactivateCodexIntegration()
+        ? deactivateCodexIntegration({ forRuntimeRecovery })
         : undefined;
   if (!result) throw new Error(`Unknown route action: ${action}`);
   stdout.write(`${JSON.stringify(result, null, 2)}\n`);
@@ -486,6 +511,9 @@ async function interruptHookCommand(args: string[]): Promise<void> {
 async function tunnelCommand(args: string[]): Promise<void> {
   const action = args.shift() ?? "status";
   assertNoArgs(args);
+  if (existsSync(getConfigPath()) && loadConfig().mcpProvider === "external-http") {
+    throw new Error("External HTTP transport is unmanaged; switch explicitly to openai-tunnel before using tunnel commands");
+  }
   if (action === "key-import") {
     const key = await secretPrompt("Runtime key (hidden): ");
     if (!key) throw new Error("A non-empty runtime key is required");
@@ -551,7 +579,7 @@ async function uninstallCommand(args: string[]): Promise<void> {
   }
   const launcherRuntimeStopped = config?.browserHost === "launcher" && launcherControl;
   if (config && process.platform === "darwin" && !launcherRuntimeStopped) await assertServiceIdle(config);
-  if (config?.mode === "full" && !launcherRuntimeStopped) {
+  if (config && usesManagedMcpTunnel(config) && !launcherRuntimeStopped) {
     if (process.platform === "darwin") await uninstallTunnelService();
     stopTunnel(config);
   }

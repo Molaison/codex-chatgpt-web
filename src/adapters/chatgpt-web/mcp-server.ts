@@ -1,12 +1,13 @@
 import { createHash, randomBytes } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import * as z from "zod/v4";
 import { namespacedToolName, type CodexTool } from "../../types";
 import { VERSION } from "../../version";
 import type { ChatGptTurnEnvironment } from "./environment";
 import { CODEX_COMPACTION_CONTROL_WIRE_NAME } from "./native-compaction-control";
-import { callTurnBroker, TurnBrokerTimeoutError, type BrokerToolResult } from "./turn-broker";
+import { callTurnBroker, TurnBrokerTimeoutError, type BrokerRetirementDiagnostics, type BrokerToolResult } from "./turn-broker";
 import { observeMcpToolCalls } from "./mcp-observation";
 
 interface ClaimedTurn {
@@ -257,6 +258,7 @@ function gatewayToolCatalogProgram(options: {
   offset: number;
   limit: number;
   excludedNames: string[];
+  marker: string;
 }): string {
   const needle = options.query?.trim().toLowerCase() ?? "";
   return [
@@ -271,14 +273,14 @@ function gatewayToolCatalogProgram(options: {
     "  .map(tool => ({ name: tool.name, description: typeof tool.description === \"string\" ? tool.description : \"\" }))",
     "  .filter(tool => !needle || (tool.name + \"\\n\" + tool.description).toLowerCase().includes(needle));",
     `const page = matches.slice(${options.offset}, ${options.offset + options.limit});`,
-    "text(JSON.stringify({ tools: page, total: matches.length }));",
+    `text(${JSON.stringify(options.marker)} + JSON.stringify({ tools: page, total: matches.length }));`,
   ].join("\n");
 }
 
 function gatewayToolCatalogPage(response: {
   content: unknown[];
   isError?: boolean;
-}, excludedNames: ReadonlySet<string>): GatewayToolCatalogPage {
+}, excludedNames: ReadonlySet<string>, marker: string): GatewayToolCatalogPage {
   const textBlocks = response.content
     .map(item => item && typeof item === "object" && !Array.isArray(item)
       ? item as Record<string, unknown>
@@ -288,12 +290,16 @@ function gatewayToolCatalogPage(response: {
   if (response.isError) {
     throw new Error(`Native nested tool inventory failed: ${textBlocks.join("\n") || "unknown error"}`);
   }
-  if (textBlocks.length !== 1) {
-    throw new Error("Native nested tool inventory returned an invalid text response");
+  // exec may wrap text() output with timing/status text. Only the single record
+  // emitted for this inventory request is a catalog, never arbitrary surrounding JSON.
+  const records = textBlocks.flatMap(text => text.split(/\r?\n/))
+    .filter(line => line.startsWith(marker));
+  if (records.length !== 1) {
+    throw new Error("Native nested tool inventory did not return one matching catalog record");
   }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(textBlocks[0]!);
+    parsed = JSON.parse(records[0]!.slice(marker.length));
   } catch {
     throw new Error("Native nested tool inventory returned invalid JSON");
   }
@@ -442,10 +448,13 @@ function execCommandGatewayProgram(
   ]);
 }
 
-export async function runChatGptMcpServer(options: {
+export interface ChatGptMcpServerOptions {
   brokerSocketPath: string;
   contract?: ChatGptMcpContract;
-}): Promise<void> {
+}
+
+/** The tool contract and broker authorization are independent of the wire transport. */
+export function createChatGptMcpServer(options: ChatGptMcpServerOptions): McpServer {
   const contract = options.contract ?? "native";
   const server = new McpServer(
     { name: contract === "safe" ? "codex-safe" : "codex-native", version: VERSION },
@@ -565,11 +574,16 @@ export async function runChatGptMcpServer(options: {
       // A cancelled/timed-out MCP request no longer has a consumer for the native result. Revoke
       // the whole turn capability so the broker drops the pending invocation and every later call
       // from that abandoned ChatGPT response fails explicitly against its retired binding.
+      let diagnostics: BrokerRetirementDiagnostics | undefined;
       try {
-        await callTurnBroker(options.brokerSocketPath, {
+        const retired = await callTurnBroker<{ released: boolean; diagnostics?: BrokerRetirementDiagnostics }>(options.brokerSocketPath, {
           method: "release",
           bindingId,
+          ...(error instanceof TurnBrokerTimeoutError ? {
+            failure: { code: "codex_tool_timeout" as const, tool: wireName(tool), timeoutMs },
+          } : {}),
         });
+        diagnostics = retired.diagnostics;
       } catch (releaseError) {
         throw new AggregateError(
           [error, releaseError],
@@ -579,14 +593,16 @@ export async function runChatGptMcpServer(options: {
       if (error instanceof TurnBrokerTimeoutError) {
         const toolName = wireName(tool);
         console.error(
-          `[chatgpt-web-mcp] ${toolName} did not complete within ${timeoutMs}ms; retired its turn binding`,
+          `[chatgpt-web-mcp] ${toolName} did not complete within ${timeoutMs}ms; retired its turn binding`
+          + ` broker_state_at_retirement=${JSON.stringify(diagnostics ?? null)}`,
         );
         return result({
           code: "codex_tool_timeout",
           tool: toolName,
           timeout_ms: timeoutMs,
           retryable: false,
-          message: `Codex tool ${toolName} did not complete before the MCP transport deadline. The current turn binding was retired; do not retry it in this ChatGPT response.`,
+          ...(diagnostics === undefined ? {} : { broker_state_at_retirement: diagnostics }),
+          message: `Codex tool ${toolName} did not complete before the MCP transport deadline. The current turn binding was retired; do not retry it in this ChatGPT response. Delivery confirms handoff to Codex; execution and approval status are unknown.`,
         }, true);
       }
       throw error;
@@ -811,6 +827,7 @@ export async function runChatGptMcpServer(options: {
         const gateway = execGateway(bound);
         if (gateway) {
           const excludedGatewayNames = bound.tools.map(wireName);
+          const marker = `codex-tool-catalog:${randomBytes(16).toString("hex")}:`;
           const nestedOffset = Math.max(0, offset - directMatches.length);
           const nestedLimit = Math.max(0, limit - directPage.length);
           const response = await invoke(claimed.bindingId, bound, gateway, {
@@ -822,9 +839,10 @@ export async function runChatGptMcpServer(options: {
               // duplicate or reopen an outer tool that this contract deliberately hid (including
               // our own MCP namespace in Zero Risk).
               excludedNames: excludedGatewayNames,
+              marker,
             }),
           }, extra.signal);
-          const catalog = gatewayToolCatalogPage(response, new Set(excludedGatewayNames));
+          const catalog = gatewayToolCatalogPage(response, new Set(excludedGatewayNames), marker);
           nestedTotal = catalog.total;
           nestedPage = catalog.tools.map(tool => ({
             wire_name: tool.name,
@@ -974,5 +992,18 @@ export async function runChatGptMcpServer(options: {
     );
   }
 
-  await server.connect(observeMcpToolCalls(new StdioServerTransport(), BRIDGE_TOOL_NAMES));
+  return server;
+}
+
+export async function connectChatGptMcpServer(
+  options: ChatGptMcpServerOptions,
+  transport: Transport,
+): Promise<McpServer> {
+  const server = createChatGptMcpServer(options);
+  await server.connect(observeMcpToolCalls(transport, BRIDGE_TOOL_NAMES));
+  return server;
+}
+
+export async function runChatGptMcpServer(options: ChatGptMcpServerOptions): Promise<void> {
+  await connectChatGptMcpServer(options, new StdioServerTransport());
 }

@@ -37,6 +37,26 @@ If the models still do not appear:
 A green step 3 followed by a browser-turn error means installation succeeded. Repeating step 3 will
 not repair an unrelated ChatGPT browser or model-turn failure.
 
+### Windows: Cannot bind the local port (EACCES)
+
+`Cannot bind 127.0.0.1:17841: listen EACCES: permission denied` means Windows refused access to
+the port. Possible causes include a reserved port range, another service holding the address
+exclusively, or security software. The error alone does not identify the cause.
+
+Check reserved ranges and listeners in PowerShell:
+
+```powershell
+netsh interface ipv4 show excludedportrange protocol=tcp
+Get-NetTCPConnection -LocalPort 17841 -ErrorAction SilentlyContinue | Select-Object LocalAddress, State, OwningProcess
+```
+
+If 17841 falls inside a listed range, include that range in your report. Hyper-V, WSL, Docker and
+Windows Sandbox can manage such reservations. If a listener appears, its OwningProcess identifies
+the process to investigate. If neither check explains it, include both outputs and an
+**Activity → Export safe log**. Reinstalling the launcher does not resolve an operating-system
+reservation or another service's exclusive binding. Do not stop networking services or change
+port reservations based only on the EACCES message.
+
 ## `openai_base_url changed after setup` or a model is "not supported"
 
 The launcher deliberately refuses to overwrite a route changed by another tool. Only one program
@@ -56,6 +76,25 @@ Choose one route owner:
 Do not hand-edit the launcher's route journal. It exists so setup and removal can fail closed instead
 of silently destroying another provider's configuration. First-class external-router composition is
 tracked in [#205](https://github.com/miuuyy/codex-chatgpt-web/issues/205), but is not supported today.
+
+## `Codex interrupt lifecycle hook changed after setup`
+
+The launcher found that its entries in Codex's `config.toml` are missing or different from those
+installed during setup. This can happen when another tool edits the file. Setup stops to avoid
+overwriting those changes. A TOML parsing error instead means the file cannot be read; an invalid
+integration journal means the launcher's saved setup record needs investigation.
+
+Close Codex and any tool editing its settings, then make a copy of `config.toml`. It is normally in
+`~/.codex` (Windows: `%USERPROFILE%\.codex`), or the folder selected by `CODEX_HOME`.
+Compare it with a known-good backup made **after successful launcher setup**. Restore only the
+launcher's affected `hooks.Interrupt` and matching `hooks.state` entries, preserving their order and
+all unrelated settings and hooks. For a syntax error, repair the TOML or restore a known-good file,
+keeping a copy of the current version so newer settings are not lost.
+
+Then run **Setup → Install into Codex → Reinstall**. Do not delete all hooks or edit the launcher's
+integration journal to bypass the check. If you have no suitable backup, or the error mentions the
+journal, use **Activity → Export safe log** and open an issue with the exact error. Do not upload your
+whole config file; it may contain credentials.
 
 ## Native models stop after closing the launcher
 
@@ -97,9 +136,10 @@ window does not automatically transfer that session.
   running.
 - If the account offers **Try another way**, an alternate authentication method can avoid a
   platform-passkey limitation.
-- Passkey-only macOS accounts have a known open issue: [#209](https://github.com/miuuyy/codex-chatgpt-web/issues/209).
-  If no alternate method exists, follow that issue rather than repeatedly deleting the browser
-  profile; there is no safe generic workaround to claim yet.
+- On macOS, choose **Use passkey** to open a separate Chrome window. Sign in to ChatGPT there
+  using your passkey. Once ChatGPT opens, return to the launcher and choose **I’m signed in — continue**.
+  Keep that Chrome window open until you continue; the launcher closes it and verifies the imported
+  session. Your usual Chrome profile is not used. Google Chrome must be installed.
 
 If an ordinary login still fails, export a safe log immediately after one attempt. Include the OS,
 launcher version, account tier, sign-in provider, and whether the Temporary Chat composer ever
@@ -120,6 +160,9 @@ mean that the ChatGPT UI did not expose a structure the bridge can safely prove.
 
 Free and Go accounts normally expose Luna and Think without the paid-account effort selector. A
 missing paid selector on those accounts is not itself a sign-in failure.
+Luna and Think use rolling summaries with **Settings → Bigger Context** off. Experimental Bigger
+Context keeps the temporary conversation and sends large histories in parts. If earlier details
+are lost in long Free-account chats, turn Bigger Context off and restart Codex.
 
 ## Personalization or connector controls are not found
 
@@ -143,6 +186,13 @@ Browser-only mode needs no connector. Full harness mode requires all of the foll
 - the connector and Tunnel on the same OpenAI account as the ChatGPT workspace;
 - **Allow all actions** under the connector's permissions; and
 - **Connect harness** completed before **Verify runtime**.
+
+If ChatGPT says **MCP endpoint not found**, keep the launcher running and complete
+**Connect harness** before creating the plugin. Use the same Tunnel ID in both places and
+copy the plugin name from the launcher's MCP page. Do not enter both mode names as one name.
+If ChatGPT then reports a request limit, wait for its cooldown before retrying once. If the
+launcher shows the harness connected but creation still fails, export a safe log and include
+the exact error and time of the attempt.
 
 Do not rename or refresh an old **Codex Native** connector. ChatGPT caches the public MCP contract by
 connector identity, so create **Codex Native2** as a new connector.
@@ -214,6 +264,12 @@ after Sent until the plugin starts. Copying does not send another message or cha
 
 ### ChatGPT shows `Error creating connector`
 
+For an opt-in transport A/B experiment that keeps the existing tool authorization, see
+[Experimental HTTP alternative](docs/mcp-http-experiment.md). Its advanced CLI provider setup
+can run automatic Full with native tools, or Zero Risk/manual, without OpenAI Tunnel credentials.
+Automatic mode uses the existing browser harness without manual prompt/Sent handoffs. The adapter
+does not create a ChatGPT connector or prove that a registration failure is caused by OpenAI.
+
 1. Confirm that the Tunnel ID and the regular API key used by the launcher were created under the
    same OpenAI account.
 2. Confirm that the launcher has connected the local harness and the Tunnel is running before you
@@ -245,6 +301,18 @@ its bounded MCP deadline.
 Do not assume that a generic 502 means the Tunnel is broken. Since v4.0.7, a native tool that
 outlives its turn binding is reported explicitly as `codex_tool_timeout` and retired rather than
 being presented as an ambiguous proxy success.
+
+## Saved task environment cannot be read
+
+If an interrupted shutdown damages `runtime/thread-environments.json`, start a fresh Codex task.
+When Codex supplies a verified workspace and permissions, the launcher preserves the damaged JSON
+beside the original as `thread-environments.json.corrupt-…` and rebuilds the file from that current
+task. It does not recover permissions from damaged data. Existing tasks without a current verified
+environment may still need to be restarted.
+
+If the error remains or reports invalid workspace/permission records, export **Activity → Export
+safe log** and include the exact error. Keep the preserved file private; do not delete your launcher
+settings or upload the saved task environments.
 
 ## Native compaction returns `404 Not Found`
 

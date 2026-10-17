@@ -1,3 +1,11 @@
+import {
+  GENERATED_FILE_MAX_BYTES,
+  refreshStoredGeneratedFile,
+  resolveEstuaryGeneratedFile,
+  serveGeneratedFile,
+  type GeneratedFileReplay,
+} from "./generated-files";
+import { fetchLauncherAuthenticatedBytes } from "./launcher-browser-host";
 import { chatGptWebTraceId, createChatGptWebAdapter } from "./adapters/chatgpt-web";
 import { closeChatGptBrowserWorkers } from "./adapters/chatgpt-web/browser-worker";
 import { closeTurnBrokers, TurnBroker } from "./adapters/chatgpt-web/turn-broker";
@@ -14,7 +22,9 @@ import {
   extractChatGptTurnIdentity,
   extractCodexTurnIdentityFromBody,
   extractChatGptCompactionSourceRevision,
+  isCodexComposerPrediction,
 } from "./adapters/chatgpt-web/environment";
+import { assertComposerPredictionFits, configureComposerPrediction } from "./composer-predictions";
 import { rememberCompactionContinuation } from "./adapters/chatgpt-web/compaction-continuation";
 import { bridgeToResponsesSSE, buildResponseJSON, formatErrorResponse } from "./bridge";
 import type { AppConfig } from "./config";
@@ -45,6 +55,7 @@ import {
 } from "./responses/compaction";
 import { parseRequest } from "./responses/parser";
 import { expandPreviousResponseInput, flushResponseState, rememberResponseState } from "./responses/state";
+import { rememberSavedChatResponseAlias, supportsSavedChatAliases, verifySavedChatResponseAlias } from "./responses/saved-chat-aliases";
 import { namespacedToolName, type AdapterEvent, type CodexParsedRequest } from "./types";
 import type { CodexProviderConfig } from "./types";
 import type { ProviderAdapter } from "./adapters/base";
@@ -398,24 +409,156 @@ function modelCatalogFailure(stage: ModelCatalogFailure["stage"], error: unknown
   return { stage };
 }
 
+type UpstreamModelCatalog =
+  | { ok: true; status: number; statusText: string; headers: Headers; body: ArrayBuffer }
+  | { ok: false; error: unknown; sent: boolean };
+
+/**
+ * Codex abandons a catalog request after five seconds and retries. When the first HTTPS connection
+ * of a network takes longer than that, cancelling the upstream attempt together with each client
+ * made every retry start from nothing, so the catalog never loaded (#696). The upstream GET is
+ * idempotent: one attempt per identical request keeps running for the client that retries, and is
+ * dropped only after nobody has waited for it for a while. Responses are never reused across
+ * different request headers, and a failure is never kept.
+ */
+export class ModelCatalogFetches {
+  private readonly attempts = new Map<string, {
+    result: Promise<UpstreamModelCatalog>;
+    abort: AbortController;
+    waiters: number;
+    sent: boolean;
+    timer?: ReturnType<typeof setTimeout>;
+  }>();
+
+  constructor(
+    private readonly abandonedTimeoutMs = 30_000,
+    private readonly unclaimedResultMs = 10_000,
+  ) {}
+
+  async fetch(
+    request: Request,
+    forward: (request: Request, markSent: () => void) => Promise<Response>,
+  ): Promise<UpstreamModelCatalog> {
+    const key = createHash("sha256")
+      .update(JSON.stringify([new URL(request.url).search, [...request.headers].sort()]))
+      .digest("hex");
+    let attempt = this.attempts.get(key);
+    if (!attempt) {
+      const abort = new AbortController();
+      const created = {
+        abort,
+        waiters: 0,
+        sent: false,
+        result: undefined as unknown as Promise<UpstreamModelCatalog>,
+        timer: undefined as ReturnType<typeof setTimeout> | undefined,
+      };
+      created.result = (async (): Promise<UpstreamModelCatalog> => {
+        try {
+          const response = await forward(new Request(request, { signal: abort.signal }), () => { created.sent = true; });
+          return {
+            ok: true, status: response.status, statusText: response.statusText,
+            headers: response.headers, body: await response.arrayBuffer(),
+          };
+        } catch (error) {
+          return { ok: false, error, sent: created.sent };
+        }
+      })().then(result => {
+        clearTimeout(created.timer);
+        created.timer = undefined;
+        // A client that retries just after its abandoned attempt finished may still take the result.
+        const unclaimed = result.ok && result.status >= 200 && result.status < 300 && created.waiters === 0;
+        if (unclaimed && this.attempts.get(key) === created) {
+          created.timer = setTimeout(() => {
+            if (this.attempts.get(key) === created) this.attempts.delete(key);
+          }, this.unclaimedResultMs);
+          created.timer.unref?.();
+        } else if (this.attempts.get(key) === created) {
+          this.attempts.delete(key);
+        }
+        return result;
+      });
+      attempt = created;
+      this.attempts.set(key, attempt);
+    }
+    const joined = attempt;
+    joined.waiters += 1;
+    clearTimeout(joined.timer);
+    joined.timer = undefined;
+    let leave!: () => void;
+    const left = new Promise<UpstreamModelCatalog>(resolve => {
+      leave = () => resolve({
+        ok: false,
+        error: request.signal.reason ?? new DOMException("Model catalog request aborted", "AbortError"),
+        sent: joined.sent,
+      });
+    });
+    if (request.signal.aborted) leave();
+    else request.signal.addEventListener("abort", leave, { once: true });
+    try {
+      const result = await Promise.race([joined.result, left]);
+      if (result.ok && this.attempts.get(key) === joined) {
+        // Delivered: the next request must ask upstream again.
+        clearTimeout(joined.timer);
+        this.attempts.delete(key);
+      }
+      return result;
+    } finally {
+      request.signal.removeEventListener("abort", leave);
+      joined.waiters -= 1;
+      if (joined.waiters === 0 && this.attempts.get(key) === joined && !joined.timer) {
+        joined.timer = setTimeout(() => joined.abort.abort(
+          new DOMException("Model catalog request was abandoned", "AbortError"),
+        ), this.abandonedTimeoutMs);
+        joined.timer.unref?.();
+      }
+    }
+  }
+
+  close(): void {
+    for (const attempt of this.attempts.values()) {
+      clearTimeout(attempt.timer);
+      attempt.abort.abort(new DOMException("Model catalog request cancelled", "AbortError"));
+    }
+    this.attempts.clear();
+  }
+}
+
 export async function modelsRequest(
   req: Request,
   config: AppConfig,
   fetchUpstream?: NativeFetch,
   contextOverride?: () => CodexModelContextOverride | undefined,
   onFailure?: (failure: ModelCatalogFailure) => void,
+  clientSignal: AbortSignal = req.signal,
+  shared?: ModelCatalogFetches,
 ): Promise<Response> {
+  const cancelled = () => new Response(null, { status: 499 });
+  if (clientSignal.aborted) return cancelled();
   let upstream: Response;
   let sent = false;
+  const forward = (request: Request, markSent: () => void) => forwardNativeCodexRequest(request, "models", input => {
+    markSent();
+    return (fetchUpstream ?? fetchNativeCodex)(input);
+  });
   try {
-    upstream = await forwardNativeCodexRequest(req, "models", input => {
-      sent = true;
-      return (fetchUpstream ?? fetchNativeCodex)(input);
-    });
+    if (shared) {
+      const result = await shared.fetch(req, forward);
+      if (!result.ok) {
+        sent = result.sent;
+        throw result.error;
+      }
+      upstream = new Response([101, 204, 205, 304].includes(result.status) ? null : result.body.slice(0), {
+        status: result.status, statusText: result.statusText, headers: new Headers(result.headers),
+      });
+    } else {
+      upstream = await forward(req, () => { sent = true; });
+    }
   } catch (error) {
+    if (clientSignal.aborted) return cancelled();
     onFailure?.(modelCatalogFailure(sent ? "transport" : "request", error));
     return formatErrorResponse(502, "upstream_error", error instanceof Error ? error.message : String(error));
   }
+  if (clientSignal.aborted) return cancelled();
   if (!upstream.ok) {
     onFailure?.({ stage: "upstream" });
     return upstream;
@@ -424,9 +567,11 @@ export async function modelsRequest(
   try {
     catalog = augmentNativeModelCatalog(await upstream.json(), config, contextOverride?.());
   } catch (error) {
+    if (clientSignal.aborted) return cancelled();
     onFailure?.(modelCatalogFailure("catalog", error));
     return formatErrorResponse(502, "invalid_response_error", error instanceof Error ? error.message : String(error));
   }
+  if (clientSignal.aborted) return cancelled();
   const body = JSON.stringify(catalog);
   const headers = new Headers(upstream.headers);
   headers.delete("content-encoding");
@@ -518,11 +663,14 @@ export async function responseRequest(
     ? (raw as { previous_response_id?: unknown }).previous_response_id
     : undefined;
   const expanded = expandPreviousResponseInput(raw);
+  const prediction = isCodexComposerPrediction(raw);
+  let executionConfig = config;
   let parsed: CodexParsedRequest;
   let route: ChatGptWebModelRoute;
   try {
     parsed = parseRequest(expanded);
-    route = routeChatGptWebRequest(parsed, config);
+    if (prediction) executionConfig = configureComposerPrediction(parsed, config);
+    route = routeChatGptWebRequest(parsed, executionConfig);
     const identity = extractChatGptTurnIdentity(parsed);
     if (identity.threadId && identity.turnId) {
       options.onTurnIdentity?.({ threadId: identity.threadId, turnId: identity.turnId });
@@ -538,19 +686,48 @@ export async function responseRequest(
         + "Start a new Compatibility V1 task, or delegate from a Web model whose collaboration call uses the plaintext-delivery marker.",
     );
   }
-  if (typeof requestedPreviousResponseId === "string" && expanded === raw) {
-    return formatErrorResponse(
-      409,
-      "invalid_request_error",
-      "Local continuation state for previous_response_id is unavailable; refusing to run ChatGPT Web with partial Codex context. Compact the Codex task or start a new task before retrying.",
-    );
+  const aliasProvider = providerConfig(config);
+  if (typeof requestedPreviousResponseId === "string") {
+    if (options.rememberState !== false && supportsSavedChatAliases(aliasProvider, parsed)) {
+      try {
+        // Aliases prove ownership, including on a cache hit; cached text alone cannot
+        // authorize another account/thread. The saved browser owns the history now.
+        verifySavedChatResponseAlias(aliasProvider, parsed, requestedPreviousResponseId);
+        parsed = parseRequest(raw);
+        route = routeChatGptWebRequest(parsed, config);
+        parsed._chatgptSavedConversationContinuation = true;
+      } catch (error) {
+        if (!(error instanceof ChatGptWebAdapterError)) throw error;
+        return Response.json({ error: { message: error.message, type: error.errorType,
+          code: error.code, retryable: error.retryable } }, { status: error.status });
+      }
+    } else if (expanded === raw) {
+      return formatErrorResponse(
+        409,
+        "invalid_request_error",
+        "Local continuation state for previous_response_id is unavailable; refusing to run ChatGPT Web with partial Codex context. Compact the Codex task or start a new task before retrying.",
+      );
+    }
+  }
+
+  if (prediction) {
+    try {
+      assertComposerPredictionFits(parsed, executionConfig);
+    } catch (error) {
+      // An optional suggestion must not compact/retry the task merely to make itself fit.
+      return formatErrorResponse(400, "invalid_request_error", `Next-message prediction skipped: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    console.info(`[chatgpt-web] composer_prediction model=${route.slug} effort=medium`);
   }
 
   const compaction = parsed._compactionRequest === true;
   const compactionItem = compaction && parsed._compactionResponseFormat !== "message";
   const rememberCompletedResponse = (response: Record<string, unknown>): void => {
     if (!compaction) {
-      if (options.rememberState !== false) rememberResponseState(parsed._rawBody, response, { force: true });
+      if (options.rememberState !== false) {
+        rememberSavedChatResponseAlias(provider, parsed, response);
+        rememberResponseState(parsed._rawBody, response, { force: true });
+      }
       return;
     }
     if (response.status !== "completed") return;
@@ -576,7 +753,7 @@ export async function responseRequest(
     });
     rememberCompactionContinuation(parsed, identity, [source, v1Source], summary);
   };
-  if (compaction && route.backendModel === CHATGPT_WEB_LUNA_BACKEND_MODEL) {
+  if (compaction && route.backendModel === CHATGPT_WEB_LUNA_BACKEND_MODEL && !config.experimentalBiggerContext) {
     return formatErrorResponse(
       409,
       "invalid_request_error",
@@ -593,24 +770,20 @@ export async function responseRequest(
     parsed.context.messages.push({ role: "user", content: COMPACT_PROMPT, timestamp: Date.now() });
   }
 
-  const provider = providerConfig(config);
+  const provider = providerConfig(executionConfig);
   let traceId: string | undefined;
   try {
     traceId = chatGptWebTraceId(provider, parsed);
   } catch (error) {
-    // A cancelled browser session can only exist after the adapter accepted canonical native
-    // turn identity and user-revision metadata. Requests without that identity have no matching
-    // trace tombstone; preserve the adapter's existing strict validation/error path below.
     const message = error instanceof Error ? error.message : String(error);
-    if (message === CHATGPT_TURN_REVISION_CONFLICT_MESSAGE) {
-      // Codex can reopen an interrupted task with only refreshed developer/skill context under a
-      // new turn_id. Its last human prompt still belongs to the stopped turn and must not be
-      // replayed as new work. HTTP 400 makes that malformed recovery request terminal instead of
-      // allowing Codex to retry it as an upstream 502.
+    if (message === CHATGPT_TURN_REVISION_CONFLICT_MESSAGE
+      || message === "ChatGPT web requires a current-turn user message for browser-session replay") {
+      // Missing or stale instructions cannot become valid by retrying the same native turn.
+      // Reject before opening an SSE stream so clients and gateways see a terminal HTTP 400.
       return formatErrorResponse(400, "invalid_request_error", message);
     }
-    if (!message.includes("requires native Codex turn_id metadata")
-      && !message.includes("requires a current-turn user message")) throw error;
+    // Requests without native identity have no trace tombstone; let the adapter validate them.
+    if (!message.includes("requires native Codex turn_id metadata")) throw error;
   }
   const cancelledError = traceId ? chatGptTurnSessions.cancelledError(traceId) : undefined;
   if (cancelledError) {
@@ -641,7 +814,12 @@ export async function responseRequest(
         queue.push(event);
       });
     } catch (error) {
-      const event: AdapterEvent = { type: "error", message: error instanceof Error ? error.message : String(error) };
+      const event: AdapterEvent = {
+        type: "error", message: error instanceof Error ? error.message : String(error),
+        ...(error instanceof ChatGptWebAdapterError ? {
+          status: error.status, errorType: error.errorType, code: error.code, retryable: error.retryable,
+        } : {}),
+      };
       options.onAdapterEvent?.(event);
       queue.push(event);
     } finally {
@@ -689,8 +867,14 @@ export async function responseRequest(
     toolSearchToolNames: maps.toolSearchToolNames,
     ...(compactionItem ? { compaction: true } : {}),
   });
-  rememberCompletedResponse(json);
-  return Response.json(json);
+  try { rememberCompletedResponse(json); }
+  catch (error) {
+    if (!(error instanceof ChatGptWebAdapterError)) throw error;
+    return Response.json({ error: { message: error.message, type: error.errorType,
+      code: error.code, retryable: error.retryable } }, { status: error.status });
+  }
+  const capacityRejected = events.some(event => event.type === "error" && event.code === "concurrency_limit_exceeded");
+  return Response.json(json, { status: capacityRejected ? 429 : 200 });
 }
 
 export async function compactRequest(
@@ -752,7 +936,7 @@ export async function compactRequest(
   } catch (error) {
     return formatErrorResponse(400, "invalid_request_error", error instanceof Error ? error.message : String(error));
   }
-  if (route.backendModel === CHATGPT_WEB_LUNA_BACKEND_MODEL) {
+  if (route.backendModel === CHATGPT_WEB_LUNA_BACKEND_MODEL && !config.experimentalBiggerContext) {
     return formatErrorResponse(
       409,
       "invalid_request_error",
@@ -810,9 +994,43 @@ export async function compactRequest(
   return Response.json({ output: buildCompactV1Output(extractCompactUserMessages(input), summary) });
 }
 
+/**
+ * 原生形状链接的缓存已经过期：在已登录的 launcher 浏览器里重放一次原始下载，
+ * 成功后刷新本地缓存并回本地字节；失败时明确返回 410 而不是伪造成功。
+ */
+async function redownloadGeneratedFile(
+  request: Request, replay: GeneratedFileReplay, config: AppConfig, directory: string,
+): Promise<Response> {
+  const expired = () => new Response("File expired and could not be re-downloaded from ChatGPT", {
+    status: 410, headers: { "cache-control": "no-store" },
+  });
+  const chatgptWeb = providerConfig(config).chatgptWeb;
+  if (chatgptWeb?.browserHost !== "launcher" || !chatgptWeb.browserHostDescriptorPath) return expired();
+  for (const source of replay.sources) {
+    try {
+      const downloaded = await fetchLauncherAuthenticatedBytes(chatgptWeb.browserHostDescriptorPath, source, {
+        maxBytes: GENERATED_FILE_MAX_BYTES,
+      });
+      if (refreshStoredGeneratedFile(directory, replay.fileId, downloaded.mime, downloaded.bytes)) {
+        const refreshed = resolveEstuaryGeneratedFile(request, directory);
+        if (refreshed instanceof Response) return refreshed;
+      }
+    } catch (error) {
+      console.warn(
+        `[chatgpt-web] generated file ${replay.fileId} could not be re-downloaded: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  return expired();
+}
+
 export function startServer(
   config: AppConfig,
-  dependencies: { fetchUpstream?: NativeFetch; adapterFactory?: ChatGptWebAdapterFactory } = {},
+  dependencies: {
+    fetchUpstream?: NativeFetch;
+    adapterFactory?: ChatGptWebAdapterFactory;
+    modelCatalogFetches?: ModelCatalogFetches;
+  } = {},
 ): ReturnType<typeof Bun.serve> {
   if (config.purpose === "dev-harness") {
     throw new Error("DEV harness configuration cannot start a Responses listener");
@@ -835,6 +1053,7 @@ export function startServer(
     request: number; at: string; status: number; failure?: ModelCatalogFailure;
   } | null = null;
   const httpTurns = new HttpTurnCounter();
+  const modelCatalogFetches = dependencies.modelCatalogFetches ?? new ModelCatalogFetches();
   const activity = () => ({
     active_http_turns: httpTurns.count(),
     active_browser_turns: chatGptTurnSessions.activeCount() + (turnBroker?.externalOwnerActiveCount() ?? 0),
@@ -851,6 +1070,25 @@ export function startServer(
     idleTimeout: 0,
     async fetch(req) {
       const url = new URL(req.url);
+      // Loopback is reachable from any web page, cross-site or same-origin after DNS rebinding,
+      // and this route has no bearer secret. Browsers attach Origin to every such request that
+      // can start or control work; Codex and the launcher are not browsers and never send it.
+      if (req.method !== "GET" && req.headers.has("origin")) {
+        return formatErrorResponse(
+          403,
+          "invalid_request_error",
+          "Browser-originated requests are not accepted by the local Codex route",
+        );
+      }
+      const downloadDirectory = providerConfig(config).chatgptWeb!.downloadDirectory!;
+      const generatedFile = serveGeneratedFile(req, downloadDirectory);
+      if (generatedFile) return generatedFile;
+      const estuaryFile = resolveEstuaryGeneratedFile(req, downloadDirectory);
+      if (estuaryFile) {
+        return estuaryFile instanceof Response
+          ? estuaryFile
+          : await redownloadGeneratedFile(req, estuaryFile, config, downloadDirectory);
+      }
       if (req.method === "GET" && url.pathname === "/healthz") {
         return Response.json({
           status: "ok",
@@ -1020,6 +1258,9 @@ export function startServer(
           const request = ++modelCatalogRequests;
           const started = Date.now();
           const recordResult = (response: Response, failure?: ModelCatalogFailure): Response => {
+            // A disconnected Codex client did not test the catalog. Preserve the
+            // last completed result; only actual failures belong in launcher health.
+            if (req.signal.aborted) return response;
             const result = { request, at: new Date().toISOString(), status: response.status, ...(failure ? { failure } : {}) };
             // An older, slower request must not replace a newer completed result.
             if (!lastModelCatalogResult || request > lastModelCatalogResult.request) lastModelCatalogResult = result;
@@ -1050,8 +1291,10 @@ export function startServer(
             dependencies.fetchUpstream,
             readCodexModelContextOverride,
             value => { failure = value; },
+            req.signal,
+            modelCatalogFetches,
           );
-          if (response.ok) {
+          if (response.ok && !req.signal.aborted) {
             successfulModelCatalogRequests += 1;
             lastSuccessfulModelCatalogRequestAt = new Date().toISOString();
           }
@@ -1121,6 +1364,7 @@ export function startServer(
     if (shutdownPromise) return;
     draining = true;
     chatGptTurnSessions.clear();
+    modelCatalogFetches.close();
     flushResponseState();
     shutdownPromise = (async () => {
       const results = await Promise.allSettled([

@@ -1,15 +1,18 @@
 import { createHash } from "node:crypto";
 import { selectedSkillFile, skillFileTokens, type ChatGptSkillFile } from "./skill-attachments";
 import {
+  CHATGPT_WEB_GPT6_INSTANT_BIGGER_CONTEXT_ERROR,
   chatGptWebImageTokenReserve,
   isChatGptWebZeroRiskBackendModel,
   resolveChatGptWebMessageTokenBudget,
+  resolveChatGptWebStagingTokenBudget,
   resolveChatGptWebTransportLimits,
+  supportsChatGptWebBiggerContext,
 } from "../../chatgpt-web-models";
 import { ChatGptWebAdapterError } from "./adapter-error";
 import { estimateTokens } from "../../lib/token-estimate";
-import type { CodexAssistantContentPart, CodexContentPart, CodexMessage, CodexParsedRequest } from "../../types";
-import { isOnePixelPngDataUrl, isReadableCompactionSummaryText } from "../../responses/compaction";
+import type { CodexAssistantContentPart, CodexContentPart, CodexFileContent, CodexMessage, CodexParsedRequest } from "../../types";
+import { isOnePixelPngDataUrl, isReadableCompactionSummaryText, SUMMARY_PREFIX } from "../../responses/compaction";
 import { CHATGPT_WEB_LUNA_MODEL_ID, CHATGPT_WEB_MODEL_ID, resolveChatGptWebModelMode, type ChatGptWebCapabilities } from "./model";
 import {
   CHATGPT_LUNA_CHECKPOINT_MARKER,
@@ -25,6 +28,9 @@ export interface ChatGptWebPromptImage {
 export interface CompiledChatGptWebPrompt {
   text: string;
   images: ChatGptWebPromptImage[];
+  files?: CodexFileContent[];
+  /** Current broker identity, already present in the final prompt; never diagnostic data. */
+  turnToken?: string;
   skillFiles?: ChatGptSkillFile[];
   /** Transactional transport when Bigger Context is explicitly enabled. */
   multipart?: ChatGptWebMultipartPrompt;
@@ -44,6 +50,125 @@ export interface CompileChatGptWebPromptOptions {
    * reads or mutates ChatGPT's DOM. Completion is accepted only through the bound Zero Risk MCP tools.
    */
   manualControl?: true;
+}
+
+/** Only recognize a standalone runtime envelope, not arbitrary XML, fenced code or prose. */
+function isQuestionAnswerEnvironment(text: string): boolean {
+  const match = text.trim().match(/^<environment_context>([\s\S]*)<\/environment_context>$/);
+  if (!match || /<\/?environment_context\b/.test(match[1]!)) return false;
+  const fields = match[1]!.replace(
+    /<(cwd|shell|current_date|timezone|sandbox_mode|approval_policy|network_access|codex_dev_mode)>[^<>]*<\/\1>|<(filesystem|writable_roots|subagents)>[\s\S]*?<\/\2>|<subagents\s*\/>/g,
+    "",
+  );
+  return match[1]!.trim().length > 0 && fields.trim().length === 0;
+}
+
+/** Ordinary questions import human messages and completed answers, never the local runtime. */
+function compileQuestionAnswerPrompt(
+  parsed: CodexParsedRequest,
+  options: CompileChatGptWebPromptOptions,
+): CompiledChatGptWebPrompt {
+  const messages = parsed.context.messages.flatMap((original): CodexMessage[] => {
+    // 纯问答只回答人类问题：有问答子集时用它替换完整正文（附件与注入内容已按原生 kinds 剔除）。
+    const message = original.role === "user" && original.qaContent !== undefined
+      ? { ...original, content: original.qaContent }
+      : original;
+    if (message.role === "toolResult" && message.nativeDelegation !== undefined) {
+      return [{ role: "user", timestamp: message.timestamp,
+        content: "Delegated task:\n" + message.nativeDelegation
+          + "\n\nThis route supports question answering only, without access to local files or tools. "
+          + "If this task requires them, explain that a -tools model is required; do not claim to have executed it." }];
+    }
+    if (message.role === "user") {
+      if (message.origin === "codex_skill") return [];
+      if (typeof message.content === "string") return isQuestionAnswerEnvironment(message.content) ? [] : [message];
+      const content = message.content.filter(part => part.type !== "text" || !isQuestionAnswerEnvironment(part.text));
+      return content.length ? [{ ...message, content }] : [];
+    }
+    if (message.role !== "assistant" || message.phase === "commentary") return [];
+    const content = message.content.filter(part => part.type === "text");
+    return content.length ? [{ ...message, content }] : [];
+  });
+  const build = (source: readonly CodexMessage[], omittedMessages = 0): CompiledChatGptWebPrompt => {
+    const images: ChatGptWebPromptImage[] = [];
+    const files: CodexFileContent[] = [];
+    // A real user can ask about a one-pixel image. Only the legacy transport treats it as a sentinel.
+    let imagesToDrop = Math.max(0, source.reduce((count, message) => count + (
+      message.role === "user" && typeof message.content !== "string"
+        ? message.content.filter(part => part.type === "image").length : 0
+    ), 0) - CHATGPT_MAX_INPUT_IMAGES);
+    const history = source.map(message => {
+      if (message.role === "assistant") return {
+        role: "assistant",
+        text: message.content.flatMap(part => part.type === "text" ? [part.text] : []).join("\n"),
+      };
+      const content = typeof message.content === "string" ? message.content : message.content.map(part => {
+        if (part.type === "text") return part.text;
+        if (part.type === "file") {
+          files.push(part);
+          return "[Attached file: " + part.filename + "]";
+        }
+        if (imagesToDrop > 0) { imagesToDrop -= 1; return DROPPED_IMAGE_NOTE; }
+        const ref = "chatgpt-input-image-" + (images.length + 1);
+        images.push({ ref, imageUrl: part.imageUrl, ...(part.detail ? { detail: part.detail } : {}) });
+        return "[Attached image: " + ref + "]";
+      }).join("\n");
+      return {
+        role: "user",
+        text: isReadableCompactionSummaryText(content)
+          ? "Previous conversation summary:\n" + content.slice(SUMMARY_PREFIX.length).trimStart()
+          : content,
+      };
+    }).filter(message => message.text.trim().length > 0);
+    if (!history.some(message => message.role === "user")) {
+      throw new ChatGptWebAdapterError("The request does not contain a human question or image", {
+        status: 400, errorType: "invalid_request_error", code: "question_missing", retryable: false,
+      });
+    }
+    const text = history.length === 1 && history[0]!.role === "user"
+      ? history[0]!.text
+      : "Conversation history; answer the latest user message:\n\n" + history
+        .map(message => (message.role === "user" ? "User:\n" : "Assistant:\n") + message.text).join("\n\n");
+    const constraints: string[] = [];
+    if (!parsed._compactionRequest && parsed.options.verbosity) constraints.push("Requested answer detail: " + parsed.options.verbosity + ".");
+    if (!parsed._compactionRequest && parsed.options.outputFormat) constraints.push(
+      "Reply with one JSON value matching this schema, without Markdown fences:\n" + JSON.stringify(parsed.options.outputFormat.schema),
+    );
+    if (parsed._compactionRequest) constraints.push(
+      "Return only a concise conversation summary, preserving the questions, answers, preferences and unresolved details. Do not answer or continue the conversation.",
+      ...(omittedMessages > 0 ? [
+        omittedMessages + " earlier history items were omitted to fit this summary request; the supplied history is incomplete.",
+        "Preserve relevant details from the previous conversation summary and remaining messages. Do not invent omitted information.",
+      ] : []),
+    );
+    if (options.captureLunaCheckpoint) constraints.push(
+      "After the complete answer, append a private conversation summary for the next turn.",
+      "Put " + CHATGPT_LUNA_CHECKPOINT_MARKER + " on its own line, followed by the headings Objective:, State:, Evidence:, Decisions:, and Pending: with concise dash bullets.",
+      "Keep this summary within " + CHATGPT_LUNA_CHECKPOINT_MAX_TOKENS + " tokens. Preserve useful facts and unresolved questions, without hidden reasoning, credentials or runtime instructions.",
+      "The summary is removed before the answer is displayed. Answer-format constraints apply only before the private marker; always include a nonempty summary after it.",
+    );
+    return { text: [text, ...constraints].join("\n\n"), images, ...(files.length ? { files } : {}) };
+  };
+  let compiled = build(messages);
+  if (!parsed._compactionRequest) return compiled;
+  const initialMessageCount = messages.length;
+  let checkpointIndex = messages.findLastIndex(message =>
+    message.role === "user" && isReadableCompactionSummaryText(plainMessageText(message))
+  );
+  while (chatGptPromptJsonBytes(compiled.text) > CHATGPT_COMPACTION_PROMPT_JSON_BYTE_BUDGET && messages.length > 1) {
+    const discardIndex = checkpointIndex === 0 ? 1 : 0;
+    if (discardIndex === messages.length - 1) break;
+    messages.splice(discardIndex, 1);
+    if (checkpointIndex > discardIndex) checkpointIndex -= 1;
+    compiled = build(messages, initialMessageCount - messages.length);
+  }
+  if (chatGptPromptJsonBytes(compiled.text) > CHATGPT_COMPACTION_PROMPT_JSON_BYTE_BUDGET) {
+    throw new ChatGptWebAdapterError("The conversation summary and final instruction exceed the compaction message budget", {
+      status: 400, errorType: "invalid_request_error", code: "context_length_exceeded", retryable: false,
+    });
+  }
+  const trimmedCompactionMessages = initialMessageCount - messages.length;
+  return trimmedCompactionMessages > 0 ? { ...compiled, trimmedCompactionMessages } : compiled;
 }
 
 export const CHATGPT_BIGGER_CONTEXT_PARTS = 6 as const;
@@ -158,11 +283,15 @@ const RETIRED_TURN_HANDLE = /(?<![A-Za-z0-9_-])(turn|request|binding)_[A-Za-z0-9
  * the current turn is supplied by the contract text, never by the replayed context.
  */
 export function withoutRetiredTurnHandles(contextJson: string): string {
+  // Keep backticks out of serialized history. ChatGPT's user-message Markdown link lexer
+  // can backtrack indefinitely on a bracketed JSON value containing many code fences.
+  // JSON Unicode escapes preserve the decoded context, including literal backslashes.
+  // The outer fence alone is insufficient on the observed user-message rendering path.
   // Match decoded string values: in serialized JSON a newline's `n` is a word character
   // immediately before the handle. Leave structural keys and native tool-call IDs intact.
   return JSON.stringify(JSON.parse(contextJson, (_key, value: unknown) => typeof value === "string"
     ? value.replace(RETIRED_TURN_HANDLE, (_handle, kind: string) => `[retired ${kind} handle]`)
-    : value));
+    : value)).replaceAll("`", "\\u0060");
 }
 
 /** ChatGPT accepts at most this many attachments on one message. */
@@ -202,16 +331,21 @@ function inputContent(
   content: string | CodexContentPart[],
   images: ChatGptWebPromptImage[],
   budget: ImageBudget,
+  files: CodexFileContent[],
 ): unknown {
   if (typeof content === "string") return content;
   const semantic = content.filter(part =>
     part.type !== "image" || !isOnePixelPngDataUrl(part.imageUrl)
   );
-  if (!semantic.some(part => part.type === "image")) {
+  if (!semantic.some(part => part.type === "image" || part.type === "file")) {
     return semantic.filter(part => part.type === "text").map(part => part.text).join("\n");
   }
   return semantic.map(part => {
     if (part.type === "text") return { type: "text", text: part.text };
+    if (part.type === "file") {
+      files.push(part);
+      return { type: "file_attachment", filename: part.filename };
+    }
     budget.seen += 1;
     if (budget.seen <= budget.dropped) return { type: "text", text: DROPPED_IMAGE_NOTE };
     const ref = `codex-input-image-${images.length + 1}`;
@@ -291,6 +425,7 @@ function messageEnvelope(
   message: CodexMessage,
   images: ChatGptWebPromptImage[],
   budget: ImageBudget,
+  files: CodexFileContent[],
 ): Record<string, unknown> {
   if (message.role === "toolResult") {
     return {
@@ -299,7 +434,7 @@ function messageEnvelope(
       tool_name: message.toolName,
       ...(message.toolNamespace ? { tool_namespace: message.toolNamespace } : {}),
       is_error: message.isError,
-      content: inputContent(message.content, images, budget),
+      content: inputContent(message.content, images, budget, files),
     };
   }
   if (message.role === "agentMessage") {
@@ -307,7 +442,7 @@ function messageEnvelope(
       role: "agent_message",
       ...(message.author !== undefined ? { author: message.author } : {}),
       ...(message.recipient !== undefined ? { recipient: message.recipient } : {}),
-      content: inputContent(message.content, images, budget),
+      content: inputContent(message.content, images, budget, files),
     };
   }
   if (message.role === "assistant") {
@@ -317,7 +452,7 @@ function messageEnvelope(
       content: assistantContent(message.content),
     };
   }
-  return { role: message.role, content: inputContent(message.content, images, budget) };
+  return { role: message.role, content: inputContent(message.content, images, budget, files) };
 }
 
 type MultipartContextRecord =
@@ -457,10 +592,13 @@ export function compileChatGptWebPrompt(
   if (multipartParts !== undefined && !isChatGptWebMultipartPartCount(multipartParts)) {
     throw new Error("Bigger Context requires two or six context parts");
   }
-  if (multipartEnabled && parsed.modelId === CHATGPT_WEB_LUNA_MODEL_ID) {
-    throw new Error("Bigger Context is unavailable for Luna because its accumulated browser transcript still shares one 28,000-token transport budget");
+  if (multipartEnabled && captureLunaCheckpoint) {
+    throw new Error("Bigger Context uses native compaction, not Luna rolling checkpoints");
   }
-  if (parsed.modelId === CHATGPT_WEB_LUNA_MODEL_ID && parsed._compactionRequest) {
+  if (multipartEnabled && !supportsChatGptWebBiggerContext(parsed.modelId, mode.effort, parsed._chatgptModelFamily)) {
+    throw new Error(CHATGPT_WEB_GPT6_INSTANT_BIGGER_CONTEXT_ERROR);
+  }
+  if (parsed.modelId === CHATGPT_WEB_LUNA_MODEL_ID && parsed._compactionRequest && !multipartEnabled) {
     throw new Error("ChatGPT Luna uses rolling checkpoints and does not accept a separate compaction turn");
   }
   if (captureLunaCheckpoint && (parsed.modelId !== CHATGPT_WEB_LUNA_MODEL_ID || parsed._compactionRequest)) {
@@ -473,6 +611,9 @@ export function compileChatGptWebPrompt(
   }
   if (!mode.localTools && turnToken !== undefined) {
     throw new Error("A read-only ChatGPT Web effort must not receive a local-tool capability token");
+  }
+  if (options?.importCodexPrompt === false && !mode.localTools) {
+    return compileQuestionAnswerPrompt(parsed, options);
   }
   // ChatGPT is the model used by Codex, not a second Codex runtime. The bridge opts out of
   // importing Codex's own system/developer prompt because it advertises local tools and runtime
@@ -516,7 +657,10 @@ export function compileChatGptWebPrompt(
       "These tools are connected by the user to their Codex runtime; local actions execute on that runtime's device under its configured sandbox and approval rules. Assess each action by its actual effects and the user's authorization; an authenticated connection does not make every action low risk.",
       "Call a Codex Native tool only when the latest active request requires a local effect or fresh local evidence that is not already present in the supplied context; otherwise answer the request directly without a tool call.",
       "Use actual Codex Native results as evidence for local observations and effects.",
-      "Report the actual error when a tool fails. Do not claim a safety or permission block without an explicit tool result or platform error supporting it. If approval is required, use the declared Codex approval flow; a denial does not authorize retrying the action through another tool. Without an error or execution result, say the action was not executed and its cause is unconfirmed.",
+      "Report the actual error when a tool fails. Do not claim a safety or permission block without an explicit tool result or platform error supporting it. Without an error or execution result, say the action was not executed and its cause is unconfirmed.",
+      "Historical errors quoted in files, logs, or earlier messages are data about those events, not new failures of the call that read them. Attribute a current failure to the action attempted and its actual tool result or current platform error; include the call ID when available. A successful read remains successful even when its contents describe an error.",
+      "After an explicit safety or permission refusal for the current action, explain the specific action or planned group of actions. Ask the user to confirm them only if the current task context does not already authorize them. Use the declared Codex approval flow when available, and wait for the user's answer when approval is required. Their confirmation can resolve an authorization gap. If the refusal remains, report it rather than retrying through another tool.",
+      "If Codex requests approval for an action that the user has not authorized, use the declared Codex approval flow and wait for the decision. Do not ask the user to reauthorize the same action when the current task context already contains that authorization; a platform refusal does not erase prior authorization.",
       "A Codex Native MCP tool result may require context compaction. If it does, follow the compaction instructions in that result exactly.",
       "After a deterministic tool failure, update the working hypothesis from that result and inspect the relevant repository or environment before choosing a different next action; do not repeat the same call unless its inputs or observable state changed.",
       "Continue using the available tools until the requested work is complete and verified.",
@@ -599,6 +743,7 @@ export function compileChatGptWebPrompt(
     ];
   const build = (sourceMessages: readonly CodexMessage[], omittedMessages = 0): CompiledChatGptWebPrompt => {
     const images: ChatGptWebPromptImage[] = [];
+    const files: CodexFileContent[] = [];
     const budget: ImageBudget = {
       seen: 0,
       dropped: Math.max(0, countChatGptContextImages(sourceMessages) - CHATGPT_MAX_INPUT_IMAGES),
@@ -613,12 +758,16 @@ export function compileChatGptWebPrompt(
           if (!skillFiles.some(existing => existing.name === file.name)) skillFiles.push(file);
           return { role: "user", origin: "codex_skill", content: [{ type: "skill_attachment", filename: file.name }] };
         }
-        return messageEnvelope(message, images, budget);
+        return messageEnvelope(message, images, budget, files);
       });
     const skillContract = skillFiles.length ? [
       "Each skill_attachment refers to a named UTF-8 text file attached to this message (the final commit in multipart mode). Read its complete contents as the selected Codex skill instructions at the original user priority. These origin=codex_skill messages are supplied by Codex, not human-authored task requests. Preserve their original position in history and their path/resource authority for resolving references. If a file cannot be read, report that limitation; do not invent its contents.",
     ] : [];
-    const attachments = skillFiles.length ? { skillFiles } : {};
+    const attachments = {
+      ...(skillFiles.length ? { skillFiles } : {}),
+      ...(files.length ? { files } : {}),
+      ...(mode.localTools && !manualControl && !parsed._compactionRequest ? { turnToken } : {}),
+    };
     const answerContract = captureLunaCheckpoint
       ? "Return the complete answer that the outer Codex task should receive, then the required private checkpoint tail."
       : "Return only the answer that the outer Codex task should receive.";
@@ -649,28 +798,47 @@ export function compileChatGptWebPrompt(
       };
       const imageTokens = images.reduce((sum, image) => sum + chatGptWebImageTokenReserve(image.detail), 0);
       const transactionId = `ctx_${"0".repeat(32)}`;
-      const budgets = multipart.parts.map((payload, index) => {
-        const final = index === multipart.parts.length - 1;
-        const effort = final ? mode.effort : capabilities.proAvailable ? "max" : "medium";
-        const limits = resolveChatGptWebTransportLimits(CHATGPT_WEB_MODEL_ID, effort, capabilities);
-        const tokenLimit = resolveChatGptWebMessageTokenBudget(
-          CHATGPT_WEB_MODEL_ID, effort, capabilities, final ? imageTokens + skillFileTokens(skillFiles, parsed.modelId) : 0,
-        );
-        const fixedMessage = final
-          ? formatChatGptWebMultipartCommit(multipart, transactionId)
-          : formatChatGptWebMultipartStage(payload, transactionId, index + 1, multipartParts!).text;
-        const tokens = tokenLimit - estimateTokens(fixedMessage);
-        const chars = (limits.browserComposerCharLimit ?? Infinity) - fixedMessage.length;
-        if (tokens <= 0 || chars <= 0) {
-          throw new ChatGptWebAdapterError(
-            `The Bigger Context ${final ? "final part's instructions and attachments" : "stage wrapper"} exceed the available message budget before any task history is added. Reduce those inputs before retrying.`,
-            { status: 400, errorType: "invalid_request_error", code: "context_length_exceeded", retryable: false },
-          );
-        }
-        return { tokens, chars };
-      });
-      multipart.parts = partitionMultipartContext(records, multipartParts!, budgets);
-      return { text: multipart.commit, images, ...attachments, multipart };
+      // First try Instant-sized stages and give the final selected mode its own larger share.
+      // Equal parts near Instant's maximum can be accepted once and rejected on the next Send.
+      // If complete records cannot fit that allocation, plan with the wider available stage mode
+      // before submitting anything; no context is truncated and no failed upload is replayed.
+      const backendModel = parsed.modelId === CHATGPT_WEB_LUNA_MODEL_ID ? CHATGPT_WEB_LUNA_MODEL_ID : CHATGPT_WEB_MODEL_ID;
+      const stagingEfforts = backendModel === CHATGPT_WEB_LUNA_MODEL_ID ? ["low"] as const
+        : capabilities.proAvailable ? ["max"] as const : ["low", "medium"] as const;
+      const emptyParts = multipart.parts;
+      for (const stagingEffort of stagingEfforts) {
+        multipart.parts = emptyParts;
+        const budgets = multipart.parts.map((payload, index) => {
+          const final = index === multipart.parts.length - 1;
+          const effort = final ? mode.effort : stagingEffort;
+          const limits = resolveChatGptWebTransportLimits(backendModel, effort, capabilities);
+          const tokenLimit = final
+            ? resolveChatGptWebMessageTokenBudget(backendModel, effort, capabilities,
+              imageTokens + skillFileTokens(skillFiles, parsed.modelId))
+            : resolveChatGptWebStagingTokenBudget(backendModel, effort, capabilities);
+          const fixedMessage = final
+            ? formatChatGptWebMultipartCommit(multipart, transactionId)
+            : formatChatGptWebMultipartStage(payload, transactionId, index + 1, multipartParts!).text;
+          const tokens = tokenLimit - estimateTokens(fixedMessage);
+          const chars = (limits.browserComposerCharLimit ?? Infinity) - fixedMessage.length;
+          if (tokens <= 0 || chars <= 0) {
+            throw new ChatGptWebAdapterError(
+              `The Bigger Context ${final ? "final part's instructions and attachments" : "stage wrapper"} exceed the available message budget before any task history is added. Reduce those inputs before retrying.`,
+              { status: 400, errorType: "invalid_request_error", code: "context_length_exceeded", retryable: false },
+            );
+          }
+          return { tokens, chars, tokenLimit, charLimit: limits.browserComposerCharLimit ?? Infinity };
+        });
+        multipart.parts = partitionMultipartContext(records, multipartParts!, budgets);
+        if (stagingEfforts.length > 1 && stagingEffort === "low" && multipart.parts.some((payload, index) => {
+          const final = index === multipart.parts.length - 1;
+          const text = final ? formatChatGptWebMultipartCommit(multipart, transactionId)
+            : formatChatGptWebMultipartStage(payload, transactionId, index + 1, multipartParts!).text;
+          return estimateTokens(text) > budgets[index]!.tokenLimit || text.length > budgets[index]!.charLimit;
+        })) continue;
+        return { text: multipart.commit, images, ...attachments, multipart };
+      }
+      throw new Error("No Bigger Context staging allocation is available");
     }
     const envelopeJson = withoutRetiredTurnHandles(JSON.stringify({ version: 3, system, messages }));
     const text = [
@@ -681,9 +849,13 @@ export function compileChatGptWebPrompt(
       ...manualControlContract,
       ...checkpointContract,
       answerContract,
+      // Context is serialized data, not Markdown prose. A text fence keeps the
+      // composer's link parser from interpreting bracket-heavy task history.
+      "```text",
       "<codex_context_json>",
       envelopeJson,
       "</codex_context_json>",
+      "```",
       ...(omittedMessages > 0 ? [
         "<codex_transport_resume>",
         `${omittedMessages} earlier history items were omitted to fit this compaction request; the supplied history is incomplete.`,

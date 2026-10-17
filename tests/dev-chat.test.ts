@@ -220,7 +220,7 @@ test("an existing DEV chat changes route only when the user explicitly requests 
   });
 });
 
-test("Bigger Context triples the DEV compaction window and fails closed for Luna", async () => {
+test("Bigger Context exposes bounded full-history windows for Sol and Luna", async () => {
   const root = scratch("cgw-dev-bigger-context");
   const config = {
     ...defaultConfig("browser-only"),
@@ -252,13 +252,24 @@ test("Bigger Context triples the DEV compaction window and fails closed for Luna
     contextWindow: 333_579,
   });
   expect(biggerStatus.percent).toBe(Math.round((biggerStatus.inputTokens / 285_000) * 1_000) / 10);
+  for (const [model, contextWindow, autoCompactTokenLimit] of [
+    ["chatgpt-web/gpt-6-sol", 240_000, 220_000],
+    ["chatgpt-web/gpt-6-sol-instant", 111_193, 95_000],
+  ] as const) {
+    const state = bigger.open(model.split("/")[1]!, model).state;
+    expect(bigger.status(state)).toMatchObject({ contextWindow, autoCompactTokenLimit });
+  }
+  const proState = bigger.open("six-pro", "chatgpt-web/gpt-6-pro").state;
+  expect(bigger.status(proState)).toMatchObject({ contextWindow: 336_579, autoCompactTokenLimit: 285_000 });
   const luna = new DevChatDriver({
     ...biggerConfig,
     solAvailable: false,
     extraHighAvailable: false, proAvailable: false,
   }, store, factory, root, { biggerContext: true });
-  expect(() => luna.open("luna-window", "chatgpt-web/luna")).toThrow("unavailable for Luna");
-  expect(() => luna.open("think-window", "chatgpt-web/think")).toThrow("unavailable for Luna");
+  for (const model of ["chatgpt-web/luna", "chatgpt-web/think"] as const) {
+    const state = luna.open(model.split("/")[1]!, model).state;
+    expect(luna.status(state)).toMatchObject({ contextWindow: 84_000, autoCompactTokenLimit: 59_424 });
+  }
   await Promise.all([normal.close(), bigger.close(), luna.close()]);
 });
 
@@ -359,7 +370,7 @@ test("DEV chat fails closed until the launcher-owned MCP tunnel is ready", async
   })).rejects.toThrow("launcher-owned DEV MCP tunnel is not ready");
 });
 
-test("DEV driver uses shared browser methods and its own broker while an unrelated Responses port stays occupied", async () => {
+test("DEV driver supports an injected tool-capable adapter while an unrelated Responses port stays occupied", async () => {
   const root = scratch("cgw-dev-driver");
   const codexConfig = join(root, "codex", "config.toml");
   mkdirSync(join(root, "codex"), { recursive: true });
@@ -371,10 +382,14 @@ test("DEV driver uses shared browser methods and its own broker while an unrelat
   await localBroker.listen();
   const remote = new RemoteTurnBroker(config.brokerSocketPath);
   const stateRoot = join(root, "state");
+  // The official automatic provider intentionally disables local tools in this fork.
+  // Inject tool support only in this driver/broker fixture, not in the production DEV configuration.
+  expect(providerConfig(config).chatgptWeb?.localToolsEnabled).toBe(false);
   const devProvider = (provider: CodexProviderConfig): CodexProviderConfig => ({
     ...provider,
     chatgptWeb: {
       ...provider.chatgptWeb,
+      localToolsEnabled: true,
       brokerSocketPath: config.brokerSocketPath,
       threadEnvironmentStatePath: join(stateRoot, "thread-environments.json"),
       lunaCheckpointStatePath: join(stateRoot, "luna-checkpoints.json"),

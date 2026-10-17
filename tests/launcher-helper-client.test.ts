@@ -32,6 +32,8 @@ test("daemon streams browser lifecycle through the real helper process", async (
       }
       await turn.onSendActivated();
       turn.onSubmitted();
+      turn.onHeartbeat();
+      turn.onGenerationProgress();
       turn.onReasoningSummary("Reading project");
       turn.onReasoningSummary(" files", true);
       turn.onTextDelta("done");
@@ -88,6 +90,8 @@ test("daemon streams browser lifecycle through the real helper process", async (
   const acknowledgedStages: number[] = [];
   let sendActivated = false;
   let submitted = false;
+  let heartbeats = 0;
+  let generationProgress = 0;
   let released = false;
   const client = new LauncherBrowserHelperClient(config);
   try {
@@ -108,6 +112,8 @@ test("daemon streams browser lifecycle through the real helper process", async (
       onMultipartStageAcknowledged: stage => { acknowledgedStages.push(stage); },
       onSendActivated: () => { sendActivated = true; },
       onSubmitted: () => { submitted = true; },
+      onHeartbeat: () => { heartbeats++; },
+      onGenerationProgress: () => { generationProgress++; },
       onReasoningSummary: (text, continuation) => reasoning.push({ text, continuation: continuation === true }),
       onTextDelta: text => deltas.push(text),
       captureLunaCheckpoint: true,
@@ -121,6 +127,8 @@ test("daemon streams browser lifecycle through the real helper process", async (
     expect(deltas).toEqual(["done"]);
     expect(sendActivated).toBe(true);
     expect(submitted).toBe(true);
+    expect(heartbeats).toBe(1);
+    expect(generationProgress).toBe(1);
     expect(acknowledgedStages).toEqual([1, 2, 3, 4, 5]);
     expect(checkpoints).toEqual([{
       answerHash: "a".repeat(64),
@@ -231,7 +239,7 @@ test("accepted compaction retires through the helper as completed without hiding
   }
 });
 
-test("launcher helper protocol preserves multipart context and the compaction flag", async () => {
+test("launcher helper protocol preserves multipart context, broker identity and the compaction flag", async () => {
   const sent: Record<string, unknown>[] = [];
   const client = new LauncherBrowserHelperClient({
     appName: "Codex Native2 DEV",
@@ -283,6 +291,7 @@ test("launcher helper protocol preserves multipart context and the compaction fl
     prepare: async () => ({
       text: "commit",
       images: [],
+      turnToken: "turn_0123456789abcdef0123456789abcdef",
       multipart: { parts: Array.from({ length: 6 }, (_, index) => JSON.stringify({ part: index + 1 })), commit: "commit" },
       trimmedCompactionMessages: 4,
       release() {},
@@ -300,6 +309,7 @@ test("launcher helper protocol preserves multipart context and the compaction fl
     type: "prepared_selected_ack",
     prepared: {
         text: "commit",
+        turnToken: "turn_0123456789abcdef0123456789abcdef",
         multipart: { parts: Array.from({ length: 6 }, (_, index) => JSON.stringify({ part: index + 1 })), commit: "commit" },
         trimmedCompactionMessages: 4,
     },

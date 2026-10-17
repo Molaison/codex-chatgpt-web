@@ -192,10 +192,12 @@ export function bridgeToResponsesSSE(
       const createdAt = Math.floor(Date.now() / 1000);
       let outputIndex = 0;
       const finishedItems: OutputItem[] = [];
+      const finishedRichWidgets: Array<Extract<AdapterEvent, {type: "rich_widget"}>["widget"]> = [];
 
       const responseSnapshot = (status: string, output: OutputItem[], endTurn?: boolean) => ({
         id: responseId, object: "response", created_at: createdAt,
         status, model: modelId, output, usage: null,
+        ...(finishedRichWidgets.length ? { rich_widgets: finishedRichWidgets } : {}),
         ...(endTurn !== undefined ? { end_turn: endTurn } : {}),
       });
 
@@ -444,6 +446,11 @@ export function bridgeToResponsesSSE(
               flushHiddenRawReasoning();
               if (currentToolCall) closeCurrentToolCall();
               flushHiddenReasoningEnvelope();
+              break;
+            }
+            case "rich_widget": {
+              finishedRichWidgets.push(event.widget);
+              emit("response.rich_widget.done", { widget: event.widget });
               break;
             }
             case "text_delta": {

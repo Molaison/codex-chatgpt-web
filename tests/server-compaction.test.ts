@@ -92,10 +92,11 @@ function compactionAdapterFactory(
   };
 }
 
-test("compacts ChatGPT Web v1 through a dedicated read-only browser summarization turn", async () => {
+test.each(["openai-tunnel", "external-http"] as const)("compacts ChatGPT Web v1 through a dedicated read-only browser summarization turn (%s)", async mcpProvider => {
   const providers: CodexProviderConfig[] = [];
   const previousSummary = `${SUMMARY_PREFIX}\nPrevious cumulative checkpoint`;
   const config = defaultConfig("full");
+  config.mcpProvider = mcpProvider;
   const response = await compactRequest(new Request("http://127.0.0.1:17841/v1/responses/compact", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -112,7 +113,7 @@ test("compacts ChatGPT Web v1 through a dedicated read-only browser summarizatio
 
   expect(response.status).toBe(200);
   expect(providers).toHaveLength(1);
-  expect(providers[0]!.chatgptWeb?.localToolsEnabled).toBe(true);
+  expect(providers[0]!.chatgptWeb?.localToolsEnabled).toBe(mcpProvider === "external-http");
   const body = await response.json() as { output: Array<{ role: string; content: Array<{ text: string }> }> };
   expect(body.output.map(item => item.content[0]!.text)).toEqual([
     "First request",
@@ -351,9 +352,10 @@ for (const stream of [false, true]) test(`failed compaction cannot authorize a c
   expect(response.status).toBe(400);
 });
 
-test("returns exactly one native compaction item for a ChatGPT Web v2 request", async () => {
+test.each(["openai-tunnel", "external-http"] as const)("returns exactly one native compaction item for a ChatGPT Web v2 request (%s)", async mcpProvider => {
   const providers: CodexProviderConfig[] = [];
   const config = defaultConfig("full");
+  config.mcpProvider = mcpProvider;
   const response = await responseRequest(new Request("http://127.0.0.1:17841/v1/responses", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -369,7 +371,7 @@ test("returns exactly one native compaction item for a ChatGPT Web v2 request", 
 
   expect(response.status).toBe(200);
   expect(providers).toHaveLength(1);
-  expect(providers[0]!.chatgptWeb?.localToolsEnabled).toBe(true);
+  expect(providers[0]!.chatgptWeb?.localToolsEnabled).toBe(mcpProvider === "external-http");
   const body = await response.json() as {
     status: string;
     output: Array<{ type: string; encrypted_content?: string }>;
@@ -520,6 +522,26 @@ test("Luna rejects a remote-v2 compaction trigger before opening another browser
   expect(adapterStarted).toBeFalse();
   const body = await response.json() as { error: { message: string } };
   expect(body.error.message).toContain("rolling checkpoint");
+});
+
+test("Luna Bigger Context accepts native v1 and v2 compaction", async () => {
+  const config = { ...defaultConfig("browser-only"), solAvailable: false, experimentalBiggerContext: true };
+  for (const v2 of [false, true]) {
+    const input = [{ type: "message", role: "user", content: [{ type: "input_text", text: "Keep the project requirements." }] }];
+    const response = await (v2 ? responseRequest : compactRequest)(new Request("http://127.0.0.1/v1/responses", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "chatgpt-web/luna", stream: false,
+        input: v2 ? [...input, { type: "compaction_trigger" }] : input }),
+    }), config, compactionAdapterFactory());
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    if (v2) {
+      const checkpoint = body.output.find((item: { type: string }) => item.type === "compaction");
+      expect(decodeCompactionSummary(checkpoint.encrypted_content)).toBe(summary);
+    } else {
+      expect(body.output.at(-1).content[0].text).toBe(`${SUMMARY_PREFIX}\n${summary}`);
+    }
+  }
 });
 
 test("rejects Pro-only routed models before opening a browser when the account has no Pro access", async () => {

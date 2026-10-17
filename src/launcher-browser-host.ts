@@ -264,7 +264,7 @@ export async function connectLauncherBrowserHost(
   await assertCdpReady(descriptor, Math.min(timeoutMs, 5_000));
   let browser: Browser;
   try {
-    browser = await chromium.connectOverCDP(descriptor.endpoint, { timeout: timeoutMs });
+    browser = await chromium.connectOverCDP(descriptor.endpoint, { timeout: timeoutMs, noDefaults: true });
   } catch (error) {
     throw new Error(`Could not connect Playwright to the launcher browser: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -281,6 +281,11 @@ export async function connectLauncherBrowserHost(
       surfaceId,
       abortSignal,
     );
+    // Preserve the host's theme and other pages. Only our owned page needs
+    // focus emulation for input while its Electron view is in the background.
+    const inputSession = await context.newCDPSession(page);
+    await inputSession.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+    // The browser connection owns this session; disconnect releases the override.
     return { descriptor, browser, context, page };
   } catch (error) {
     await browser.close().catch(() => {});
@@ -358,6 +363,12 @@ export const LAUNCHER_CAPABILITY_INSPECTION_TIMEOUT_MS = 120_000;
 
 export type LauncherTurnActivity =
   | {
+      phase: "approval";
+      traceId: string;
+      helperPid: number;
+      pending: boolean;
+    }
+  | {
       phase: "usage";
       traceId: string;
       helperPid: number;
@@ -383,6 +394,10 @@ export type LauncherTurnActivity =
       helperPid: number;
       /** Re-establish the launcher's hidden viewport after the caller closes its CDP session. */
       refreshViewport?: boolean;
+      progress?: {
+        stage: "preparing" | "sending" | "chatgpt";
+        activeToolCalls: number;
+      };
     }
   | {
       phase: "end";
@@ -627,7 +642,7 @@ export async function notifyLauncherTurn(
   activity: LauncherTurnActivity,
   timeoutMs = activity.phase === "end"
     ? LAUNCHER_TURN_END_TIMEOUT_MS
-    : activity.phase === "heartbeat"
+    : activity.phase === "heartbeat" || activity.phase === "approval"
       ? LAUNCHER_TURN_HEARTBEAT_TIMEOUT_MS
       : LAUNCHER_TURN_START_TIMEOUT_MS,
   signal?: AbortSignal,
@@ -741,4 +756,66 @@ export async function releaseLauncherRetainedConversation(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * 在已登录的 launcher 浏览器里重新读取一个会话内下载 URL。生成文件的本地缓存过期后
+ * 用它取回字节；只在已打开本站页面时复用该页，否则临时开一个页面并在结束后关闭。
+ */
+export async function fetchLauncherAuthenticatedBytes(
+  descriptorPath: string,
+  url: string,
+  options: { maxBytes: number; timeoutMs?: number },
+): Promise<{ bytes: Uint8Array; mime: string }> {
+  const endpoint = new URL(url);
+  if (endpoint.protocol !== "https:" || endpoint.hostname !== "chatgpt.com" || endpoint.username || endpoint.password) {
+    throw new Error("Only observed ChatGPT download endpoints can be re-read in the launcher browser");
+  }
+  const timeoutMs = options.timeoutMs ?? 60_000;
+  const connection = await connectLauncherBrowserHost(descriptorPath, Math.min(timeoutMs, 30_000));
+  let temporary: Page | undefined;
+  try {
+    let page = connection.context.pages().find(candidate => candidate.url().startsWith("https://chatgpt.com/"));
+    if (!page) {
+      temporary = await connection.context.newPage();
+      await temporary.goto("https://chatgpt.com/", { waitUntil: "domcontentloaded", timeout: timeoutMs });
+      page = temporary;
+    }
+    const captured = await page.evaluate(async ({ href, limit, budget }) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), budget);
+      try {
+        const response = await fetch(href, { credentials: "include", signal: controller.signal });
+        if (!response.ok) throw new Error("Download HTTP " + response.status);
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("Download was empty");
+        const chunks: Uint8Array[] = [];
+        let size = 0;
+        for (;;) {
+          const part = await reader.read();
+          if (part.done) break;
+          size += part.value.byteLength;
+          if (size > limit) { await reader.cancel(); throw new Error("Download exceeds the size limit"); }
+          chunks.push(part.value);
+        }
+        const bytes = new Uint8Array(size);
+        let offset = 0;
+        for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+        let binary = "";
+        for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+        return { base64: btoa(binary), mime: (response.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase() };
+      } finally { clearTimeout(timer); }
+    }, { href: url, limit: options.maxBytes, budget: timeoutMs });
+    const bytes = Buffer.from(captured.base64, "base64");
+    if (bytes.length === 0 || bytes.length > options.maxBytes) throw new Error("Invalid download size");
+    return { bytes, mime: captured.mime };
+  } finally {
+    await temporary?.close().catch(() => {});
+    await browserDisconnect(connection.browser);
+  }
+}
+
+async function browserDisconnect(browser: Browser): Promise<void> {
+  // CDP 连接关闭只断开 Playwright 的传输，不关闭用户正在使用的浏览器。
+  await browser.close().catch(() => {});
 }

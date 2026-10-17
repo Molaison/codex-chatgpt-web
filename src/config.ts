@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { chmodSync, mkdirSync, openSync, closeSync, renameSync, rmSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { chmodSync, mkdirSync, openSync, closeSync, fsyncSync, renameSync, rmSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, resolve, sep, win32 } from "node:path";
 import { tmpdir } from "node:os";
@@ -14,6 +14,7 @@ export type RuntimeMode = "browser-only" | "full";
 export type BrowserHostMode = "managed-chrome" | "launcher";
 export type BrowserInteractionMode = "automatic" | "manual";
 export type SubagentProtocol = "compatibility-v1" | "native";
+export type McpProvider = "openai-tunnel" | "external-http";
 
 /**
  * ChatGPT caches a connector's public MCP contract by connector identity. The direct turn-token
@@ -100,6 +101,8 @@ export interface AppConfig {
   purpose?: "dev-harness";
   releaseVersion: string;
   mode: RuntimeMode;
+  /** Explicit experiment; omission preserves the managed OpenAI tunnel. */
+  mcpProvider?: McpProvider;
   subagentProtocol: SubagentProtocol;
   host: "127.0.0.1";
   port: number;
@@ -114,12 +117,17 @@ export interface AppConfig {
   storageStatePath: string;
   /** Stable profile name used to isolate browser state and retained conversations. */
   accountId?: string;
+  /** Portable saved-chat mappings. Relative paths resolve under the account home. */
+  conversationStoreDirectory?: string;
+  /** Public base URL used for generated-file download links. */
+  downloadBaseUrl?: string;
   brokerSocketPath: string;
   headed: boolean;
   solAvailable: boolean;
   extraHighAvailable?: boolean;
   proAvailable: boolean;
   experimentalBiggerContext: boolean;
+  composerPredictionsEnabled: boolean;
   experimentalSkillAttachments: boolean;
   experimentalFreshConversationPerTurn: boolean;
   useSavedChats: boolean;
@@ -138,6 +146,24 @@ export interface AppConfig {
   tunnel?: TunnelConfig;
   automaticTunnel?: TunnelConfig;
   manualTunnel?: TunnelConfig;
+}
+
+export function usesManagedMcpTunnel(config: Pick<AppConfig, "mode" | "mcpProvider">): boolean {
+  return config.mode === "full" && config.mcpProvider !== "external-http";
+}
+
+export function validateMcpProvider(config: Pick<Partial<AppConfig>,
+  "mcpProvider" | "mode" | "browserHost" | "browserInteractionMode" | "purpose">): void {
+  if (config.mcpProvider !== undefined && config.mcpProvider !== "openai-tunnel"
+    && config.mcpProvider !== "external-http") {
+    throw new Error("MCP provider must be openai-tunnel or external-http");
+  }
+  if (config.mcpProvider === "external-http"
+    && (config.mode !== "full"
+      || (config.browserInteractionMode !== "automatic" && config.browserInteractionMode !== "manual")
+      || config.browserHost !== "launcher" || config.purpose !== undefined)) {
+    throw new Error("external-http requires production Launcher Full mode with automatic or Zero Risk browser interaction");
+  }
 }
 
 export function tunnelConfigForInteractionMode(
@@ -204,7 +230,7 @@ function renameAtomicFile(source: string, destination: string): void {
 export function atomicWriteFile(
   path: string,
   data: string | Uint8Array,
-  { mode = 0o600, protectDirectory = true }: { mode?: number; protectDirectory?: boolean } = {},
+  { mode = 0o600, protectDirectory = true, durable = false }: { mode?: number; protectDirectory?: boolean; durable?: boolean } = {},
 ): void {
   const directory = dirname(path);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -215,6 +241,7 @@ export function atomicWriteFile(
   const fd = openSync(temp, "wx", mode);
   try {
     writeFileSync(fd, data);
+    if (durable) fsyncSync(fd);
     closeSync(fd);
     renameAtomicFile(temp, path);
   } catch (error) {
@@ -257,9 +284,10 @@ export function defaultConfig(mode: RuntimeMode = "browser-only"): AppConfig {
     extraHighAvailable: false,
     proAvailable: false,
     experimentalBiggerContext: false,
+    composerPredictionsEnabled: true,
     experimentalSkillAttachments: false,
     experimentalFreshConversationPerTurn: false,
-    useSavedChats: false,
+    useSavedChats: true,
     zeroRiskProEnabled: false,
     standardConcurrencyLimit: 5,
     proConcurrencyLimit: 2,
@@ -441,6 +469,7 @@ function parseConfig(value: unknown, path: string): AppConfig {
   if (browserInteractionMode === "manual" && parsed.browserHost !== "launcher") {
     throw new Error(`Zero Risk requires the launcher browser host in ${path}`);
   }
+  validateMcpProvider({ ...parsed, browserInteractionMode });
   if (!Number.isInteger(parsed.port) || parsed.port! < 1 || parsed.port! > 65_535) throw new Error(`Invalid port in ${path}`);
   if (!Number.isSafeInteger(parsed.contextWindow) || parsed.contextWindow! <= 0) {
     throw new Error(`Invalid contextWindow in ${path}`);
@@ -449,6 +478,18 @@ function parseConfig(value: unknown, path: string): AppConfig {
   if (parsed.accountId !== undefined
     && (typeof parsed.accountId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(parsed.accountId))) {
     throw new Error(`Invalid accountId in ${path}`);
+  }
+  if (parsed.conversationStoreDirectory !== undefined
+    && (typeof parsed.conversationStoreDirectory !== "string"
+      || !parsed.conversationStoreDirectory.trim() || parsed.conversationStoreDirectory.includes("\0"))) {
+    throw new Error("Invalid conversationStoreDirectory in " + path);
+  }
+  if (parsed.downloadBaseUrl !== undefined) {
+    let url: URL;
+    try { url = new URL(parsed.downloadBaseUrl); } catch { throw new Error("Invalid downloadBaseUrl"); }
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+      throw new Error("Invalid downloadBaseUrl");
+    }
   }
   if (typeof parsed.autoApproveToolCalls !== "boolean") {
     throw new Error(`Invalid autoApproveToolCalls in ${path}`);
@@ -513,7 +554,7 @@ function parseConfig(value: unknown, path: string): AppConfig {
       }
     }
   };
-  if (parsed.mode === "full") {
+  if (usesManagedMcpTunnel(parsed as AppConfig)) {
     validateTunnel(parsed.tunnel, "tunnel");
     if (parsed.automaticTunnel !== undefined) validateTunnel(parsed.automaticTunnel, "automaticTunnel");
     if (parsed.manualTunnel !== undefined) validateTunnel(parsed.manualTunnel, "manualTunnel");
@@ -567,6 +608,10 @@ function parseConfig(value: unknown, path: string): AppConfig {
     throw new Error(`Invalid experimentalSkillAttachments in ${path}`);
   }
   const experimentalSkillAttachments = parsed.experimentalSkillAttachments === true;
+  if (parsed.composerPredictionsEnabled !== undefined && typeof parsed.composerPredictionsEnabled !== "boolean") {
+    throw new Error(`Invalid composerPredictionsEnabled in ${path}`);
+  }
+  const composerPredictionsEnabled = parsed.composerPredictionsEnabled !== false;
   if (parsed.experimentalFreshConversationPerTurn !== undefined
     && typeof parsed.experimentalFreshConversationPerTurn !== "boolean") {
     throw new Error(`Invalid experimentalFreshConversationPerTurn in ${path}`);
@@ -575,7 +620,7 @@ function parseConfig(value: unknown, path: string): AppConfig {
   if (parsed.useSavedChats !== undefined && typeof parsed.useSavedChats !== "boolean") {
     throw new Error(`Invalid useSavedChats in ${path}`);
   }
-  const useSavedChats = parsed.useSavedChats === true;
+  const useSavedChats = parsed.useSavedChats ?? browserInteractionMode !== "manual";
   if (browserInteractionMode === "manual" && experimentalSkillAttachments) {
     throw new Error(`Zero Risk does not support Skills as files in ${path}`);
   }
@@ -600,6 +645,7 @@ function parseConfig(value: unknown, path: string): AppConfig {
     solAvailable,
     proAvailable,
     experimentalBiggerContext,
+    composerPredictionsEnabled,
     experimentalSkillAttachments,
     experimentalFreshConversationPerTurn,
     useSavedChats,
@@ -644,6 +690,11 @@ export function providerConfig(config: AppConfig): CodexProviderConfig {
     noReasoningModels: [],
     chatgptWeb: {
       accountId: config.accountId ?? "default",
+      conversationStoreDirectory: resolve(getConfigDir(), expandUserPath(
+        config.conversationStoreDirectory ?? join("runtime", "conversations"),
+      )),
+      downloadDirectory: join(getConfigDir(), "downloads"),
+      downloadBaseUrl: config.downloadBaseUrl ?? "http://" + config.host + ":" + config.port,
       appName: manual ? config.manualAppName : config.automaticAppName,
       browserInteractionMode: config.browserInteractionMode,
       browserHost: config.browserHost,
@@ -654,16 +705,16 @@ export function providerConfig(config: AppConfig): CodexProviderConfig {
       threadEnvironmentStatePath: join(getConfigDir(), "runtime", "thread-environments.json"),
       lunaCheckpointStatePath: join(getConfigDir(), "runtime", "luna-checkpoints.json"),
       headed: config.headed,
-      // Automatic ChatGPT is a model backend for Codex. Do not attach Codex's local MCP tools to
-      // that browser conversation; Zero Risk keeps its explicit manual control channel.
-      localToolsEnabled: manual && config.mode === "full",
+      // Explicit external HTTP Full mode uses the existing automatic native harness. Preserve
+      // this fork's official-provider behavior and Zero Risk's separate manual control channel.
+      localToolsEnabled: config.mode === "full" && (manual || config.mcpProvider === "external-http"),
       solAvailable: manual ? false : config.solAvailable,
       extraHighAvailable: !manual && config.extraHighAvailable === true,
       proAvailable: manual ? false : config.proAvailable,
       experimentalBiggerContext: manual ? false : config.experimentalBiggerContext,
       experimentalSkillAttachments: manual ? false : config.experimentalSkillAttachments,
       experimentalFreshConversationPerTurn: !manual && config.experimentalFreshConversationPerTurn === true,
-      useSavedChats: config.useSavedChats === true,
+      useSavedChats: config.useSavedChats ?? !manual,
       standardConcurrencyLimit: config.standardConcurrencyLimit,
       proConcurrencyLimit: config.proConcurrencyLimit,
       ...(config.stallTimeoutSec !== undefined ? { stallTimeoutSec: config.stallTimeoutSec } : {}),

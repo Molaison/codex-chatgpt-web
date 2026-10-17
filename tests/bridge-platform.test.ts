@@ -56,3 +56,26 @@ test("Darwin SSE remains decodable through Bun.serve under sustained chunking", 
     await server.stop(true);
   }
 });
+
+
+test("Responses SSE carries inert widget data before the terminal snapshot", async () => {
+  const widget = { version: 1 as const, kind: "cartesian_chart" as const, id: "chart-1",
+    mark: "bar" as const, title: "Activity", xField: "x", yField: "y",
+    points: [{x:"WT", y:1.5}] };
+  async function* events(): AsyncGenerator<AdapterEvent> {
+    yield { type: "text_delta", text: "Results" };
+    yield { type: "rich_widget", widget };
+    yield { type: "done", endTurn: true };
+  }
+  const body = await new Response(bridgeToResponsesSSE(events(), "papers/gpt-6-sol")).text();
+  const records = body.split("\n\n").filter(frame => frame.includes("data: {")).map(frame => {
+    const data = frame.split("\n").find(line => line.startsWith("data: {"))!;
+    return JSON.parse(data.slice(6));
+  });
+  const widgetIndex = records.findIndex(row => row.type === "response.rich_widget.done");
+  const completeIndex = records.findIndex(row => row.type === "response.completed");
+  expect(widgetIndex).toBeGreaterThan(-1);
+  expect(completeIndex).toBeGreaterThan(widgetIndex);
+  expect(records[widgetIndex].widget).toEqual(widget);
+  expect(records[completeIndex].response.rich_widgets).toEqual([widget]);
+});

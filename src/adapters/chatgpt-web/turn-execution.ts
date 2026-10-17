@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { ChatGptChartWidget } from "./rich-widget";
 import type { AdapterEvent, CodexParsedRequest } from "../../types";
 import type { BrokerToolRequest } from "./turn-broker";
 import { ChatGptWebAdapterError, chatGptBrowserTabClosedError, chatGptTurnSupersededError } from "./adapter-error";
@@ -56,10 +57,21 @@ interface TraceWaiter {
 export class ChatGptTraceFeed {
   private readonly queued: ChatGptTraceEvent[] = [];
   private readonly waiters = new Set<TraceWaiter>();
+  private readonly progressObservers = new Set<() => void>();
+
+  observeProgress(observer: () => void): () => void {
+    this.progressObservers.add(observer);
+    return () => { this.progressObservers.delete(observer); };
+  }
+
+  recordProgress(): void {
+    for (const observer of this.progressObservers) observer();
+  }
 
   push(event: ChatGptTraceEvent): void {
     const normalized = event.continuation ? event.text : event.text.trim();
     if (!normalized) return;
+    this.recordProgress();
     const normalizedEvent = { ...event, text: normalized };
     this.queued.push(normalizedEvent);
     const waiter = this.waiters.values().next().value as TraceWaiter | undefined;
@@ -145,6 +157,7 @@ interface ChatGptTurnRuntimeBase {
   physicalSettlement: Promise<void>;
   trace: ChatGptTraceFeed;
   text: ChatGptTextFeed;
+  richWidgets?: ChatGptChartWidget[];
   usageInput?: CodexParsedRequest;
   conversationKey?: string;
   releaseRetainedConversation?: () => Promise<void>;
@@ -283,6 +296,7 @@ export class ChatGptTurnSession {
   private settledPhysical = false;
   private attachedConversationKey: string | undefined;
   private tail: Promise<void> = Promise.resolve();
+  private readonly roundObservers = new Map<string, () => void>();
   private capabilityRetirementScheduled = false;
   private readonly rounds = new Map<string, {
     events: AdapterEvent[];
@@ -323,6 +337,15 @@ export class ChatGptTurnSession {
       })}`);
       return outcome;
     });
+  }
+
+  /** An exact reconnect replaces its stale HTTP observer, never the browser execution. */
+  observeRound(key: string, detach: () => void): () => void {
+    this.roundObservers.get(key)?.();
+    this.roundObservers.set(key, detach);
+    return () => {
+      if (this.roundObservers.get(key) === detach) this.roundObservers.delete(key);
+    };
   }
 
   runExclusive<T>(task: () => Promise<T>): Promise<T> {
@@ -532,8 +555,9 @@ export class ChatGptTurnSessions {
     }
     const active = [...this.entries.values()].filter(session => session.isActive()).length;
     if (active >= MAX_CHATGPT_BROWSER_TABS) {
-      throw new Error(
+      throw new ChatGptWebAdapterError(
         `ChatGPT Web supports at most ${MAX_CHATGPT_BROWSER_TABS} simultaneous browser turns; close or finish a browser tab before starting another`,
+        { status: 429, errorType: "rate_limit_error", code: "concurrency_limit_exceeded", retryable: true },
       );
     }
     if (this.entries.size >= this.maxEntries) throw new Error(`ChatGPT web session registry is full (${this.maxEntries} entries)`);

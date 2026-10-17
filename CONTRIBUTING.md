@@ -26,8 +26,10 @@ work went into it.
 - Keep the project focused on ChatGPT web-backed Codex models. Generic providers and unrelated
   product surfaces are out of scope.
 - Model selection is explicit. Never silently fall back to another model or reasoning level.
-- Full mode exposes local tools only through the active outer Codex registry and official MCP
-  tunnel. Browser-only mode must not create a broker capability or attach an MCP connector.
+- Full mode exposes local tools only through the active outer Codex registry. The official MCP
+  tunnel remains the default. The opt-in [external HTTP experiment](docs/mcp-http-experiment.md)
+  supports production Launcher Full mode (automatic or Zero Risk) with the same broker authorization.
+  Browser-only mode must not create a broker capability or attach an MCP connector.
 - Every available ChatGPT Web effort has the same turn-bound MCP capability in Full mode. Do not
   add effort-specific MCP exclusions.
 - Preserve fail-closed behavior. A selector or protocol failure must return an explicit error, not

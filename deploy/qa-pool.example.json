@@ -1,0 +1,12 @@
+{
+  "host": "127.0.0.1",
+  "port": 17865,
+  "databasePath": "./private/qa-pool/sessions.sqlite",
+  "clients": [
+    { "id": "cpr", "keyFile": "./private/qa-pool/provider.key" }
+  ],
+  "accounts": [
+    { "id": "account-1", "origin": "http://127.0.0.1:17851", "models": ["chatgpt-web/gpt-5.6-sol-instant"] },
+    { "id": "account-2", "origin": "http://127.0.0.1:17852", "models": ["chatgpt-web/gpt-5.6-sol-instant"] }
+  ]
+}

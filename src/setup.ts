@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:net";
 import { join } from "node:path";
-import type { AppConfig, BrowserInteractionMode, RuntimeMode, SubagentProtocol } from "./config";
+import type { AppConfig, BrowserInteractionMode, McpProvider, RuntimeMode, SubagentProtocol } from "./config";
 import {
   currentRuntimeCommand,
   defaultBrokerEndpoint,
@@ -12,6 +12,8 @@ import {
   resolveInteractionConnectorIdentities,
   saveConfig,
   tunnelConfigForInteractionMode,
+  usesManagedMcpTunnel,
+  validateMcpProvider,
 } from "./config";
 import {
   browserLoginStateExists,
@@ -45,6 +47,7 @@ import { VERSION } from "./version";
 export interface SetupOptions {
   connectorNameSuffix?: string;
   mode: RuntimeMode;
+  mcpProvider?: McpProvider;
   browserInteractionMode?: BrowserInteractionMode;
   subagentProtocol?: SubagentProtocol;
   port?: number;
@@ -54,11 +57,13 @@ export interface SetupOptions {
   forceLogin?: boolean;
   autoApproveToolCalls?: boolean;
   experimentalBiggerContext?: boolean;
+  composerPredictionsEnabled?: boolean;
   experimentalSkillAttachments?: boolean;
   experimentalFreshConversationPerTurn?: boolean;
   useSavedChats?: boolean;
   zeroRiskProEnabled?: boolean;
   replaceCodexRoute?: boolean;
+  preserveDisconnectedRoute?: boolean;
   restartService?: boolean;
   acknowledgedUnofficial?: boolean;
   tunnelId?: string;
@@ -129,6 +134,7 @@ function loadExistingConfig(): AppConfig | undefined {
 function meaningfulRuntimeChange(before: AppConfig, after: AppConfig): boolean {
   return JSON.stringify({
     mode: before.mode,
+    mcpProvider: before.mcpProvider,
     subagentProtocol: before.subagentProtocol,
     releaseVersion: before.releaseVersion,
     host: before.host,
@@ -148,6 +154,7 @@ function meaningfulRuntimeChange(before: AppConfig, after: AppConfig): boolean {
     extraHighAvailable: before.extraHighAvailable,
     proAvailable: before.proAvailable,
     experimentalBiggerContext: before.experimentalBiggerContext,
+    composerPredictionsEnabled: before.composerPredictionsEnabled,
     experimentalSkillAttachments: before.experimentalSkillAttachments,
     experimentalFreshConversationPerTurn: before.experimentalFreshConversationPerTurn,
     useSavedChats: before.useSavedChats,
@@ -160,6 +167,7 @@ function meaningfulRuntimeChange(before: AppConfig, after: AppConfig): boolean {
     manualTunnel: before.manualTunnel,
   }) !== JSON.stringify({
     mode: after.mode,
+    mcpProvider: after.mcpProvider,
     subagentProtocol: after.subagentProtocol,
     releaseVersion: after.releaseVersion,
     host: after.host,
@@ -179,6 +187,7 @@ function meaningfulRuntimeChange(before: AppConfig, after: AppConfig): boolean {
     extraHighAvailable: after.extraHighAvailable,
     proAvailable: after.proAvailable,
     experimentalBiggerContext: after.experimentalBiggerContext,
+    composerPredictionsEnabled: after.composerPredictionsEnabled,
     experimentalSkillAttachments: after.experimentalSkillAttachments,
     experimentalFreshConversationPerTurn: after.experimentalFreshConversationPerTurn,
     useSavedChats: after.useSavedChats,
@@ -201,11 +210,27 @@ export function tunnelWorkerRuntimeChanged(before: AppConfig | undefined, after:
     || JSON.stringify(before.tunnel) !== JSON.stringify(after.tunnel);
 }
 
+/**
+ * On Windows, EACCES can indicate a reserved port, an exclusive binding, or a security policy.
+ * The error alone does not identify which one prevented the listener from starting.
+ */
+export function portBindFailureMessage(
+  host: string,
+  port: number,
+  error: NodeJS.ErrnoException,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  const message = `Cannot bind ${host}:${port}: ${error.message}`;
+  if (platform !== "win32" || error.code !== "EACCES") return message;
+  return `${message}. Windows may have reserved this port, another service may hold it exclusively, or security software may be blocking it. `
+    + "See \"Windows: Cannot bind the local port (EACCES)\" in TROUBLESHOOTING.md";
+}
+
 async function assertPortAvailable(host: string, port: number): Promise<void> {
   await new Promise<void>((resolveAvailable, rejectAvailable) => {
     const server = createServer();
     server.unref();
-    server.once("error", error => rejectAvailable(new Error(`Cannot bind ${host}:${port}: ${error.message}`)));
+    server.once("error", error => rejectAvailable(new Error(portBindFailureMessage(host, port, error))));
     server.listen(port, host, () => server.close(error => error ? rejectAvailable(error) : resolveAvailable()));
   });
 }
@@ -255,6 +280,7 @@ function baseConfig(
 ): AppConfig {
   const config = existing ? structuredClone(existing) : defaultConfig(options.mode);
   config.mode = options.mode;
+  if (options.mcpProvider !== undefined) config.mcpProvider = options.mcpProvider;
   if (options.browserInteractionMode) config.browserInteractionMode = options.browserInteractionMode;
   Object.assign(config, resolveInteractionConnectorIdentities(
     config.browserInteractionMode,
@@ -279,6 +305,9 @@ function baseConfig(
     delete config.browserHostDescriptorPath;
   }
   if (options.autoApproveToolCalls !== undefined) config.autoApproveToolCalls = options.autoApproveToolCalls;
+  if (options.composerPredictionsEnabled !== undefined) {
+    config.composerPredictionsEnabled = options.composerPredictionsEnabled;
+  }
   if (options.experimentalSkillAttachments !== undefined) {
     config.experimentalSkillAttachments = options.experimentalSkillAttachments;
   }
@@ -320,6 +349,15 @@ function baseConfig(
     config.experimentalBiggerContext = false;
     config.experimentalSkillAttachments = false;
   }
+  validateMcpProvider({ ...config, ...(profile === "development" ? { purpose: DEV_CONFIG_PURPOSE } : {}) });
+  if (config.mcpProvider === "external-http") {
+    if (options.tunnelId !== undefined || options.runtimeKeyFile !== undefined || options.runtimeKeyValue !== undefined) {
+      throw new Error("external-http cannot be combined with OpenAI tunnel credentials");
+    }
+    if (existing && existing.browserHost !== "launcher") {
+      throw new Error("external-http cannot migrate a terminal-managed runtime; use the Launcher first");
+    }
+  }
   if (options.acknowledgedUnofficial) config.acknowledgedUnofficialAt = new Date().toISOString();
   if (!config.acknowledgedUnofficialAt) {
     throw new Error("Setup requires explicit acknowledgement that this is unofficial browser automation. Pass --acknowledge-unofficial.");
@@ -338,14 +376,23 @@ async function inspectLauncherCapabilities(
     refreshAccountCapabilities,
     config.browserInteractionMode,
   );
+  if (!detectCapabilities) {
+    // Updating the local runtime or its settings does not require a live web session.
+    // Only initial setup and an explicit model refresh inspect the account.
+    return {
+      solAvailable: existing!.solAvailable,
+      extraHighAvailable: existing!.extraHighAvailable === true,
+      proAvailable: existing!.proAvailable,
+    };
+  }
   const inspected = await inspectLauncherBrowserHost(config.browserHostDescriptorPath!, {
-    detectCapabilities,
+    detectCapabilities: true,
     expectedProfile,
   });
   return {
-    solAvailable: detectCapabilities ? inspected.solAvailable === true : existing!.solAvailable,
-    extraHighAvailable: detectCapabilities ? inspected.extraHighAvailable === true : existing!.extraHighAvailable === true,
-    proAvailable: detectCapabilities ? inspected.proAvailable === true : existing!.proAvailable,
+    solAvailable: inspected.solAvailable === true,
+    extraHighAvailable: inspected.extraHighAvailable === true,
+    proAvailable: inspected.proAvailable === true,
   };
 }
 
@@ -356,6 +403,9 @@ async function configureTunnel(config: AppConfig, existing: AppConfig | undefine
     delete config.manualTunnel;
     return;
   }
+  // The caller explicitly manages HTTP and its proxy. Preserve saved official credentials for
+  // an explicit later switch, but never install, start, or inspect their runtime here.
+  if (!usesManagedMcpTunnel(config)) return;
   const interactionMode = config.browserInteractionMode;
   const legacyTunnel = existing?.mode === "full"
     && !existing.automaticTunnel
@@ -456,9 +506,20 @@ function prepareSetup(options: SetupOptions): PreparedSetup {
   return { existing, config, launcherOwned };
 }
 
+function assertExternalMcpServicesStopped(config: AppConfig, beforeService?: ReturnType<typeof getServiceStatus>): void {
+  if (config.mcpProvider !== "external-http") return;
+  const background = beforeService ?? getServiceStatus();
+  const previousTunnelService = getTunnelServiceStatus();
+  if (background.installed || background.loaded
+    || previousTunnelService.installed || previousTunnelService.loaded) {
+    throw new Error("external-http requires legacy background and tunnel services to be removed through the Launcher first");
+  }
+}
+
 export function preflightSetup(options: SetupOptions): void {
   const { existing, config } = prepareSetup(options);
-  if (config.mode === "full") {
+  assertExternalMcpServicesStopped(config);
+  if (usesManagedMcpTunnel(config)) {
     const saved = existing?.mode === "full"
       ? tunnelConfigForInteractionMode(existing, config.browserInteractionMode)
       : undefined;
@@ -502,6 +563,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
   const refreshTunnelWorker = tunnelWorkerRuntimeChanged(existing, config);
   if (existing && options.restartService) config.controlToken = randomBytes(32).toString("base64url");
   const beforeService = getServiceStatus();
+  assertExternalMcpServicesStopped(config, beforeService);
   if (launcherOwned && (beforeService.installed || beforeService.loaded)) {
     if (!existing) {
       throw new Error("A legacy background service exists without a verifiable configuration; refusing automatic migration");
@@ -599,12 +661,12 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
   }
 
   let tunnelReady: boolean | null = null;
-  if (config.mode === "browser-only" && existing?.mode === "full") {
+  if (config.mode === "browser-only" && existing && usesManagedMcpTunnel(existing)) {
     const previousTunnelService = getTunnelServiceStatus();
     if (previousTunnelService.installed || previousTunnelService.loaded) await uninstallTunnelService();
     stopTunnel(existing);
   }
-  if (config.mode === "full") {
+  if (usesManagedMcpTunnel(config)) {
     const profilePath = join(config.tunnel!.profileDir, `${config.tunnel!.profileName}.yaml`);
     const tunnelService = getTunnelServiceStatus();
     const needsProfile = !existsSync(profilePath);
@@ -640,6 +702,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
   if (!migratingTerminalRuntime) removeLegacyRuntimeArtifacts(config);
   installCodexIntegration(config, {
     replaceExistingRoute: options.replaceCodexRoute,
+    preserveDisconnectedRoute: options.preserveDisconnectedRoute,
   });
 
   return {
@@ -682,6 +745,7 @@ export async function setupDevProfile(options: SetupOptions): Promise<DevProfile
     config.extraHighAvailable = capabilities.solAvailable && capabilities.extraHighAvailable;
     config.proAvailable = capabilities.solAvailable && capabilities.proAvailable;
   }
+
 
   await configureTunnel(config, existing, options);
   // DEV uses the same supervisor-owned startup after this configuration is committed.

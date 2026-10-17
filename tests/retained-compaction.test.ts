@@ -27,6 +27,7 @@ import {
   createChatGptWebAdapter,
 } from "../src/adapters/chatgpt-web/index";
 import { SUMMARY_PREFIX } from "../src/responses/compaction";
+import { CHATGPT_COMPACTION_PROMPT_JSON_BYTE_BUDGET, chatGptPromptJsonBytes } from "../src/adapters/chatgpt-web/prompt";
 import {
   ChatGptTextFeed,
   ChatGptTraceFeed,
@@ -219,10 +220,12 @@ test("active compaction delivers the current result and converts every later MCP
       arguments: { cmd: "pwd" },
     });
     const [request] = await broker.nextToolBatch(token);
+    let progressEvents = 0;
     broker.requestCompaction(token, {
       content: [{ type: "text", text: "compact now" }],
       isError: true,
-    });
+    }, () => { progressEvents++; });
+    expect(progressEvents).toBe(0);
     broker.completeTool(token, request!.callId, {
       content: [{ type: "text", text: "current result" }],
     });
@@ -238,6 +241,7 @@ test("active compaction delivers the current result and converts every later MCP
       content: [{ type: "text", text: "compact now" }],
       isError: true,
     });
+    expect(progressEvents).toBe(1);
   } finally {
     await broker.close();
     rmSync(root, { recursive: true, force: true });
@@ -288,9 +292,10 @@ test("active compaction drains an MCP call already queued without an outer Codex
   }
 });
 
-test("a completed retained agent returns an exact checkpoint and its browser is physically retired", async () => {
+test.each(["5.6", "6"] as const)("a retained %s checkpoint preserves model selection and physically retires its browser", async family => {
   expect(MAX_COMPACTION_HANDOFF_TIMEOUT_MS).toBe(5 * 60_000);
-  const sourceRequest = request(false);
+  const sourceRequest = { ...request(false), _chatgptModelFamily: family };
+  const compactRequest = { ...request(true), _chatgptModelFamily: family };
   const conversationKey = chatGptConversationKey(sourceRequest, "provider")!;
   const source = new ChatGptTurnSession({
     mode: "read-only",
@@ -336,7 +341,7 @@ test("a completed retained agent returns an exact checkpoint and its browser is 
 
   await expect(requestRetainedCompactionHandoff(
     worker as never,
-    request(true),
+    compactRequest,
     source,
     broker,
     { localToolsEnabled: true, solAvailable: true, extraHighAvailable: true, proAvailable: true },
@@ -344,8 +349,10 @@ test("a completed retained agent returns an exact checkpoint and its browser is 
     undefined,
     60 * 60_000,
   )).resolves.toBe("Retained agent checkpoint");
+  expect(captured?.modelFamily).toBe(family);
   expect(captured?.conversationKey).toBe(conversationKey);
   expect(captured?.requireRetainedConversation).toBeTrue();
+  expect(captured?.compaction).toBeTrue();
   expect(captured?.nativeConnector).toBeTrue();
   expect(captured?.capabilities.localToolsEnabled).toBeFalse();
   expect(browserRetired).toBeTrue();
@@ -1260,7 +1267,12 @@ test("a compact HTTP observer can reconnect without sending a second retained-ch
   }
 });
 
-test.each([false, true])("structured compact rebuilds canonical context when its retained source is absent (Bigger Context=%s)", async experimentalBiggerContext => {
+test.each([
+  { name: "plain QA", experimentalBiggerContext: false, oversized: "none" },
+  { name: "QA with legacy Bigger Context enabled", experimentalBiggerContext: true, oversized: "none" },
+  { name: "QA trims oversized older history", experimentalBiggerContext: true, oversized: "history" },
+  { name: "QA rejects oversized final question", experimentalBiggerContext: true, oversized: "final" },
+])("structured compact rebuilds canonical context when its retained source is absent ($name)", async ({ experimentalBiggerContext, oversized }) => {
   const root = mkdtempSync(join(shortSocketTempRoot(), "cgw-missing-retained-compact-"));
   const provider: CodexProviderConfig = {
     adapter: "chatgpt-web",
@@ -1278,27 +1290,44 @@ test.each([false, true])("structured compact rebuilds canonical context when its
   const worker = ChatGptBrowserWorker.forProvider(provider);
   const originalRun = worker.run.bind(worker);
   let browserStarts = 0;
+  let submittedPrompts = 0;
   (worker as unknown as { run: (turn: BrowserTurn) => Promise<string> }).run = async turn => {
     browserStarts += 1;
     expect(turn.requireRetainedConversation).toBeUndefined();
     expect(turn.conversationKey).toBeUndefined();
     expect(turn.compaction).toBeTrue();
+    expect(turn.capabilities.localToolsEnabled).toBeFalse();
     const prepared = await turn.prepare();
-    const contextText = prepared.multipart?.parts.join("\n") ?? prepared.text;
-    expect(contextText).toContain("Original task");
-    expect(contextText).toContain("Continue with the next step");
-    if (experimentalBiggerContext) {
-      expect(prepared.multipart!.parts).toHaveLength(6);
-      expect(prepared.trimmedCompactionMessages).toBeUndefined();
-      const lastRecord = prepared.multipart!.parts.flatMap(part => JSON.parse(part).records).at(-1);
-      expect(lastRecord.message.content).toBe(compact.context.messages.at(-1)!.content);
+    try {
+      expect(prepared.multipart).toBeUndefined();
+      expect(prepared.text).toContain("Original task");
+      expect(prepared.text).toContain("Continue with the next step");
+      expect(prepared.text).toContain(compact.context.messages.at(-1)!.content as string);
+      expect(prepared.text).not.toMatch(/INTERNAL_RUNTIME_|codex_context_json|codex_multipart|Codex Native|<environment_context>/);
+      expect(chatGptPromptJsonBytes(prepared.text)).toBeLessThanOrEqual(CHATGPT_COMPACTION_PROMPT_JSON_BYTE_BUDGET);
+      if (oversized === "history") {
+        expect(prepared.trimmedCompactionMessages).toBe(1);
+        expect(prepared.text).not.toContain("OLDER_HISTORY_SENTINEL");
+      } else {
+        expect(prepared.trimmedCompactionMessages).toBeUndefined();
+      }
+      submittedPrompts += 1;
+      return "Fallback checkpoint from canonical conversation context";
+    } finally {
+      prepared.release();
     }
-    prepared.release();
-    return "Fallback checkpoint from canonical Codex context";
   };
   const compact = request(true);
+  compact.context.systemPrompt = ["INTERNAL_RUNTIME_SYSTEM"];
+  compact.context.messages.unshift(
+    { role: "developer", content: "INTERNAL_RUNTIME_DEVELOPER", timestamp: 0 },
+    { role: "user", origin: "codex_skill", content: "INTERNAL_RUNTIME_SKILL", timestamp: 0 },
+    { role: "user", content: "<environment_context><cwd>/private</cwd><codex_dev_mode>All outer tool effects are explicitly simulated.</codex_dev_mode></environment_context>", timestamp: 0 },
+  );
+  if (oversized === "history") compact.context.messages.unshift({ role: "user", content: "OLDER_HISTORY_SENTINEL" + "x".repeat(160_000), timestamp: 0 });
+  if (oversized === "final") compact.context.messages.at(-1)!.content += "x".repeat(160_000);
+  const originalContext = structuredClone(compact.context);
   const events: AdapterEvent[] = [];
-  if (experimentalBiggerContext) compact.context.messages.at(-1)!.content += "x".repeat(160_000);
   try {
     await createChatGptWebAdapter(provider).runTurn!(
       compact,
@@ -1306,8 +1335,16 @@ test.each([false, true])("structured compact rebuilds canonical context when its
       event => events.push(event),
     );
     expect(browserStarts).toBe(1);
+    expect(compact.context).toEqual(originalContext);
+    if (oversized === "final") {
+      expect(submittedPrompts).toBe(0);
+      expect(events.filter(event => event.type === "text_delta" || event.type === "done")).toEqual([]);
+      expect(events.at(-1)).toMatchObject({ type: "error", status: 400, errorType: "invalid_request_error", code: "context_length_exceeded", retryable: false });
+      return;
+    }
+    expect(submittedPrompts).toBe(1);
     expect(events.some(event => event.type === "text_delta"
-      && event.text.includes("Fallback checkpoint from canonical Codex context"))).toBeTrue();
+      && event.text.includes("Fallback checkpoint from canonical conversation context"))).toBeTrue();
     expect(events.some(event => event.type === "text_delta"
       && event.text.includes("CODEX_LATEST_USER_PROMPT_JSON"))).toBeTrue();
     expect(events.at(-1)).toMatchObject({ type: "done", stopReason: "stop", endTurn: true });
@@ -1680,6 +1717,126 @@ test("a disappeared retained source cannot leave its fresh compaction rebuild pa
     (worker as unknown as { run: (turn: BrowserTurn) => Promise<string> }).run = originalRun;
     chatGptTurnSessions.clear();
     await TurnBroker.forSocket(provider.chatgptWeb!.brokerSocketPath!).close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("finishing the previous response does not consume the retained checkpoint's time budget", async () => {
+  const root = mkdtempSync(join(shortSocketTempRoot(), "cgw-retained-phases-"));
+  const provider: CodexProviderConfig = {
+    adapter: "chatgpt-web", baseUrl: `browser://retained-phases-${root}`,
+    chatgptWeb: { browserHost: "launcher", browserHostDescriptorPath: join(root, "launcher.json"),
+      brokerSocketPath: defaultBrokerEndpoint(root), localToolsEnabled: true,
+      solAvailable: true, extraHighAvailable: true, proAvailable: true, turnTimeoutMs: 40 },
+  };
+  const sourceRequest = request(false);
+  const namespace = chatGptWebExecutionNamespace(provider);
+  let finishSource!: (text: string) => void;
+  const browser = new Promise<string>(resolve => { finishSource = resolve; });
+  chatGptTurnSessions.getOrCreate(`${namespace}:${chatGptTurnExecutionKey(sourceRequest)}`, () => ({
+    mode: "read-only", browser, physicalSettlement: browser.then(() => {}),
+    trace: new ChatGptTraceFeed(), text: new ChatGptTextFeed(), usageInput: sourceRequest,
+    conversationKey: chatGptConversationKey(sourceRequest, namespace), cancel: () => finishSource("cancelled"),
+  }));
+  const worker = ChatGptBrowserWorker.forProvider(provider);
+  const originalRun = worker.run;
+  const broker = TurnBroker.forSocket(provider.chatgptWeb!.brokerSocketPath!);
+  await broker.listen();
+  worker.run = async turn => {
+    mock.timers.tick(25);
+    expect(turn.abortSignal?.aborted).toBeFalse();
+    const prepared = await turn.prepareResume!();
+    const binding = controlBinding(prepared.text);
+    prepared.release();
+    await callTurnBroker(provider.chatgptWeb!.brokerSocketPath!, {
+      method: "submit_compaction_handoff", token: binding.token,
+      handoffId: binding.handoffId, summary: "Checkpoint after previous response settled",
+    });
+    return "Checkpoint submitted";
+  };
+  const events: AdapterEvent[] = [];
+  mock.timers.enable({ apis: ["setTimeout"] });
+  let run: Promise<void> | undefined;
+  try {
+    run = createChatGptWebAdapter(provider).runTurn!(request(true), { headers: new Headers() }, event => events.push(event));
+    await new Promise<void>(resolve => setImmediate(resolve));
+    mock.timers.tick(25);
+    finishSource("Previous response finished");
+    await run;
+    expect(events.at(-1)).toMatchObject({ type: "done", endTurn: true });
+    expect(events.some(event => event.type === "text_delta" && event.text.includes("Checkpoint after previous"))).toBeTrue();
+  } finally {
+    finishSource("cleanup");
+    await run;
+    mock.timers.reset();
+    worker.run = originalRun;
+    chatGptTurnSessions.clear();
+    await broker.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test.each([false, true])("compaction source progress renews waiting, but silent source still expires (%s)", async live => {
+  const root = mkdtempSync(join(shortSocketTempRoot(), "cgw-retained-progress-"));
+  const provider: CodexProviderConfig = {
+    adapter: "chatgpt-web", baseUrl: `browser://retained-phases-${root}`,
+    chatgptWeb: { browserHost: "launcher", browserHostDescriptorPath: join(root, "launcher.json"),
+      brokerSocketPath: defaultBrokerEndpoint(root), localToolsEnabled: true,
+      solAvailable: true, extraHighAvailable: true, proAvailable: true, turnTimeoutMs: 40 },
+  };
+  const sourceRequest = request(false);
+  const namespace = chatGptWebExecutionNamespace(provider);
+  let finishSource!: (text: string) => void;
+  const browser = new Promise<string>(resolve => { finishSource = resolve; });
+  const sourceTrace = new ChatGptTraceFeed();
+  chatGptTurnSessions.getOrCreate(`${namespace}:${chatGptTurnExecutionKey(sourceRequest)}`, () => ({
+    mode: "read-only", browser, physicalSettlement: browser.then(() => {}),
+    trace: sourceTrace, text: new ChatGptTextFeed(), usageInput: sourceRequest,
+    conversationKey: chatGptConversationKey(sourceRequest, namespace), cancel: () => finishSource("cancelled"),
+  }));
+  const worker = ChatGptBrowserWorker.forProvider(provider);
+  const originalRun = worker.run;
+  const broker = TurnBroker.forSocket(provider.chatgptWeb!.brokerSocketPath!);
+  await broker.listen();
+  worker.run = async turn => {
+    mock.timers.tick(25);
+    expect(turn.abortSignal?.aborted).toBeFalse();
+    const prepared = await turn.prepareResume!();
+    const binding = controlBinding(prepared.text);
+    prepared.release();
+    await callTurnBroker(provider.chatgptWeb!.brokerSocketPath!, {
+      method: "submit_compaction_handoff", token: binding.token,
+      handoffId: binding.handoffId, summary: "Checkpoint after previous response settled",
+    });
+    return "Checkpoint submitted";
+  };
+  const events: AdapterEvent[] = [];
+  mock.timers.enable({ apis: ["setTimeout"] });
+  let run: Promise<void> | undefined;
+  try {
+    run = createChatGptWebAdapter(provider).runTurn!(request(true), { headers: new Headers() }, event => events.push(event));
+    await new Promise<void>(resolve => setImmediate(resolve));
+    for (let step = 0; step < 4; step++) {
+      mock.timers.tick(25);
+      if (live) sourceTrace.recordProgress();
+      await new Promise<void>(resolve => setImmediate(resolve));
+    }
+    if (live) {
+      expect(events.some(event => event.type === "error")).toBeFalse();
+      finishSource("Previous response finished");
+      await run;
+      expect(events.at(-1)).toMatchObject({ type: "done", endTurn: true });
+    } else {
+      await run;
+      expect(events.at(-1)).toMatchObject({ type: "error", code: "compaction_handoff_timeout" });
+    }
+  } finally {
+    finishSource("cleanup");
+    await run;
+    mock.timers.reset();
+    worker.run = originalRun;
+    chatGptTurnSessions.clear();
+    await broker.close();
     rmSync(root, { recursive: true, force: true });
   }
 });

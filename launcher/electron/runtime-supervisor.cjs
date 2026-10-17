@@ -12,6 +12,7 @@ const {
 } = require("./process-tree.cjs");
 const { runtimeInvocation } = require("./runtime-command.cjs");
 const { windowsTrustEnvironment } = require("./windows-trust.cjs");
+const { tunnelConnectionEnvironment } = require("./tunnel-proxy.cjs");
 
 const RESTART_WINDOW_MS = 60_000;
 const MAX_RESTARTS_PER_WINDOW = 5;
@@ -188,6 +189,10 @@ function managedTunnelConnectArgs(config, invocation) {
   ];
 }
 
+function usesManagedMcpTunnel(config) {
+  return config?.mode === "full" && config.mcpProvider !== "external-http";
+}
+
 function validateConfig(config, descriptorPath, platform = process.platform, launcherProfile = "production") {
   if (!config || config.version !== 3) throw new Error("Runtime configuration is missing or unsupported");
   if (launcherProfile === "development") {
@@ -206,6 +211,16 @@ function validateConfig(config, descriptorPath, platform = process.platform, lau
   }
   if (config.browserInteractionMode !== "automatic" && config.browserInteractionMode !== "manual") {
     throw new Error("Runtime configuration has an invalid browser interaction mode");
+  }
+  if (config.mcpProvider !== undefined && config.mcpProvider !== "openai-tunnel"
+    && config.mcpProvider !== "external-http") {
+    throw new Error("MCP provider must be openai-tunnel or external-http");
+  }
+  if (config.mcpProvider === "external-http"
+    && (launcherProfile !== "production" || config.purpose !== undefined
+      || config.mode !== "full"
+      || config.browserHost !== "launcher")) {
+    throw new Error("external-http requires production Launcher Full mode with automatic or Zero Risk browser interaction");
   }
   if (config.subagentProtocol !== undefined
     && config.subagentProtocol !== "compatibility-v1"
@@ -301,7 +316,7 @@ function validateConfig(config, descriptorPath, platform = process.platform, lau
       }
     }
   };
-  if (config.mode === "full") {
+  if (usesManagedMcpTunnel(config)) {
     validateTunnel(config.tunnel, "tunnel");
     if (config.automaticTunnel !== undefined) validateTunnel(config.automaticTunnel, "automaticTunnel");
     if (config.manualTunnel !== undefined) validateTunnel(config.manualTunnel, "manualTunnel");
@@ -335,6 +350,7 @@ class RuntimeSupervisor {
     publishOperation,
     runtimeInvocationFactory = runtimeInvocation,
     onConfigRead,
+    resolveProxy,
   }) {
     this.app = app;
     this.logger = logger;
@@ -350,6 +366,7 @@ class RuntimeSupervisor {
     this.publishOperation = publishOperation;
     this.runtimeInvocationFactory = runtimeInvocationFactory;
     this.onConfigRead = onConfigRead;
+    this.resolveProxy = resolveProxy;
     this.configPath = path.join(coreHome, "config.json");
     this.statePath = path.join(coreHome, "runtime", "launcher-supervisor.json");
     this.daemon = null;
@@ -986,7 +1003,7 @@ class RuntimeSupervisor {
   }
 
   async startTunnel(config, operationName = "runtime-start", { forceRestart = false } = {}) {
-    if (config.mode !== "full") return;
+    if (!usesManagedMcpTunnel(config)) return;
     this.assertTunnelClientReady(config);
     // Every acquisition binds diagnostics to this runtime, including adoption of an existing alias.
     this.tunnelHealthBaseUrl = null;
@@ -1048,6 +1065,7 @@ class RuntimeSupervisor {
   }
 
   async runTunnelConnectCommand(config) {
+    const connection = await tunnelConnectionEnvironment({ resolveProxy: this.resolveProxy });
     const contract = config.browserInteractionMode === "manual" ? "safe" : "native";
     const invocation = this.runtimeCommand([
       "mcp",
@@ -1058,9 +1076,10 @@ class RuntimeSupervisor {
     ]);
     return await this.runTunnelCommand(
       config,
-      managedTunnelConnectArgs(config, invocation),
+      [...managedTunnelConnectArgs(config, invocation), "--control-plane-base-url", connection.baseURL],
       TUNNEL_START_TIMEOUT_MS,
       "Tunnel managed startup",
+      connection.env,
     );
   }
 
@@ -1348,11 +1367,11 @@ class RuntimeSupervisor {
     else if (tunnelOnly) throw new Error("DEV runtime cannot recover a Responses daemon");
     else await this.startDaemon(config);
     if (!tunnelOnly && !this.daemon) throw new Error("Responses proxy is unavailable after runtime recovery");
-    if (config.mode === "full" && !this.tunnel) {
+    if (usesManagedMcpTunnel(config) && !this.tunnel) {
       throw new Error("Tunnel runtime is unavailable after runtime recovery");
     }
     if (!tunnelOnly) await this.waitForProxy(config);
-    if (config.mode === "full") {
+    if (usesManagedMcpTunnel(config)) {
       await this.waitForTunnel(config, TUNNEL_START_TIMEOUT_MS, "runtime-recovery");
     }
     if (!this.tryWriteState("ready")) {
@@ -1427,7 +1446,7 @@ class RuntimeSupervisor {
 
   async ownedRuntimeReady(config) {
     if (this.launcherProfile === "development") {
-      return config.mode !== "full" || Boolean(this.tunnel && await this.tunnelHealth(config));
+      return !usesManagedMcpTunnel(config) || Boolean(this.tunnel && await this.tunnelHealth(config));
     }
     const daemon = this.daemon;
     if (!daemon
@@ -1437,7 +1456,7 @@ class RuntimeSupervisor {
       || !await this.proxyHealth(config, 2_000, daemon.pid, true)) {
       return false;
     }
-    if (config.mode !== "full") return true;
+    if (!usesManagedMcpTunnel(config)) return true;
     return Boolean(this.tunnel && await this.tunnelHealth(config));
   }
 
@@ -1570,7 +1589,7 @@ class RuntimeSupervisor {
   }
 
   async adoptConfiguredTunnelForStop(config) {
-    if (config.mode !== "full" || this.tunnel) return;
+    if (!usesManagedMcpTunnel(config) || this.tunnel) return;
     const health = await this.waitForKnownTunnelStatus(config);
     if (tunnelRuntimeStopped(health)) {
       return;
@@ -1603,12 +1622,16 @@ class RuntimeSupervisor {
     );
   }
 
-  async runTunnelCommand(config, args, timeoutMs, label) {
+  async runTunnelCommand(config, args, timeoutMs, label, env = process.env) {
+    if (config.mcpProvider === "external-http") {
+      throw new Error("This runtime does not own a managed OpenAI tunnel");
+    }
     const tunnel = config.tunnel;
     if (!tunnel) throw new Error("launcher-owned tunnel has no runtime configuration");
     return await new Promise((resolve, reject) => {
       const child = spawn(tunnel.binaryPath, args, {
         cwd: tunnel.profileDir,
+        env,
         detached: DETACH_OWNED_CHILD,
         stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true,
@@ -1743,7 +1766,7 @@ class RuntimeSupervisor {
       );
     }
     let managedTunnelRunning = false;
-    if (config.mode === "full") {
+    if (usesManagedMcpTunnel(config)) {
       const tunnelHealth = await this.waitForKnownTunnelStatus(config);
       managedTunnelRunning = !tunnelRuntimeStopped(tunnelHealth);
       if (managedTunnelRunning
@@ -1760,8 +1783,8 @@ class RuntimeSupervisor {
       }
     } else if (processRunning(state.tunnelPid)) {
       throw new Error(
-        `The stale tunnel PID ${state.tunnelPid} is still alive but browser-only configuration`
-        + " has no tunnel identity with which to verify it",
+        `The stale tunnel PID ${state.tunnelPid} is still alive but the configuration`
+        + " has no managed tunnel identity with which to verify it",
       );
     }
     if (!daemonRunning && !managedTunnelRunning) {
@@ -1967,7 +1990,7 @@ class RuntimeSupervisor {
         ? await this.proxyHealth(config)
         : false;
       const runtimeMayBeLive = healthyRuntime || runtimeOwnershipMayBeLive(ownershipState);
-      if (config?.mode === "full"
+      if (usesManagedMcpTunnel(config)
         && !this.tunnel
         && (runtimeMayBeLive || !ownershipState)) {
         await this.adoptConfiguredTunnelForStop(config);
@@ -2012,7 +2035,7 @@ class RuntimeSupervisor {
       return { status: "stopped" };
     } catch (error) {
       const compensationErrors = [];
-      if (tunnelStopped && config?.mode === "full" && !this.tunnel) {
+      if (tunnelStopped && usesManagedMcpTunnel(config) && !this.tunnel) {
         try {
           await this.startTunnel(config);
         } catch (caught) {

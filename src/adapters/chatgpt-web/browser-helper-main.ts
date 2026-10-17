@@ -15,6 +15,11 @@ interface RunMessage {
   type: "run";
   id: string;
   config: {
+    accountId?: string;
+    conversationStoreDirectory?: string;
+    imageOutputDirectory?: string;
+    downloadDirectory?: string;
+    downloadBaseUrl?: string;
     appName: string;
     browserHostDescriptorPath: string;
     browserDiagnosticsPath?: string;
@@ -27,6 +32,9 @@ interface RunMessage {
   turn: {
     traceId: string;
     modelId: string;
+    project?: BrowserTurn["project"];
+    sessionMode?: BrowserTurn["sessionMode"];
+    deferTextUntilComplete?: BrowserTurn["deferTextUntilComplete"];
     reasoning?: string;
     modelFamily?: "5.6" | "6";
     proModel?: boolean;
@@ -195,6 +203,11 @@ async function run(message: RunMessage): Promise<void> {
     chatgptWeb: {
       appName: message.config.appName,
       browserHost: "launcher",
+      accountId: message.config.accountId,
+      conversationStoreDirectory: message.config.conversationStoreDirectory,
+      imageOutputDirectory: message.config.imageOutputDirectory,
+      downloadDirectory: message.config.downloadDirectory,
+      downloadBaseUrl: message.config.downloadBaseUrl,
       browserHostDescriptorPath: message.config.browserHostDescriptorPath,
       browserDiagnosticsPath: message.config.browserDiagnosticsPath,
       turnTimeoutMs: message.config.turnTimeoutMs,
@@ -224,6 +237,9 @@ async function run(message: RunMessage): Promise<void> {
   const turn: BrowserTurn = {
     traceId: message.turn.traceId,
     modelId: message.turn.modelId,
+    ...(message.turn.project ? { project: message.turn.project } : {}),
+    ...(message.turn.sessionMode ? { sessionMode: message.turn.sessionMode } : {}),
+    ...(message.turn.deferTextUntilComplete ? { deferTextUntilComplete: true } : {}),
     reasoning: message.turn.reasoning,
     ...(message.turn.modelFamily ? { modelFamily: message.turn.modelFamily } : {}),
     ...(message.turn.proModel ? { proModel: true } : {}),
@@ -268,6 +284,7 @@ async function run(message: RunMessage): Promise<void> {
       },
     } : {}),
     onHeartbeat: () => writeProtocol({ type: "event", id: message.id, event: "heartbeat" }),
+    onGenerationProgress: () => writeProtocol({ type: "event", id: message.id, event: "generation_progress" }),
     onPreparedSelected: reused => {
       if (!writeProtocol({ type: "event", id: message.id, event: "prepared_selected", reused })) {
         throw new Error("Browser helper could not request prompt selection");
@@ -304,6 +321,7 @@ async function run(message: RunMessage): Promise<void> {
     }),
     onCommentary: (text, continuation) => writeProtocol({ type: "event", id: message.id, event: "commentary", text, ...(continuation ? { continuation: true } : {}) }),
     onTextDelta: text => writeProtocol({ type: "event", id: message.id, event: "text", text }),
+    onRichWidgets: widgets => { if (widgets.length) writeProtocol({ type: "event", id: message.id, event: "rich_widgets", widgets }); },
     ...(message.turn.captureLunaCheckpoint ? {
       captureLunaCheckpoint: true,
       onLunaCheckpoint: captured => writeProtocol({

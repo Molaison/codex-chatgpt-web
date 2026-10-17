@@ -6,6 +6,7 @@ import { notifyLauncherTurn, readLauncherBrowserHostDescriptor } from "../../lau
 import { ChatGptCompactionHandoffAccepted, ChatGptWebAdapterError } from "./adapter-error";
 import type { CompiledChatGptWebPrompt } from "./prompt";
 import type { BrowserTurn, ResolvedBrowserConfig } from "./browser-worker";
+import type { ChatGptChartWidget } from "./rich-widget";
 import {
   parseChatGptLunaCheckpoint,
   type ChatGptLunaCheckpoint,
@@ -25,7 +26,8 @@ interface PendingTurn {
 
 type HelperMessage =
   | { type: "ready"; features?: string[] }
-  | { type: "event"; id: string; event: "heartbeat" | "send_activated" | "submitted" | "reasoning" | "commentary" | "text"; text?: string; continuation?: boolean }
+  | { type: "event"; id: string; event: "heartbeat" | "generation_progress" | "send_activated" | "submitted" | "reasoning" | "commentary" | "text"; text?: string; continuation?: boolean }
+  | { type: "event"; id: string; event: "rich_widgets"; widgets: ChatGptChartWidget[] }
   | { type: "event"; id: string; event: "tool_batch_observed"; revision: number }
   | { type: "event"; id: string; event: "multipart_stage_acknowledged"; stageIndex: number }
   | { type: "event"; id: string; event: "completion_fence_begin"; requestId: number }
@@ -94,6 +96,14 @@ function parseHelperMessage(line: string): HelperMessage {
         revision: message.revision as number,
       };
     }
+    if (event === "rich_widgets") {
+      if (!Array.isArray(message.widgets) || message.widgets.length > 4
+        || message.widgets.some(widget => !widget || widget.kind !== "cartesian_chart" || widget.version !== 1
+          || !Array.isArray(widget.points) || widget.points.length > 300)) {
+        throw new Error("Launcher browser helper rich widgets are invalid");
+      }
+      return { type: "event", id: message.id, event, widgets: message.widgets as ChatGptChartWidget[] };
+    }
     if (event === "luna_checkpoint") {
       if (typeof message.answerHash !== "string" || !/^[a-f0-9]{64}$/.test(message.answerHash)) {
         throw new Error("Launcher browser helper Luna checkpoint answer hash is invalid");
@@ -114,7 +124,7 @@ function parseHelperMessage(line: string): HelperMessage {
       }
       return { type: "event", id: message.id, event, reused: message.reused };
     }
-    if (!["heartbeat", "send_activated", "submitted", "reasoning", "commentary", "text"].includes(String(event))) {
+    if (!["heartbeat", "generation_progress", "send_activated", "submitted", "reasoning", "commentary", "text"].includes(String(event))) {
       throw new Error("Launcher browser helper emitted an unknown event");
     }
     if (text !== undefined && typeof text !== "string") {
@@ -126,7 +136,7 @@ function parseHelperMessage(line: string): HelperMessage {
     return {
       type: "event",
       id: message.id,
-      event: event as "heartbeat" | "send_activated" | "submitted" | "reasoning" | "commentary" | "text",
+      event: event as "heartbeat" | "generation_progress" | "send_activated" | "submitted" | "reasoning" | "commentary" | "text",
       ...(text !== undefined ? { text: text as string } : {}),
       ...(continuation !== undefined ? { continuation: continuation as boolean } : {}),
     };
@@ -280,10 +290,18 @@ export class LauncherBrowserHelperClient {
             useSavedChats: this.config.useSavedChats,
             standardConcurrencyLimit: this.config.standardConcurrencyLimit,
             proConcurrencyLimit: this.config.proConcurrencyLimit,
+            accountId: this.config.accountId,
+            conversationStoreDirectory: this.config.conversationStoreDirectory,
+            imageOutputDirectory: this.config.imageOutputDirectory,
+            downloadDirectory: this.config.downloadDirectory,
+            downloadBaseUrl: this.config.downloadBaseUrl,
           },
           turn: {
             traceId: turn.traceId,
             modelId: turn.modelId,
+            ...(turn.project ? { project: turn.project } : {}),
+            ...(turn.sessionMode ? { sessionMode: turn.sessionMode } : {}),
+            ...(turn.deferTextUntilComplete ? { deferTextUntilComplete: true } : {}),
             reasoning: turn.reasoning,
             ...(turn.modelFamily ? { modelFamily: turn.modelFamily } : {}),
             ...(turn.proModel ? { proModel: true } : {}),
@@ -419,6 +437,7 @@ export class LauncherBrowserHelperClient {
     if (!pending) return;
     if (message.type === "event") {
       if (message.event === "heartbeat") pending.turn.onHeartbeat?.();
+      else if (message.event === "generation_progress") pending.turn.onGenerationProgress?.();
       else if (message.event === "tool_batch_observed") {
         const progress = pending.turn.externalProgress;
         if (!progress) {
@@ -534,6 +553,8 @@ export class LauncherBrowserHelperClient {
               prepared: {
                 text: prepared.text,
                 images: prepared.images,
+                ...(prepared.files ? { files: prepared.files } : {}),
+                ...(prepared.turnToken ? { turnToken: prepared.turnToken } : {}),
                 ...(prepared.skillFiles ? { skillFiles: prepared.skillFiles } : {}),
                 ...(prepared.multipart ? { multipart: prepared.multipart } : {}),
                 ...(prepared.trimmedCompactionMessages !== undefined
@@ -560,6 +581,7 @@ export class LauncherBrowserHelperClient {
       }
       else if (message.event === "commentary" && message.text) pending.turn.onCommentary?.(message.text, message.continuation === true);
       else if (message.event === "text" && message.text) pending.turn.onTextDelta(message.text);
+      else if (message.event === "rich_widgets") pending.turn.onRichWidgets?.(message.widgets);
       return;
     }
     if (message.type === "result") {
