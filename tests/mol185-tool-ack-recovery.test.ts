@@ -151,7 +151,9 @@ test("MOL185: remote completion recovers a dropped ACK without re-executing the 
     // Crucial evidence: the tool result has already crossed the authoritative broker
     // boundary even though the owner has not received its completion ACK.
     expect(await f.invocation).toEqual(expectedResult);
-    await expect(completion).resolves.toBeUndefined();
+    // Bun 1.4 Windows: an async matcher can re-enter libuv while its socket callback
+    // is still active (oven-sh/bun#44025). Await normally, then keep the same assertion.
+    expect(await completion).toBeUndefined();
     expect(acknowledgements).toBe(2);
     expect(f.resultsResolved()).toBe(1);
     expect(serializationCount).toBe(1);
