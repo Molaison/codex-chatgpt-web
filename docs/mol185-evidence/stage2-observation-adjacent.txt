@@ -1,0 +1,283 @@
+Command: env -u CHATGPT_DOM_TEST_BROWSER bun test tests/browser-live-progress.test.ts tests/compaction-browser-recovery.test.ts
+Real-browser tests intentionally skipped; all execution here is CPU/mock-only.
+
+bun test v1.4.0 (34cbb9a40)
+
+tests/browser-live-progress.test.ts:
+(pass) the largest response diagnostics survive the launcher's safe-log string limit intact [4.27ms]
+(pass) a browser security challenge is scoped to the owned submission and never retried automatically [1.03ms]
+(skip) response diagnostics retain wrapper ownership but omit private text, classes and identifiers
+(pass) owned SSE keeps a quiet response alive until requestfinished, without declaring completion [1.56ms]
+(pass) owned SSE keeps a quiet response alive until requestfailed, without declaring completion [7.64ms]
+(pass) a blocked Enter command is handled once: accepted [252.83ms]
+(pass) a blocked Enter command is handled once: late-accepted [264.30ms]
+(pass) a blocked Enter command is handled once: cancelled [261.06ms]
+(pass) a blocked Enter command is handled once: press-failed [251.00ms]
+(skip) real Enter accepts MCP while the renderer is still busy handling the key
+(pass) same-page recovery owns a disconnected pending Enter: accepted [266.94ms]
+(pass) same-page recovery owns a disconnected pending Enter: recovery-failed [268.55ms]
+(pass) same-page recovery owns a disconnected pending Enter: cancelled [265.98ms]
+
+tests/compaction-browser-recovery.test.ts:
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=01-browser-page-acquired failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture opened (transport=multipart-6, maxMessageChars=1285, estimatedInputTokens=10657, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser turn compaction_recovery_fixture multipart staging effort=low maxStageMessageTokens=380 maxStageChars=1096
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=02-effort-selection-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":1,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":380}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=03-multipart-stage-1-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=03-multipart-stage-1-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 1/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=04-multipart-stage-1-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=04-multipart-stage-1-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":2,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":368}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=05-multipart-stage-2-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=05-multipart-stage-2-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 2/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=06-multipart-stage-2-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=06-multipart-stage-2-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":3,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":371}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=07-multipart-stage-3-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=07-multipart-stage-3-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 3/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=08-multipart-stage-3-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=08-multipart-stage-3-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":4,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":356}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=09-multipart-stage-4-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=09-multipart-stage-4-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 4/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=10-multipart-stage-4-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=10-multipart-stage-4-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":5,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":365}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=11-multipart-stage-5-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=11-multipart-stage-5-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 5/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=12-multipart-stage-5-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=12-multipart-stage-5-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=13-final-part-effort-selected failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=13-final-part-effort-selected path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=14-prompt-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=14-prompt-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=15-file-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=15-file-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture submission accepted evidence=user_turn
+[chatgpt-web] browser turn compaction_recovery_fixture failed: fixture reached final response observation
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=16-turn-failed failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=16-turn-failed path=<test-owned-temporary-path>
+(pass) browser turns preserve recovery, ordering and final-only tools (owned=%s, tools=%s, multipart=%s, size rejected=%s, retained=%s, SSE=%s, GPT-6 Pro=%s) [176.06ms]
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=01-browser-page-acquired failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture opened (transport=multipart-6, maxMessageChars=1285, estimatedInputTokens=10657, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser turn compaction_recovery_fixture multipart staging effort=low maxStageMessageTokens=380 maxStageChars=1096
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=02-effort-selection-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":1,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":380}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=03-multipart-stage-1-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=03-multipart-stage-1-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 1/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=04-multipart-stage-1-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=04-multipart-stage-1-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":2,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":368}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=05-multipart-stage-2-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=05-multipart-stage-2-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 2/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=06-multipart-stage-2-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=06-multipart-stage-2-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":3,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":371}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=07-multipart-stage-3-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=07-multipart-stage-3-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 3/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=08-multipart-stage-3-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=08-multipart-stage-3-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":4,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":356}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=09-multipart-stage-4-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=09-multipart-stage-4-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 4/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=10-multipart-stage-4-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=10-multipart-stage-4-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":5,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":365}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=11-multipart-stage-5-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=11-multipart-stage-5-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 5/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=12-multipart-stage-5-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=12-multipart-stage-5-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=13-final-part-effort-selected failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=13-final-part-effort-selected path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=14-prompt-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=14-prompt-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=15-file-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=15-file-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture submission accepted evidence=user_turn
+[chatgpt-web] browser turn compaction_recovery_fixture failed: fixture reached final response observation
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=16-turn-failed failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=16-turn-failed path=<test-owned-temporary-path>
+(pass) browser turns preserve recovery, ordering and final-only tools (owned=%s, tools=%s, multipart=%s, size rejected=%s, retained=%s, SSE=%s, GPT-6 Pro=%s) [8.80ms]
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=01-browser-page-acquired failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture opened (transport=multipart-6, maxMessageChars=1285, estimatedInputTokens=10657, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser turn compaction_recovery_fixture multipart staging effort=low maxStageMessageTokens=386 maxStageChars=1096
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=02-effort-selection-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":1,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":386}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=03-multipart-stage-1-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=03-multipart-stage-1-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 1/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=04-multipart-stage-1-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=04-multipart-stage-1-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":2,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":374}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=05-multipart-stage-2-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=05-multipart-stage-2-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 2/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=06-multipart-stage-2-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=06-multipart-stage-2-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":3,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":377}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=07-multipart-stage-3-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=07-multipart-stage-3-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 3/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=08-multipart-stage-3-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=08-multipart-stage-3-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":4,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":362}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=09-multipart-stage-4-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=09-multipart-stage-4-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 4/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=10-multipart-stage-4-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=10-multipart-stage-4-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":5,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":371}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=11-multipart-stage-5-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=11-multipart-stage-5-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 5/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=12-multipart-stage-5-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=12-multipart-stage-5-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=13-final-part-effort-selected failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=13-final-part-effort-selected path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=14-prompt-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=14-prompt-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=15-file-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=15-file-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture submission accepted evidence=user_turn
+[chatgpt-web] browser turn compaction_recovery_fixture failed: fixture reached final response observation
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=16-turn-failed failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=16-turn-failed path=<test-owned-temporary-path>
+(pass) browser turns preserve recovery, ordering and final-only tools (owned=%s, tools=%s, multipart=%s, size rejected=%s, retained=%s, SSE=%s, GPT-6 Pro=%s) [7.68ms]
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=01-browser-page-acquired failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture opened (transport=inline, maxMessageChars=21, estimatedInputTokens=8197, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=02-effort-selection-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=03-prompt-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=03-prompt-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=04-file-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=04-file-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture submission accepted evidence=user_turn
+[chatgpt-web] browser turn compaction_recovery_fixture failed: The ChatGPT browser tab was closed, so the Codex turn was cancelled.
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=05-turn-failed failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=05-turn-failed path=<test-owned-temporary-path>
+(pass) browser turns preserve recovery, ordering and final-only tools (owned=%s, tools=%s, multipart=%s, size rejected=%s, retained=%s, SSE=%s, GPT-6 Pro=%s) [1.21ms]
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=01-browser-page-acquired failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture opened (transport=multipart-6, maxMessageChars=1285, estimatedInputTokens=10657, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser turn compaction_recovery_fixture multipart staging effort=low maxStageMessageTokens=374 maxStageChars=1096
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=02-effort-selection-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":1,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":374}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=03-multipart-stage-1-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=03-multipart-stage-1-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 1/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=04-multipart-stage-1-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=04-multipart-stage-1-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":2,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":362}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=05-multipart-stage-2-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=05-multipart-stage-2-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 2/6 submission accepted evidence=user_turn
+[chatgpt-web] browser turn compaction_recovery_fixture failed: ChatGPT rejected this message because it exceeds the selected mode's input-size limit. Compact the task before retrying.
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=06-turn-failed failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=06-turn-failed path=<test-owned-temporary-path>
+(pass) browser turns preserve recovery, ordering and final-only tools (owned=%s, tools=%s, multipart=%s, size rejected=%s, retained=%s, SSE=%s, GPT-6 Pro=%s) [8.47ms]
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=01-browser-page-acquired failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture opened (transport=inline, maxMessageChars=21, estimatedInputTokens=8197, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=02-effort-selection-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=03-prompt-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=03-prompt-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=04-file-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=04-file-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture submission accepted evidence=user_turn
+[chatgpt-web] browser turn compaction_recovery_fixture failed: fixture reached final response observation
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=05-turn-failed failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=05-turn-failed path=<test-owned-temporary-path>
+(pass) browser turns preserve recovery, ordering and final-only tools (owned=%s, tools=%s, multipart=%s, size rejected=%s, retained=%s, SSE=%s, GPT-6 Pro=%s) [2.75ms]
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=01-browser-page-acquired failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture opened (transport=multipart-6, maxMessageChars=1285, estimatedInputTokens=10657, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser turn compaction_recovery_fixture multipart staging effort=low maxStageMessageTokens=380 maxStageChars=1096
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=02-effort-selection-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":1,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":380}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=03-multipart-stage-1-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=03-multipart-stage-1-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 1/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=04-multipart-stage-1-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=04-multipart-stage-1-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":2,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":368}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=05-multipart-stage-2-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=05-multipart-stage-2-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 2/6 submission accepted evidence=user_turn
+[chatgpt-web] browser turn compaction_recovery_fixture failed: ChatGPT rejected this message because it exceeds the selected mode's input-size limit. Compact the task before retrying.
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=06-turn-failed failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=06-turn-failed path=<test-owned-temporary-path>
+(pass) browser turns preserve recovery, ordering and final-only tools (owned=%s, tools=%s, multipart=%s, size rejected=%s, retained=%s, SSE=%s, GPT-6 Pro=%s) [8.10ms]
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=01-browser-page-acquired failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture opened (transport=multipart-6, maxMessageChars=1285, estimatedInputTokens=10657, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser turn compaction_recovery_fixture multipart staging effort=low maxStageMessageTokens=383 maxStageChars=1096
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=02-effort-selection-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":1,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":383}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=03-multipart-stage-1-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=03-multipart-stage-1-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 1/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=04-multipart-stage-1-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=04-multipart-stage-1-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":2,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":371}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=05-multipart-stage-2-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=05-multipart-stage-2-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 2/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=06-multipart-stage-2-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=06-multipart-stage-2-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":3,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":374}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=07-multipart-stage-3-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=07-multipart-stage-3-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 3/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=08-multipart-stage-3-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=08-multipart-stage-3-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":4,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":359}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=09-multipart-stage-4-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=09-multipart-stage-4-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 4/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=10-multipart-stage-4-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=10-multipart-stage-4-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] multipart_stage_prepared {"traceId":"compaction_recovery_fixture","part":5,"total":6,"effort":"low","messageChars":1096,"estimatedMessageTokens":368}
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=11-multipart-stage-5-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=11-multipart-stage-5-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture multipart part 5/6 submission accepted evidence=user_turn
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=12-multipart-stage-5-acknowledged failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=12-multipart-stage-5-acknowledged path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=13-final-part-effort-selected failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=13-final-part-effort-selected path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=14-prompt-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=14-prompt-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=15-file-attachment-complete failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=15-file-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn compaction_recovery_fixture submission accepted evidence=user_turn
+[chatgpt-web] browser turn compaction_recovery_fixture failed: fixture reached final response observation
+[chatgpt-web] browser diagnostic partial capture trace=compaction_recovery_fixture checkpoint=16-turn-failed failures=responseStructure
+[chatgpt-web] browser diagnostic trace=compaction_recovery_fixture checkpoint=16-turn-failed path=<test-owned-temporary-path>
+(pass) browser turns preserve recovery, ordering and final-only tools (owned=%s, tools=%s, multipart=%s, size rejected=%s, retained=%s, SSE=%s, GPT-6 Pro=%s) [6.98ms]
+
+ 19 pass
+ 2 skip
+ 0 fail
+ 358 expect() calls
+Ran 21 tests across 2 files. [2.66s]

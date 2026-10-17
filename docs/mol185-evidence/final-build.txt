@@ -1,0 +1,24 @@
+5c692e86ef083cfd24d04acad776346fecf002cb649baa5845025b2c5eced388  deploy/cpr-provider.mjs
+636f37ef9eabb4af1779f99d10339d12f0052d220ff4a6f75774ebdace339438  src/bridge.ts
+f03372cca1d8ca2f354224280fdc4cdcf8f8b687218eb1896f40d5d0c2ea375a  src/adapters/chatgpt-web/index.ts
+a7fed2e625a56d59bb7c12fa92596bc998e5f5b99e28f79879efcdd5cc030791  tests/chatgpt-web-harness.test.ts
+2054f86994df800297fba52a7302f8f6e3957cb16a97104874562890cd2029b6  tests/cpr-provider-transport.test.mjs
+414df5463269d3a1433ea98caab88efb86c1289eebe2100486a718ea2e4e1d8f  tests/mol185-json-terminal.test.ts
+9dbe141b099aa4a84c029f735ad6141d7e88ef2559ea83dbe67bdae7e93f7b8d  tests/mol185-submission-retry.test.ts
+$ bun x --no-install --bun tsc --noEmit
+$ bun run --cwd launcher build
+$ bun run typecheck && bun run build:renderer
+$ tsc --noEmit
+$ vite build
+vite v6.4.3 building for production...
+transforming...
+✓ 442 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                     0.72 kB │ gzip:   0.42 kB
+dist/assets/mcp-create-tunnel-Ct8dodf9.mp4        715.64 kB
+dist/assets/mcp-connect-connector-D6ufVfWb.mp4  1,839.21 kB
+dist/assets/index-D6FawXKA.css                     55.44 kB │ gzip:  10.24 kB
+dist/assets/index-B2eH4piB.js                     492.34 kB │ gzip: 156.52 kB
+✓ built in 1.55s
+/workspace/shared/mol185-evidence/final-runtime

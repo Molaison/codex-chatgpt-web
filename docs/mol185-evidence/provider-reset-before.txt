@@ -1,0 +1,68 @@
+{"mode":"qa","listenerTransport":"test-only-loopback-tcp; AF_UNIX unverified","failed":{"outcome":"timeout","status":200,"body":"data: {\"type\":\"response.created\",\"response\":{\"id\":\"fault\",\"model\":\"test-model\"}}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"partial"},"healthy":{"outcome":"end","status":200,"body":"data: {\"type\":\"response.created\",\"response\":{\"id\":\"sibling\",\"model\":\"test-model\"}}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\ndata: [DONE]\n\n"},"subsequent":{"outcome":"end","status":200,"body":"data: {\"type\":\"response.created\",\"response\":{\"id\":\"after\",\"model\":\"test-model\"}}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\ndata: [DONE]\n\n"},"calls":["fault","sibling","after"],"exitCode":null,"stderr":""}
+✖ qa: partial SSE upstream reset terminates only that response without replay (2102.924804ms)
+{"mode":"full","listenerTransport":"test-only-loopback-tcp; AF_UNIX unverified","failed":{"outcome":"timeout","status":200,"body":"data: {\"type\":\"response.created\",\"response\":{\"id\":\"fault\",\"model\":\"test-model-tools\"}}\n\nevent: response.output_text.delta\n"},"healthy":{"outcome":"end","status":200,"body":"data: {\"type\":\"response.created\",\"response\":{\"id\":\"sibling\",\"model\":\"test-model-tools\"}}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\ndata: [DONE]\n\n"},"subsequent":{"outcome":"end","status":200,"body":"data: {\"type\":\"response.created\",\"response\":{\"id\":\"after\",\"model\":\"test-model-tools\"}}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\ndata: [DONE]\n\n"},"calls":["fault","sibling","after"],"exitCode":null,"stderr":""}
+✖ full: partial SSE upstream reset terminates only that response without replay (2093.342191ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4303.785794
+
+✖ failing tests:
+
+test at tests/cpr-provider-transport.test.mjs:48:3
+✖ qa: partial SSE upstream reset terminates only that response without replay (2102.924804ms)
+  AssertionError [ERR_ASSERTION]: {"mode":"qa","listenerTransport":"test-only-loopback-tcp; AF_UNIX unverified","failed":{"outcome":"timeout","status":200,"body":"data: {\"type\":\"response.created\",\"response\":{\"id\":\"fault\",\"model\":\"test-model\"}}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"partial"},"healthy":{"outcome":"end","status":200,"body":"data: {\"type\":\"response.created\",\"response\":{\"id\":\"sibling\",\"model\":\"test-model\"}}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\ndata: [DONE]\n\n"},"subsequent":{"outcome":"end","status":200,"body":"data: {\"type\":\"response.created\",\"response\":{\"id\":\"after\",\"model\":\"test-model\"}}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\ndata: [DONE]\n\n"},"calls":["fault","sibling","after"],"exitCode":null,"stderr":""}
+  + actual - expected
+  
+    {
+      exactlyOnce: true,
+  +   failedClosed: false,
+  -   failedClosed: true,
+      noFakeCompletion: true,
+      providerAlive: true,
+      siblingCompleted: true,
+      subsequentCompleted: true
+    }
+  
+      at TestContext.<anonymous> (file:///workspace/shared/codex-chatgpt-web-bop/tests/cpr-provider-transport.test.mjs:117:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { providerAlive: true, failedClosed: false, noFakeCompletion: true, siblingCompleted: true, subsequentCompleted: true, exactlyOnce: true },
+    expected: { providerAlive: true, failedClosed: true, noFakeCompletion: true, siblingCompleted: true, subsequentCompleted: true, exactlyOnce: true },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/cpr-provider-transport.test.mjs:48:3
+✖ full: partial SSE upstream reset terminates only that response without replay (2093.342191ms)
+  AssertionError [ERR_ASSERTION]: {"mode":"full","listenerTransport":"test-only-loopback-tcp; AF_UNIX unverified","failed":{"outcome":"timeout","status":200,"body":"data: {\"type\":\"response.created\",\"response\":{\"id\":\"fault\",\"model\":\"test-model-tools\"}}\n\nevent: response.output_text.delta\n"},"healthy":{"outcome":"end","status":200,"body":"data: {\"type\":\"response.created\",\"response\":{\"id\":\"sibling\",\"model\":\"test-model-tools\"}}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\ndata: [DONE]\n\n"},"subsequent":{"outcome":"end","status":200,"body":"data: {\"type\":\"response.created\",\"response\":{\"id\":\"after\",\"model\":\"test-model-tools\"}}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\ndata: [DONE]\n\n"},"calls":["fault","sibling","after"],"exitCode":null,"stderr":""}
+  + actual - expected
+  
+    {
+      exactlyOnce: true,
+  +   failedClosed: false,
+  -   failedClosed: true,
+      noFakeCompletion: true,
+      providerAlive: true,
+      siblingCompleted: true,
+      subsequentCompleted: true
+    }
+  
+      at TestContext.<anonymous> (file:///workspace/shared/codex-chatgpt-web-bop/tests/cpr-provider-transport.test.mjs:117:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { providerAlive: true, failedClosed: false, noFakeCompletion: true, siblingCompleted: true, subsequentCompleted: true, exactlyOnce: true },
+    expected: { providerAlive: true, failedClosed: true, noFakeCompletion: true, siblingCompleted: true, subsequentCompleted: true, exactlyOnce: true },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

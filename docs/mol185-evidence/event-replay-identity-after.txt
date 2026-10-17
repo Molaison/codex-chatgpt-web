@@ -1,0 +1,22 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/mol185-event-replay-identity.test.ts:
+[chatgpt-web] browser_settled {"traceId":"7510912deca7","outcome":"final","compaction":false,"submission":"accepted"}
+MOL185_ROUND_REPLAY {"mutation":"identical","settlement":"in-flight","starts":1,"sends":1,"text":"Retained prefix. Recovered suffix."}
+(pass) MOL-185 identical SSE reconnect recovers the complete in-flight response [141.59ms]
+[chatgpt-web] browser_settled {"traceId":"f06c8e881426","outcome":"final","compaction":false,"submission":"accepted"}
+MOL185_ROUND_REPLAY {"mutation":"identical","settlement":"offline-completed","starts":1,"sends":1,"text":"Retained prefix. Recovered suffix."}
+(pass) MOL-185 identical SSE reconnect recovers the complete offline-completed response [4.25ms]
+[chatgpt-web] browser_settled {"traceId":"803f5920741a","outcome":"final","compaction":false,"submission":"accepted"}
+MOL185_ROUND_REPLAY {"mutation":"message-property-order","settlement":"in-flight","starts":1,"sends":1,"text":"Retained prefix. Recovered suffix."}
+(pass) MOL-185 message-property-order SSE reconnect recovers the complete in-flight response [6.49ms]
+[chatgpt-web] browser_settled {"traceId":"4ea83963c015","outcome":"final","compaction":false,"submission":"accepted"}
+MOL185_ROUND_REPLAY {"mutation":"message-property-order","settlement":"offline-completed","starts":1,"sends":1,"text":"Retained prefix. Recovered suffix."}
+(pass) MOL-185 message-property-order SSE reconnect recovers the complete offline-completed response [4.02ms]
+(pass) MOL-185 round identity treats JSON object properties as unordered without mutating input [4.06ms]
+(pass) MOL-185 round identity retains array order, exact strings, values, and native identity [2.22ms]
+
+ 6 pass
+ 0 fail
+ 48 expect() calls
+Ran 6 tests across 1 file. [830.00ms]

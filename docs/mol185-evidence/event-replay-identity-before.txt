@@ -1,0 +1,61 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/mol185-event-replay-identity.test.ts:
+[chatgpt-web] browser_settled {"traceId":"c73e318e6b6e","outcome":"final","compaction":false,"submission":"accepted"}
+MOL185_ROUND_REPLAY {"mutation":"identical","settlement":"in-flight","starts":1,"sends":1,"text":"Retained prefix. Recovered suffix."}
+(pass) MOL-185 identical SSE reconnect recovers the complete in-flight response [144.30ms]
+[chatgpt-web] browser_settled {"traceId":"c0fdec1b169b","outcome":"final","compaction":false,"submission":"accepted"}
+MOL185_ROUND_REPLAY {"mutation":"identical","settlement":"offline-completed","starts":1,"sends":1,"text":"Retained prefix. Recovered suffix."}
+(pass) MOL-185 identical SSE reconnect recovers the complete offline-completed response [4.34ms]
+[chatgpt-web] browser_settled {"traceId":"ed60109a4e64","outcome":"final","compaction":false,"submission":"accepted"}
+MOL185_ROUND_REPLAY {"mutation":"message-property-order","settlement":"in-flight","starts":1,"sends":1,"text":"Recovered suffix."}
+107 |         const text = events.filter(event => event.type === "response.output_text.delta")
+108 |           .map(event => event.delta).join("");
+109 |         console.info("MOL185_ROUND_REPLAY", JSON.stringify({ mutation, settlement, starts, sends, text }));
+110 |         expect(starts).toBe(1);
+111 |         expect(sends).toBe(1);
+112 |         expect(text).toBe("Retained prefix. Recovered suffix.");
+                           ^
+error: expect(received).toBe(expected)
+
+Expected: "Retained prefix. Recovered suffix."
+Received: "Recovered suffix."
+
+      at <anonymous> (/workspace/shared/codex-chatgpt-web-bop/tests/mol185-event-replay-identity.test.ts:112:22)
+(fail) MOL-185 message-property-order SSE reconnect recovers the complete in-flight response [10.63ms]
+[chatgpt-web] browser_settled {"traceId":"296e0a8e8dc9","outcome":"final","compaction":false,"submission":"accepted"}
+MOL185_ROUND_REPLAY {"mutation":"message-property-order","settlement":"offline-completed","starts":1,"sends":1,"text":"Recovered suffix."}
+107 |         const text = events.filter(event => event.type === "response.output_text.delta")
+108 |           .map(event => event.delta).join("");
+109 |         console.info("MOL185_ROUND_REPLAY", JSON.stringify({ mutation, settlement, starts, sends, text }));
+110 |         expect(starts).toBe(1);
+111 |         expect(sends).toBe(1);
+112 |         expect(text).toBe("Retained prefix. Recovered suffix.");
+                           ^
+error: expect(received).toBe(expected)
+
+Expected: "Retained prefix. Recovered suffix."
+Received: "Recovered suffix."
+
+      at <anonymous> (/workspace/shared/codex-chatgpt-web-bop/tests/mol185-event-replay-identity.test.ts:112:22)
+(fail) MOL-185 message-property-order SSE reconnect recovers the complete offline-completed response [4.29ms]
+127 | 
+128 | test("MOL-185 round identity treats JSON object properties as unordered without mutating input", () => {
+129 |   const first = body();
+130 |   const second = reorderedMessage(first);
+131 |   const before = JSON.stringify(second);
+132 |   expect(chatGptTurnRoundKey(parseRequest(first))).toBe(chatGptTurnRoundKey(parseRequest(second)));
+                                                         ^
+error: expect(received).toBe(expected)
+
+Expected: "60ce59e911486e4b8907ccd215013612d25468eb88144ee6abd9e3abef791c2b"
+Received: "d671dbbe7ebe449efc0b44e9c8ea0b59de14d049382ad84ea8ecfdd20dfc0644"
+
+      at <anonymous> (/workspace/shared/codex-chatgpt-web-bop/tests/mol185-event-replay-identity.test.ts:132:52)
+(fail) MOL-185 round identity treats JSON object properties as unordered without mutating input [0.50ms]
+(pass) MOL-185 round identity retains array order, exact strings, values, and native identity [4.19ms]
+
+ 3 pass
+ 3 fail
+ 39 expect() calls
+Ran 6 tests across 1 file. [753.00ms]

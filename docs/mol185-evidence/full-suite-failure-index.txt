@@ -1,0 +1,116 @@
+MOL-185 final full-suite failure index (synthetic/offline tests)
+Source SHA-256: 6e44c4435a633df3e6f38ee5cc75aabe19878a80c1f196cfac0bacd38a25b0af
+Final counts: 1096 pass; 97 skip; 102 fail; 1 unhandled error; 1295 tests across 106 files.
+Aggregate verification stopped at test exit 1. This is not a green suite.
+
+Confirmed classifications from execution review:
+89 Unix-socket environment failures: listener EPERM / Failed to listen at test-owned socket paths.
+3 Electron failures: binary absent because dependency lifecycle scripts were disabled.
+10 pristine-baseline reproduced failures: 5 effort mocks lack page.evaluate; 3 prediction assertions (HTTP 400 vs expected 200, localToolsEnabled false vs true); 2 Full HTTP fixtures omit trusted network environment metadata.
+Unhandled broker ECONNREFUSED followed socket setup failure.
+Pristine detailed contexts are delivered in pristine-existing-failures and pristine-http-harness evidence.
+No credential values, HTTP authorization headers, prompt bodies or response contents are included here.
+
+Exact failed-test occurrences in execution order (parameterized names can repeat; timing suffixes removed):
+1. ChatGPT outer-native harness v4 > starts a tool-capable browser turn across a same-turn developer gap
+2. ChatGPT outer-native harness v4 > parsed native page context starts a tool-capable turn and preserves its environment for follow-up
+3. ChatGPT outer-native harness v4 > sequential native messages honor fresh conversation=%s and Luna Bigger Context=%s
+4. ChatGPT outer-native harness v4 > sequential native messages honor fresh conversation=%s and Luna Bigger Context=%s
+5. ChatGPT outer-native harness v4 > sequential native messages honor fresh conversation=%s and Luna Bigger Context=%s
+6. ChatGPT outer-native harness v4 > sequential native messages honor fresh conversation=%s and Luna Bigger Context=%s
+7. ChatGPT outer-native harness v4 > closing a browser trace terminates the active adapter turn and blocks tab resurrection
+8. ChatGPT outer-native harness v4 > prompt preparation preserves its error instead of exposing a revoked MCP token
+9. ChatGPT outer-native harness v4 > holds an MCP invocation until the outer Codex result arrives
+10. ChatGPT outer-native harness v4 > makes capability claim retries idempotent until the turn is revoked
+11. ChatGPT outer-native harness v4 > tool diagnostics record the result error flag without treating quoted errors as new failures
+12. ChatGPT outer-native harness v4 > commits browser completion only across an unchanged broker activity fence
+13. ChatGPT outer-native harness v4 > activity cleanup is idempotent and tombstones an ambiguously delayed claim
+14. ChatGPT outer-native harness v4 > batches parallel ChatGPT MCP calls into one native Responses round
+15. ChatGPT outer-native harness v4 > revoking a turn rejects pending invocations and invalidates its binding
+16. ChatGPT outer-native harness v4 > recalculates usage from tool results added during the active browser turn
+17. ChatGPT outer-native harness v4 > replays an ordinary post-tool final after one retained structured compaction handoff
+18. ChatGPT outer-native harness v4 > Pro keeps one MCP tool loop across writer failures with fresh mode=%s
+19. ChatGPT outer-native harness v4 > Pro keeps one MCP tool loop across writer failures with fresh mode=%s
+20. ChatGPT outer-native harness v4 > serves the complete outer-native bridge contract over MCP stdio
+21. ChatGPT outer-native harness v4 > dedicated commands preserve native approval requests and reject unsupported permission fields
+22. ChatGPT outer-native harness v4 > routes every dedicated direct-token bridge to its exact top-level Codex tool
+23. ChatGPT outer-native harness v4 > keeps simultaneous direct-token MCP actions isolated by outer Codex turn
+24. ChatGPT outer-native harness v4 > serves the outer-native bridge contract over MCP stdio for a turn registered without a turn timeout
+25. ChatGPT outer-native harness v4 > an explicitly aborted MCP request revokes its turn binding and leaves the stdio server usable
+26. ChatGPT outer-native harness v4 > a native tool deadline returns an explicit MCP timeout instead of a transport failure
+27. ChatGPT outer-native harness v4 > an undelivered MCP call returns its queued state without exposing the command
+28. ChatGPT outer-native harness v4 > a retired MCP binding closes the adapter tool boundary and preserves timeout=%s
+29. ChatGPT outer-native harness v4 > a retired MCP binding closes the adapter tool boundary and preserves timeout=%s
+30. ChatGPT outer-native harness v4 > retiring MCP after an emitted tool round settles its browser owner before replacement
+31. automatic Full completes two HTTP tool rounds and replays without manual handoffs
+32. MCP cancellation retires automatic Full's pending tool and token
+33. retirement diagnostics distinguish queue time from result wait and exclude completed calls and private content
+34. expiry preserves the original retirement diagnostics for late timeout cleanup without reviving calls
+35. retirement diagnostics cap call details while keeping complete counts and evict with the existing history
+36. Zero Risk turn broker lifecycle > requires both Launcher Sent and connector start before tools can run
+37. Zero Risk turn broker lifecycle > holds an early Zero Risk completion behind the Launcher confirmation
+38. Zero Risk turn broker lifecycle > isolates parallel surfaces and cancellation rejects only the revoked turn
+39. Zero Risk turn broker lifecycle > allows Zero Risk completion as the one-shot compaction result while keeping Harness tools blocked
+40. Zero Risk turn broker lifecycle > exposes the same lifecycle through RemoteTurnBroker
+41. Zero Risk public MCP ABI > exposes start and completion while hiding the bridge namespace
+42. effort activation binds the owned menu after the control opens
+43. effort activation does not bind a closing menu (aria-expanded)
+44. effort activation does not bind a closing menu (data-state)
+45. effort activation retries one ghost click with a primary pointerdown
+46. effort activation fails closed when neither event exposes a structural surface
+47. prediction policy uses Sol 6 Medium, keeps history/schema, and never exposes tools or alters saved preferences
+48. the prediction response also reaches Codex through the normal SSE completion
+49. prompt wording and inherited thread source do not reclassify real user turns
+50. a compaction control token cannot claim the ordinary Codex tool environment
+51. active compaction delivers the current result and converts every later MCP call into the checkpoint request
+52. active compaction drains an MCP call already queued without an outer Codex waiter
+53. a settled browser response without a checkpoint reports the missing handoff immediately
+54. a checkpoint submitted before browser completion wins the terminal response race
+55. active compaction interrupts a queued MCP call that Codex never started waiting for
+56. adapter compact returns one same-agent handoff and preserves a pre-existing ordinary final
+57. a compact HTTP observer can reconnect without sending a second retained-chat message
+58. structured compact rebuild after retained browser loss preserves rate limit=%s
+59. structured compact rebuild after retained browser loss preserves rate limit=%s
+60. a disappeared retained source cannot leave its fresh compaction rebuild past the shared deadline
+61. finishing the previous response does not consume the retained checkpoint's time budget
+62. compaction source progress renews waiting, but silent source still expires (%s)
+63. compaction source progress renews waiting, but silent source still expires (%s)
+64. remote outer harness owns a turn through the live broker protocol
+65. disconnecting a remote owner_next removes its broker waiter
+66. DEV chat attaches its broker to the launcher-owned tunnel without a Responses listener
+67. DEV driver supports an injected tool-capable adapter while an unrelated Responses port stays occupied
+68. HTTP tools still require a live broker capability and preserve native approval arguments
+69. HTTP safe contract requires turn start after Launcher Sent, then delivers completion
+70. concurrent HTTP requests with identical protocol IDs cannot cross broker turns
+71. cancelling a reused request ID is isolated to its HTTP session
+72. a full-mode runtime exposes its broker endpoint before any turn registers
+73. lifecycle drain and cancellation include browser turns owned by the external DEV driver
+74. closing a rejected broker leaves the live socket reachable
+75. a broker whose endpoint was busy at startup recovers once it is released
+76. turn broker creates its private runtime directory on a cold start
+77. turn broker tokens do not expire while their browser turn is still alive
+78. turn broker revokes only channels owned by the closed browser trace
+79. an unbounded broker call fails when the broker closes without answering
+80. bounded broker calls preserve server-owned closure before advancing the lifecycle
+81. broker frame settlement still rejects errors, wrong identities and incomplete replies
+82. an unbounded broker call outlives the bounded default timeout
+83. turn broker names the finished turn that owns a replayed handle
+84. Zero Risk v1 compaction resumes with exact launcher ownership (final wins: false)
+85. Zero Risk v2 compaction resumes with exact launcher ownership (final wins: false)
+86. Zero Risk v2 compaction resumes with exact launcher ownership (final wins: true)
+87. Zero Risk adapter never starts the automatic browser worker and completes only through Zero Risk MCP
+88. a lost launcher completion acknowledgement cannot replace an authoritative Zero Risk answer
+89. Zero Risk keeps image handoff manual and says so in the paste instruction
+90. a stopped Responses observer revokes its Zero Risk binding and releases the manual turn
+91. a Zero Risk launcher failure remains failed when its own capability cleanup retires the broker
+92. Zero Risk offers only the new Codex suffix when the launcher reuses its retained ChatGPT chat
+93. Zero Risk compaction uses a fresh manual checkpoint without leaking guide text into the summary
+94. closing the Zero Risk Launcher tab revokes the bound turn instead of waiting forever
+95. trusted Codex task environment continuity > workspace-write uses one native network policy before and after steering
+96. trusted Codex task environment continuity > read-only uses one native network policy before and after steering
+97. Full 模式只发布 -tools 别名并显示 tools 语义
+98. Full 模式接受别名、上游收到原名、响应 JSON 回显别名且不动文本
+99. Full 模式 SSE 增量转发，只改写 model 字段
+100. Full 模式在转发前拒绝未加后缀的原名和未知别名
+101. Full 模式 compact 用同一套别名与响应回显
+102. QA 模式目录、请求体与 -tools 拒绝规则保持原样

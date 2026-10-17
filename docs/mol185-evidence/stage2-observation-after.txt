@@ -1,0 +1,96 @@
+Candidate: stage-2 browser observation patch over 51a3bd8, shared working tree before commit. Bun 1.4.0.
+Command: bun test tests/mol185-response-observation-recovery.test.ts
+Five paired cases plus one added candidate-only pending-evaluate watchdog control.
+
+bun test v1.4.0 (34cbb9a40)
+
+tests/mol185-response-observation-recovery.test.ts:
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof opened (transport=inline, maxMessageChars=17, estimatedInputTokens=8194, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=03-prompt-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=04-file-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof submission accepted evidence=assistant_turn
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=05-send-accepted path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=06-response-visible path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof is rebinding its existing launcher page after a stalled DOM probe: ChatGPT browser DOM observation did not respond within 2000ms
+[chatgpt-web] browser turn mol185_observation_proof rebound its existing launcher page after a stalled DOM probe
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=07-response-page-rebound path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=08-turn-completed path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof completed (markdownChars=24, domFullScans=13, domCacheHits=0)
+MOL185_RESPONSE_OBSERVATION_PROOF {"scenario":"recovered","outcome":{"answer":"Prefix\n\nRecovered answer"},"sends":1,"submitted":1,"snapshotReads":14,"failedReads":1,"countReads":1,"rebinds":1,"released":true,"stages":["browser_page","temporary_chat_preparation","effort_selection","prompt_attachment","file_attachment","send","response_page_rebind_1"],"totalMs":3188,"faultToTerminalMs":2025,"faultToRebindMs":3}
+(pass) MOL185 accepted-response read recovery preserves one Send: recovered [3188.70ms]
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof opened (transport=inline, maxMessageChars=17, estimatedInputTokens=8194, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=03-prompt-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=04-file-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof submission accepted evidence=assistant_turn
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=05-send-accepted path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof is rebinding its existing launcher page after a stalled DOM probe: ChatGPT browser DOM observation did not respond within 2000ms
+[chatgpt-web] browser turn mol185_observation_proof rebound its existing launcher page after a stalled DOM probe
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=06-response-page-rebound path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof is rebinding its existing launcher page after a stalled DOM probe: ChatGPT browser DOM observation did not respond within 2000ms
+[chatgpt-web] browser turn mol185_observation_proof rebound its existing launcher page after a stalled DOM probe
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=07-response-page-rebound path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof failed: ChatGPT browser DOM remained unresponsive after 2 same-page rebinds
+[chatgpt-web] response_structure {"traceId":"mol185_observation_proof","checkpoint":"08-turn-failed","turnIndex":0,"turnCount":0,"columns":["parent","tag","rendered","assistant","user","searchUnit","markdown","streamingStatus","activityStart","completionControl"],"turns":[]}
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=08-turn-failed path=<test-owned-temporary-path>
+MOL185_RESPONSE_OBSERVATION_PROOF {"scenario":"exhausted","outcome":{"error":"ChatGPT browser DOM remained unresponsive after 2 same-page rebinds","name":"Error"},"sends":1,"submitted":1,"snapshotReads":3,"failedReads":3,"countReads":3,"rebinds":2,"released":true,"stages":["browser_page","temporary_chat_preparation","effort_selection","prompt_attachment","file_attachment","send","response_page_rebind_1","response_page_rebind_2"],"totalMs":2,"faultToTerminalMs":1,"faultToRebindMs":0}
+(pass) MOL185 accepted-response read recovery preserves one Send: exhausted [2.33ms]
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof opened (transport=inline, maxMessageChars=17, estimatedInputTokens=8194, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=03-prompt-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=04-file-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof submission accepted evidence=assistant_turn
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=05-send-accepted path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof failed: ChatGPT web turn aborted
+[chatgpt-web] response_structure {"traceId":"mol185_observation_proof","checkpoint":"06-turn-failed","turnIndex":0,"turnCount":0,"columns":["parent","tag","rendered","assistant","user","searchUnit","markdown","streamingStatus","activityStart","completionControl"],"turns":[]}
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=06-turn-failed path=<test-owned-temporary-path>
+MOL185_RESPONSE_OBSERVATION_PROOF {"scenario":"cancelled","outcome":{"error":"ChatGPT web turn aborted","name":"AbortError"},"sends":1,"submitted":1,"snapshotReads":1,"failedReads":1,"countReads":0,"rebinds":0,"released":true,"stages":["browser_page","temporary_chat_preparation","effort_selection","prompt_attachment","file_attachment","send"],"totalMs":2,"faultToTerminalMs":0}
+(pass) MOL185 accepted-response read recovery preserves one Send: cancelled [1.69ms]
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof opened (transport=inline, maxMessageChars=17, estimatedInputTokens=8194, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=03-prompt-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=04-file-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof submission accepted evidence=assistant_turn
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=05-send-accepted path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof failed: ChatGPT exposed 2 DOM nodes for the bound assistant turn
+[chatgpt-web] response_structure {"traceId":"mol185_observation_proof","checkpoint":"06-turn-failed","turnIndex":0,"turnCount":0,"columns":["parent","tag","rendered","assistant","user","searchUnit","markdown","streamingStatus","activityStart","completionControl"],"turns":[]}
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=06-turn-failed path=<test-owned-temporary-path>
+MOL185_RESPONSE_OBSERVATION_PROOF {"scenario":"ambiguous","outcome":{"error":"ChatGPT exposed 2 DOM nodes for the bound assistant turn","name":"Error"},"sends":1,"submitted":1,"snapshotReads":1,"failedReads":1,"countReads":1,"rebinds":0,"released":true,"stages":["browser_page","temporary_chat_preparation","effort_selection","prompt_attachment","file_attachment","send"],"totalMs":1,"faultToTerminalMs":0}
+(pass) MOL185 accepted-response read recovery preserves one Send: ambiguous [1.36ms]
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof opened (transport=inline, maxMessageChars=17, estimatedInputTokens=8194, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=03-prompt-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=04-file-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof submission accepted evidence=assistant_turn
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=05-send-accepted path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=06-response-visible path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=07-turn-completed path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof completed (markdownChars=24, domFullScans=9, domCacheHits=0)
+MOL185_RESPONSE_OBSERVATION_PROOF {"scenario":"missing","outcome":{"answer":"Prefix\n\nRecovered answer"},"sends":1,"submitted":1,"snapshotReads":10,"failedReads":1,"countReads":2,"rebinds":0,"released":true,"stages":["browser_page","temporary_chat_preparation","effort_selection","prompt_attachment","file_attachment","send"],"totalMs":2272,"faultToTerminalMs":2271}
+(pass) MOL185 accepted-response read recovery preserves one Send: missing [2271.93ms]
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=01-browser-page-acquired path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof opened (transport=inline, maxMessageChars=17, estimatedInputTokens=8194, images=0, compactionTrimmedMessages=0)
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=02-effort-selection-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=03-prompt-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=04-file-attachment-complete path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof submission accepted evidence=assistant_turn
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=05-send-accepted path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=06-response-visible path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof is rebinding its existing launcher page after a stalled DOM probe: ChatGPT browser DOM observation did not respond within 2000ms
+[chatgpt-web] browser turn mol185_observation_proof rebound its existing launcher page after a stalled DOM probe
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=07-response-page-rebound path=<test-owned-temporary-path>
+[chatgpt-web] browser diagnostic trace=mol185_observation_proof checkpoint=08-turn-completed path=<test-owned-temporary-path>
+[chatgpt-web] browser turn mol185_observation_proof completed (markdownChars=24, domFullScans=13, domCacheHits=0)
+MOL185_RESPONSE_OBSERVATION_PROOF {"scenario":"pending","outcome":{"answer":"Prefix\n\nRecovered answer"},"sends":1,"submitted":1,"snapshotReads":14,"failedReads":1,"countReads":1,"rebinds":1,"released":true,"stages":["browser_page","temporary_chat_preparation","effort_selection","prompt_attachment","file_attachment","send","response_page_rebind_1"],"totalMs":5026,"faultToTerminalMs":4017,"faultToRebindMs":2003}
+(pass) MOL185 accepted-response read recovery preserves one Send: pending [5026.55ms]
+
+ 6 pass
+ 0 fail
+ 40 expect() calls
+Ran 6 tests across 1 file. [11.07s]

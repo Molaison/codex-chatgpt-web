@@ -319,7 +319,10 @@ function replayEvents(events: AdapterEvent[], emit: (event: AdapterEvent) => voi
 
 function submittedTurnFailure(session: ChatGptTurnSession, error: unknown): Error {
   const normalized = error instanceof Error ? error : new Error(String(error));
-  if (normalized instanceof ChatGptWebAdapterError) return normalized;
+  // A typed transient failure is not proof that Send failed to reach ChatGPT.
+  // Preserve specific terminal errors, but fence retryable failures with the
+  // same submission evidence as unclassified transport failures.
+  if (normalized instanceof ChatGptWebAdapterError && !normalized.retryable) return normalized;
   const phase = session.runtime.submission?.phase;
   if (!phase || phase === "prepared") return normalized;
   const ambiguous = phase === "send_activated";

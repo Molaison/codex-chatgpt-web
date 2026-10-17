@@ -1,0 +1,24 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/turn-broker-lifecycle.test.ts:
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+(pass) explicit browser-turn cancellation aborts and removes every registered session [0.79ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown"}
+(pass) targeted tab cancellation settles one trace and keeps a terminal replay tombstone [0.49ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"traceId":"trace_other","outcome":"error","compaction":false,"submission":"unknown"}
+(pass) native interruption retires only the exact browser turn identity [0.33ms]
+(pass) session cache expiry never cancels a still-active long browser turn [5.29ms]
+(pass) five active turns coexist and a sixth fails closed [0.36ms]
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+(pass) settled replay sessions expire from their last use instead of their creation time [80.61ms]
+(pass) turn broker rejects a Unix socket path that leaves no room for sun_path's NUL terminator [0.76ms]
+
+ 7 pass
+ 10 filtered out
+ 0 fail
+ 30 expect() calls
+Ran 7 tests across 1 file. [109.00ms]
+
+Exit status: 0

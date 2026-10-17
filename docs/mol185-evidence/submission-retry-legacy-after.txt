@@ -1,0 +1,23 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/chatgpt-web-harness.test.ts:
+[chatgpt-web] browser_settled {"traceId":"fa5387312753","outcome":"error","compaction":false,"submission":"send_activated"}
+(pass) ChatGPT outer-native harness v4 > an ambiguous submission outcome is stable across native reconnects [6.15ms]
+[chatgpt-web] browser_settled {"traceId":"df5b92a526d5","outcome":"error","compaction":false,"submission":"prepared"}
+[chatgpt-web] browser_settled {"traceId":"df5b92a526d5","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) ChatGPT outer-native harness v4 > an unclassified browser failure retires its session before the next native retry [121.41ms]
+[chatgpt-web] browser_settled {"traceId":"1afeb1b7fb2d","outcome":"error","compaction":false,"submission":"send_activated","code":"chatgpt_stopped_thinking","retryable":false}
+(pass) ChatGPT outer-native harness v4 > browser failure preserves its exact explanation without an automatic retry (%s, chatgpt_stopped_thinking) [1.88ms]
+[chatgpt-web] browser_settled {"traceId":"296f1209c809","outcome":"error","compaction":false,"submission":"send_activated","code":"chatgpt_response_incomplete","retryable":false}
+(pass) ChatGPT outer-native harness v4 > browser failure preserves its exact explanation without an automatic retry (%s, chatgpt_response_incomplete) [0.51ms]
+[chatgpt-web] browser_settled {"traceId":"4751d7dda9c4","outcome":"error","compaction":false,"submission":"prepared","code":"upstream_server_error","retryable":true}
+[chatgpt-web] browser_settled {"traceId":"4751d7dda9c4","outcome":"error","compaction":false,"submission":"prepared","code":"upstream_server_error","retryable":true}
+[chatgpt-web] browser_settled {"traceId":"4751d7dda9c4","outcome":"error","compaction":false,"submission":"prepared","code":"upstream_server_error","retryable":true}
+[chatgpt-web] browser_settled {"traceId":"4751d7dda9c4","outcome":"error","compaction":false,"submission":"prepared","code":"upstream_server_error","retryable":true}
+(pass) ChatGPT outer-native harness v4 > caps pre-send transient-server-error browser attempts at three retries for one native turn [1.64ms]
+
+ 5 pass
+ 100 filtered out
+ 0 fail
+ 28 expect() calls
+Ran 5 tests across 1 file. [722.00ms]

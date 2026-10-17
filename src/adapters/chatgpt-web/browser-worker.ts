@@ -1921,6 +1921,8 @@ export interface ChatGptVisibleTraceEvent {
 
 interface ChatGptResponseDomSnapshot {
   responsePresent: boolean;
+  /** The bound response could not be read; absence is verified separately before reconnecting. */
+  observationTimedOut?: boolean;
   downloadableFiles: string[];
   images: ChatGptResponseImage[];
   pendingImages: boolean;
@@ -4473,7 +4475,8 @@ export class ChatGptBrowserWorker {
     responseTurn: Locator,
     cache?: ChatGptResponseDomCache,
   ): Promise<ChatGptResponseDomSnapshot> {
-    const observed = await responseTurn.evaluate((element, options) => {
+    let observationTimedOut = false;
+    const observed = await withChatGptBrowserObservationTimeout(responseTurn.evaluate((element, options) => {
       const root = element as HTMLElement;
       type ObserverState = {
         id: number;
@@ -5157,13 +5160,17 @@ export class ChatGptBrowserWorker {
       stoppedThinkingLabels: [...CHATGPT_STOPPED_THINKING_LABELS],
       knownKey: cache?.key,
       attributeFilter: [...CHATGPT_DOM_REVISION_ATTRIBUTES, "title", "disabled", "aria-disabled", "aria-busy", "src", "srcset", "width", "height", "alt"],
-    }, { timeout: 2_000 }).catch(() => undefined);
+    }, { timeout: 2_000 }), 2_000).catch(error => {
+      observationTimedOut = error instanceof ChatGptBrowserObservationTimeoutError
+        || (error instanceof Error && error.name === "TimeoutError");
+      return undefined;
+    });
     if (observed?.extractionError) throw new Error(observed.extractionError);
     if (!observed) {
       if (responseTurn.page().isClosed()) {
         throw chatGptBrowserTabClosedError();
       }
-      return absentResponseDomSnapshot();
+      return { ...absentResponseDomSnapshot(), ...(observationTimedOut ? { observationTimedOut: true } : {}) };
     }
     const snapshot = observed.snapshot ?? cache?.snapshot ?? absentResponseDomSnapshot();
     if (observed.snapshot && cache) {
@@ -6094,9 +6101,20 @@ export class ChatGptBrowserWorker {
           continue;
         }
 
-        let snapshot = await this.responseDomSnapshot(responseTurn.locator, responseDomCache);
+        let snapshot = await withBrowserTurnAbort(
+          this.responseDomSnapshot(responseTurn.locator, responseDomCache), turn.abortSignal,
+        );
         if (!snapshot.responsePresent) {
           try {
+            if (snapshot.observationTimedOut) {
+              // A missing locator belongs to normal DOM reconciliation. Only an unreadable,
+              // uniquely bound response (or an unresponsive count probe) reconnects its transport.
+              const count = await withChatGptBrowserObservationTimeout(
+                withBrowserTurnAbort(responseTurn.locator.count(), turn.abortSignal),
+              );
+              if (count > 1) throw new Error(`ChatGPT exposed ${count} DOM nodes for the bound assistant turn`);
+              if (count === 1) throw new ChatGptBrowserObservationTimeoutError(2_000);
+            }
             const rebound = await withChatGptBrowserObservationTimeout(
               this.reconcileAssistantTurnBinding(
                 page,
@@ -6109,7 +6127,9 @@ export class ChatGptBrowserWorker {
               responseTurn = rebound;
               responseDomCache.key = undefined;
               responseDomCache.snapshot = undefined;
-              snapshot = await this.responseDomSnapshot(responseTurn.locator, responseDomCache);
+              snapshot = await withBrowserTurnAbort(
+                this.responseDomSnapshot(responseTurn.locator, responseDomCache), turn.abortSignal,
+              );
             }
           } catch (error) {
             if (!(error instanceof ChatGptBrowserObservationTimeoutError) || !launcherSurfaceId) throw error;
@@ -6133,6 +6153,7 @@ export class ChatGptBrowserWorker {
             };
             responseDomCache.key = undefined;
             responseDomCache.snapshot = undefined;
+            completionFenceRevision = undefined;
             await diagnostics.capture(page, "response-page-rebound");
             continue;
           }

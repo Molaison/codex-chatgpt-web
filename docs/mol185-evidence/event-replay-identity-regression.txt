@@ -1,0 +1,51 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/chatgpt-web-harness.test.ts:
+(pass) ChatGPT outer-native harness v4 > uses stable native turn metadata for every provider round in one Codex turn [2.09ms]
+[chatgpt-web] browser_settled {"traceId":"old-trace","outcome":"error","compaction":false,"submission":"unknown","code":"client_cancelled","retryable":false}
+[chatgpt-web] browser_settled {"traceId":"new-trace","outcome":"final","compaction":false,"submission":"unknown"}
+(pass) ChatGPT outer-native harness v4 > steering retires a browser waiting for an old tool result and rejects late older requests [1.90ms]
+[chatgpt-web] browser_settled {"traceId":"ec0855a16c0e","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) ChatGPT outer-native harness v4 > a client disconnect detaches only its stream and the same round reconnects without another browser submission [134.72ms]
+[chatgpt-web] browser_settled {"traceId":"5f79169c8612","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) ChatGPT outer-native harness v4 > an observer failure in the middle of a drained text batch loses no reconnect data [3.48ms]
+[chatgpt-web] browser_settled {"traceId":"a9156845c996","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"669712aae6b0","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) ChatGPT outer-native harness v4 > a closed response writer detaches without cancelling accepted browser work [10009.04ms]
+[chatgpt-web] browser_settled {"traceId":"8b1921d2d511","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) ChatGPT outer-native harness v4 > reconnect preserves offline text when the browser settles with final [2.92ms]
+[chatgpt-web] browser_settled {"traceId":"34b9b3ce2f8c","outcome":"error","compaction":false,"submission":"accepted"}
+(pass) ChatGPT outer-native harness v4 > reconnect preserves offline text when the browser settles with error [0.77ms]
+[chatgpt-web] browser_settled {"traceId":"6f6cf74ccf17","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) ChatGPT outer-native harness v4 > overlapping exact reconnect takes over the observer before browser completion [1.98ms]
+[chatgpt-web] browser_settled {"traceId":"38085e18ee6f","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) ChatGPT outer-native harness v4 > a reconnect aborted during registry lookup leaves the live observer attached [1.85ms]
+[chatgpt-web] browser_settled {"traceId":"3443b79e6a3d","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) ChatGPT outer-native harness v4 > Responses SSE reconnect delivers offline output without resubmitting the browser prompt [11.83ms]
+[chatgpt-web] browser_settled {"traceId":"a33b914d2e2e","outcome":"error","compaction":false,"submission":"send_activated"}
+(pass) ChatGPT outer-native harness v4 > an ambiguous submission outcome is stable across native reconnects [0.82ms]
+[chatgpt-web] browser_settled {"traceId":"14b561b16e68","outcome":"error","compaction":false,"submission":"prepared","code":"context_length_exceeded","retryable":false}
+(pass) ChatGPT outer-native harness v4 > a terminal context_length_exceeded failure remains replayable without starting another browser turn [1.34ms]
+[chatgpt-web] browser_settled {"traceId":"4a5f94f14036","outcome":"error","compaction":false,"submission":"prepared","code":"rate_limit_exceeded","retryable":false}
+(pass) ChatGPT outer-native harness v4 > a terminal rate_limit_exceeded failure remains replayable without starting another browser turn [1.24ms]
+
+tests/qa-sessions.test.ts:
+[chatgpt-web] browser_settled {"traceId":"a19504dc76ef","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) an exact request retry replays the completed answer without another browser submission [2.77ms]
+
+tests/turn-broker-lifecycle.test.ts:
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown"}
+(pass) targeted tab cancellation settles one trace and keeps a terminal replay tombstone [0.39ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"traceId":"trace_other","outcome":"error","compaction":false,"submission":"unknown"}
+(pass) native interruption retires only the exact browser turn identity [0.32ms]
+(pass) session cache expiry never cancels a still-active long browser turn [5.63ms]
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+(pass) settled replay sessions expire from their last use instead of their creation time [80.75ms]
+
+ 18 pass
+ 121 filtered out
+ 0 fail
+ 98 expect() calls
+Ran 18 tests across 3 files. [10.95s]

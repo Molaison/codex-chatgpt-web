@@ -1,0 +1,95 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/mol185-tool-ack-recovery.test.ts:
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=f47f0cf266d7
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=f47f0cf266d7, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_yViTEb1xwFUH tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_yViTEb1xwFUH path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_yViTEb1xwFUH pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: an exact completion replay after a lost ACK is accepted only once [3.20ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=714e4b51928f
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=714e4b51928f, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_kHxAIyiaZDHO tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_kHxAIyiaZDHO path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_kHxAIyiaZDHO pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: an accepted completion does not authorize conflicting result replays [0.57ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=310bed492065
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=310bed492065, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_oxbSCqVnyKc6 tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_oxbSCqVnyKc6 path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_oxbSCqVnyKc6 pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: an accepted completion receipt cannot survive turn revocation [0.19ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=087fadddbb5b
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=087fadddbb5b, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_Z-lxsbzxh66- tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_Z-lxsbzxh66- path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_Z-lxsbzxh66- pending=0 isError=false
+MOL185_TOOL_ACK_RECOVERY {"recoveryElapsedMs":983.84,"simulatedToolInvocations":1,"acceptedResultResolutions":1,"completionAcknowledgements":2,"resultSerializations":1}
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: remote completion recovers a dropped ACK without re-executing the tool [987.18ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=6057e9440123
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=6057e9440123, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_EUPpimwMdglU tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_EUPpimwMdglU path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_EUPpimwMdglU pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: remote completion rejects malformed success ACKs [2.78ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=6d425e7b4122
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=6d425e7b4122, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_F0HS_nhe9we1 tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_F0HS_nhe9we1 path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_F0HS_nhe9we1 pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: repeated lost completion ACKs stop after one safe replay [94.80ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=9b9529da52b1
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=9b9529da52b1, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_XWg95vamcIh3 tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_XWg95vamcIh3 path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_XWg95vamcIh3 pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: a definitive negative completion frame does not retry while FIN is withheld ({"completed":false}, %s) [2.92ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=4e5a996dbeb4
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=4e5a996dbeb4, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_aMwdh6Utr23y tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_aMwdh6Utr23y path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_aMwdh6Utr23y pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: a definitive negative completion frame does not retry while FIN is withheld (, fixture completion rejected) [1.88ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=997eca34571c
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=997eca34571c, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_xBx0C51gPFRN tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_xBx0C51gPFRN path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_xBx0C51gPFRN pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: unsupported or malformed replay capability fails closed ({"protocolVersion":5,"acceptingExternalOwners":true}) [896.13ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=e9a3782117e2
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=e9a3782117e2, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_f_Jp6NkVU7DF tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_f_Jp6NkVU7DF path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_f_Jp6NkVU7DF pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: unsupported or malformed replay capability fails closed ({"protocolVersion":5,"toolCompletionReplay":"true"}) [24.95ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=413ad9e01360
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=413ad9e01360, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_02KJWbOwx8-1 tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_02KJWbOwx8-1 path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_02KJWbOwx8-1 pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: unsupported or malformed replay capability fails closed ({"protocolVersion":4,"toolCompletionReplay":true}) [76.13ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=7cfde194ed22
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=7cfde194ed22, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_JnKy5Z7BKebj tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_JnKy5Z7BKebj path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_JnKy5Z7BKebj pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: unsupported or malformed replay capability fails closed (null) [900.27ms]
+
+ 12 pass
+ 0 fail
+ 46 expect() calls
+Ran 12 tests across 1 file. [3.01s]
+
+Exit status: 0

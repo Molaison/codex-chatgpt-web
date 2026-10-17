@@ -1,0 +1,104 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/mol185-tool-ack-recovery.test.ts:
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=917ee757bf84
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=917ee757bf84, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_MrMC-aENmaMg tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_MrMC-aENmaMg path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_MrMC-aENmaMg pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+53 |   const f = await fixture();
+54 |   try {
+55 |     f.broker.completeTool(f.token, f.request.callId, acceptedResult);
+56 |     expect(await f.invocation).toEqual(acceptedResult);
+57 |     expect(() => f.broker.completeTool(f.token, f.request.callId, structuredClone(acceptedResult)))
+58 |       .not.toThrow();
+                ^
+error: expect(received).not.toThrow()
+
+Error name: "Error"
+Error message: "tool call is not pending: call_MrMC-aENmaMglU4S4hCIpfvqlELshGOc"
+
+      at <anonymous> (/workspace/shared/codex-chatgpt-web-bop/tests/mol185-tool-ack-recovery.test.ts:58:12)
+(fail) MOL185: an exact completion replay after a lost ACK is accepted only once [3.20ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=8eead921bbe6
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=8eead921bbe6, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_eQKa2S-WO0Et tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_eQKa2S-WO0Et path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_eQKa2S-WO0Et pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: an accepted completion does not authorize conflicting result replays [0.35ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=a1dff214685c
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=a1dff214685c, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_pWtMxBxiVNrW tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_pWtMxBxiVNrW path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_pWtMxBxiVNrW pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) MOL185: an accepted completion receipt cannot survive turn revocation [0.17ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=80c06b2a9dd0
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=80c06b2a9dd0, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_zeHPHc03ULtD tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_zeHPHc03ULtD path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_zeHPHc03ULtD pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+130 |     const completion = owner.remote.completeTool(f.token, f.request.callId, acceptedResult);
+131 |     void completion.catch(() => {});
+132 |     // Crucial evidence: the tool result has already crossed the authoritative broker
+133 |     // boundary even though the owner has not received its completion ACK.
+134 |     expect(await f.invocation).toEqual(acceptedResult);
+135 |     await expect(completion).resolves.toBeUndefined();
+                                            ^
+error: expect(received).resolves.toBeUndefined()
+
+Expected promise that resolves
+Received promise that rejected: Promise { <rejected> }
+
+      at <anonymous> (/workspace/shared/codex-chatgpt-web-bop/tests/mol185-tool-ack-recovery.test.ts:135:39)
+(fail) MOL185: remote completion recovers a dropped ACK without re-executing the tool [985.40ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=de0778053eae
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=de0778053eae, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_MfM5QVwa8a_A tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_MfM5QVwa8a_A path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_MfM5QVwa8a_A pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+146 |       return;
+147 |     }
+148 |     original();
+149 |   });
+150 |   try {
+151 |     await expect(owner.remote.completeTool(f.token, f.request.callId, acceptedResult)).rejects.toThrow();
+                                                                                                     ^
+error: expect(received).rejects.toThrow(expected)
+
+Expected promise that rejects
+Received promise that resolved: Promise { <resolved> }
+
+      at <anonymous> (/workspace/shared/codex-chatgpt-web-bop/tests/mol185-tool-ack-recovery.test.ts:151:96)
+(fail) MOL185: remote completion rejects malformed success ACKs [3.07ms]
+[chatgpt-web] broker trace=mol185-tool-ack registered tokenHash=affb9241bc7e
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=affb9241bc7e, valid=true)
+[chatgpt-web] broker trace=mol185-tool-ack queued call=call_McnPclQbapcS tool=fixture_tool waiters=0
+[chatgpt-web] broker trace=mol185-tool-ack delivered call=call_McnPclQbapcS path=immediate replay=false
+[chatgpt-web] broker trace=mol185-tool-ack completed call=call_McnPclQbapcS pending=0 isError=false
+[chatgpt-web] broker_retired {"traceId":"mol185-tool-ack","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+166 |     original();
+167 |   });
+168 |   try {
+169 |     await expect(owner.remote.completeTool(f.token, f.request.callId, acceptedResult)).rejects.toThrow();
+170 |     expect(await f.invocation).toEqual(acceptedResult);
+171 |     expect(acknowledgements).toBe(2);
+                                   ^
+error: expect(received).toBe(expected)
+
+Expected: 2
+Received: 1
+
+      at <anonymous> (/workspace/shared/codex-chatgpt-web-bop/tests/mol185-tool-ack-recovery.test.ts:171:30)
+(fail) MOL185: repeated lost completion ACKs stop after one safe replay [18.39ms]
+
+ 2 pass
+ 4 fail
+ 15 expect() calls
+Ran 6 tests across 1 file. [1029.00ms]
+
+Exit status: 1
