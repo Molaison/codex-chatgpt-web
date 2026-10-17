@@ -67,7 +67,7 @@ async function fixture() {
       input: [
         {
           type: "message", role: "user",
-          content: [{ type: "input_text", text: `<environment_context><cwd>${root}</cwd><filesystem><workspace_roots><root>${root}</root></workspace_roots><permission_profile type="managed"><file_system type="restricted"><entry access="read"><special>:root</special></entry><entry access="write"><path>${root}</path></entry></file_system></permission_profile></filesystem></environment_context>` }],
+          content: [{ type: "input_text", text: `<environment_context><cwd>${root}</cwd><network_access>enabled</network_access><filesystem><workspace_roots><root>${root}</root></workspace_roots><permission_profile type="managed"><file_system type="restricted"><entry access="read"><special>:root</special></entry><entry access="write"><path>${root}</path></entry></file_system></permission_profile></filesystem></environment_context>` }],
           internal_chat_message_metadata_passthrough: { turn_id: turnId },
         },
         {
