@@ -809,7 +809,10 @@ export async function responseRequest(
   const abort = new AbortController();
   if (req.signal.aborted) abort.abort();
   else req.signal.addEventListener("abort", () => abort.abort(), { once: true });
+  let failed = false;
   const fail = (error: unknown): void => {
+    if (failed) return;
+    failed = true;
     const event: AdapterEvent = {
       type: "error", message: error instanceof Error ? error.message : String(error),
       ...(error instanceof ChatGptWebAdapterError ? {
@@ -826,8 +829,14 @@ export async function responseRequest(
   };
   const run = async () => {
     await adapter.runTurn!(parsed, { headers: req.headers, abortSignal: abort.signal }, event => {
-      options.onAdapterEvent?.(event);
-      queue.push(event);
+      try {
+        options.onAdapterEvent?.(event);
+        queue.push(event);
+      } catch (error) {
+        // Preserve the writer's cause before an adapter treats it as observer detachment.
+        fail(error);
+        throw error;
+      }
     });
   };
   const produce = () => run().catch(fail).finally(() => queue.close());
