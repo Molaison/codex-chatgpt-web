@@ -122,16 +122,16 @@ const rejected: Array<[string, string, (value: any) => void]> = [
   ["first-upload truncation", "page_incomplete", value => { value.context_truncation_continuation = {}; }],
   ["missing required status", "format_invalid", value => { delete value.async_status; }],
 ];
-test("unverified native evidence leaves the actual SQLite row and event log unchanged", async () => {
-  for (const [label, code, mutate] of rejected) {
-    const f = fixture();
-    try {
-      const value = conversation(); mutate(value);
-      const before = f.snapshot();
-      await expect(f.registry.reconcile(paperId, f.scope, f.options(async () => value)), label).rejects.toMatchObject({ code: "paper_recovery_" + code });
-      expect(f.snapshot(), label).toEqual(before);
-    } finally { f.close(); }
-  }
+// Each rejection has its own real SQLite fixture and the default test deadline.
+// A serial loop incorrectly charged all independent fixtures to one 5s budget.
+test.each(rejected)("unverified native evidence (%s) leaves the actual SQLite row and event log unchanged", async (label, code, mutate) => {
+  const f = fixture();
+  try {
+    const value = conversation(); mutate(value);
+    const before = f.snapshot();
+    await expect(f.registry.reconcile(paperId, f.scope, f.options(async () => value)), label).rejects.toMatchObject({ code: "paper_recovery_" + code });
+    expect(f.snapshot(), label).toEqual(before);
+  } finally { f.close(); }
 });
 
 test("a first upload requires the SHA verified by prepare, not a matching filename", async () => {
