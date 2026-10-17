@@ -1,0 +1,189 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/bridge-platform.test.ts:
+(pass) Responses SSE completes through the Windows push stream [8.12ms]
+(pass) Darwin SSE remains decodable through Bun.serve under sustained chunking [6.50ms]
+(pass) Responses SSE carries inert widget data before the terminal snapshot [0.68ms]
+
+tests/bridge-stall-timeout.test.ts:
+[bridge] upstream silence halfway to the stall budget model=chatgpt-web/test response=resp_64109a6b76bc432c9edabb34288c99f7 stallSec=1 adapterEvents=0 lastEvent=<none> sinceLastEventMs=1500
+[bridge] upstream_stall_timeout model=chatgpt-web/test response=resp_64109a6b76bc432c9edabb34288c99f7 stallSec=1 adapterEvents=0 lastEvent=<none> sinceLastEventMs=1500 sinceStreamStartMs=1500 iteratorStarted=true upstreamDone=false emittedFrames=1
+(pass) an adapter that goes silent past the budget is cancelled after coalesced timer ticks [10.48ms]
+(pass) an adapter that keeps heartbeating is never cancelled, however long it takes [2016.91ms]
+(pass) the stall budget is configurable and falls back to the shipped default [0.13ms]
+
+tests/server-lifecycle.test.ts:
+(pass) DEV harness configuration cannot bind a Responses listener [4.99ms]
+(pass) Luna Bigger Context reaches the adapter for every Free route and response mode [12.10ms]
+(pass) HTTP turn tracking follows the response stream instead of Bun's global request count [0.82ms]
+(pass) HTTP turn tracking releases a cancelled response stream [0.30ms]
+(pass) HTTP turn tracking uses a tee branch on Windows [5.38ms]
+(pass) HTTP turn tracking uses direct pull and cancellation outside Windows [0.21ms]
+(pass) HTTP turn tracking records privacy-safe client stream failure evidence [0.35ms]
+(pass) HTTP turn tracking records privacy-safe Windows lifecycle failure evidence [0.28ms]
+(pass) HTTP stream diagnostics cannot replace the source failure or retain turn ownership [0.18ms]
+(pass) HTTP turn tracking releases a stream whose client disconnected without cancelling [0.22ms]
+(pass) HTTP turn tracking releases a stream requested by an already disconnected client [0.13ms]
+(pass) a real HTTP peer disconnect releases a streaming turn [15.34ms]
+(pass) HTTP turn cancellation aborts the tracked request and waits for lifecycle release [0.54ms]
+(pass) native Codex interrupt cancels only HTTP streams owned by the exact thread and turn [0.56ms]
+(pass) native Codex interrupt remains authoritative when it arrives before HTTP identity binding [0.26ms]
+(pass) native passthrough response and compaction requests expose their exact interrupt identity [1.45ms]
+[chatgpt-web] browser_settled {"traceId":"interrupt-hook-trace","outcome":"error","compaction":false,"submission":"unknown"}
+(pass) authenticated Interrupt hook endpoint releases the exact routed Web turn [6.41ms]
+(pass) authenticated Interrupt hook endpoint also releases the exact native compaction request [6.78ms]
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+(pass) Interrupt acknowledges after exact browser cancellation starts without waiting for helper teardown [12.64ms]
+[chatgpt-web] browser_settled {"traceId":"logical-complete-trace","outcome":"final","compaction":false,"submission":"unknown"}
+(pass) Interrupt retires a logically complete browser turn whose helper is still physically stuck [2.11ms]
+(pass) Interrupt cancels a detached structured compaction by exact native turn identity [2.15ms]
+(pass) authenticated lifecycle control cancels orphaned browser turns [2.01ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown","code":"client_cancelled","retryable":false}
+(pass) targeted cancellation preserves peer turns and its cause: user close [2.31ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown","code":"browser_surface_bootstrap_timeout","retryable":false}
+(pass) targeted cancellation preserves peer turns and its cause: browser_surface_bootstrap_timeout [1.68ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown","code":"helper_heartbeat_expired","retryable":false}
+(pass) targeted cancellation preserves peer turns and its cause: helper_heartbeat_expired [1.66ms]
+(pass) authenticated targeted cancellation aborts a shared structured compaction owner [1.83ms]
+(pass) authenticated cancel-all aborts fresh structured compaction work [1.81ms]
+[chatgpt-web] browser_settled {"traceId":"1c2c6e5feda9","outcome":"error","compaction":false,"submission":"unknown","code":"client_cancelled","retryable":false}
+(pass) a Codex retry after tab cancellation receives terminal HTTP 400 without a new browser [1.16ms]
+(pass) a restart recovery turn without a new user instruction fails terminally instead of replaying the stopped prompt [0.82ms]
+(pass) a native turn with no instruction fails before browser construction, stream=%s [0.50ms]
+(pass) a native turn with no instruction fails before browser construction, stream=%s [0.31ms]
+(pass) authenticated lifecycle control aborts active alpha/search before acknowledging cancellation [2.49ms]
+(pass) authenticated lifecycle control aborts active images/generations before acknowledging cancellation [2.03ms]
+[chatgpt-web] broker claim received (tokenChars=21, tokenHash=b54ec6d0088f, valid=false, retiredTurn=unknown)
+(pass) a full-mode runtime exposes its broker endpoint before any turn registers [7.50ms]
+[chatgpt-web] broker trace=dev-lifecycle registered tokenHash=4864b01cf4f5
+[chatgpt-web] broker_retired {"traceId":"dev-lifecycle","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":0,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) lifecycle drain and cancellation include browser turns owned by the external DEV driver [6.97ms]
+(pass) a drained runtime rejects new model-catalog work before shutdown [2.14ms]
+(pass) health proves that Codex received a successful augmented model catalog [4.81ms]
+(pass) server exposes authenticated standalone Web Search on the routed v1 base URL [1.84ms]
+(pass) standalone native image generation and edits preserve their upstream protocol [4.65ms]
+(pass) authenticated shutdown requires a verified idle drain [22.47ms]
+[codex-chatgpt-web] model_catalog_failed {"request":1,"at":"2026-10-17T18:52:25.632Z","status":502,"failure":{"stage":"request"},"elapsedMs":1}
+[codex-chatgpt-web] model_catalog_failed {"request":2,"at":"2026-10-17T18:52:25.632Z","status":502,"failure":{"stage":"transport","code":"UnsupportedProxyProtocol"},"elapsedMs":0}
+[codex-chatgpt-web] model_catalog_failed {"request":3,"at":"2026-10-17T18:52:25.633Z","status":403,"failure":{"stage":"upstream"},"elapsedMs":0}
+[codex-chatgpt-web] model_catalog_failed {"request":4,"at":"2026-10-17T18:52:25.633Z","status":502,"failure":{"stage":"catalog"},"elapsedMs":0}
+(pass) model catalog health distinguishes no request, transport failure, upstream denial, and recovery without secrets [5.06ms]
+[codex-chatgpt-web] model_catalog_failed {"request":1,"at":"2026-10-17T18:52:25.636Z","status":403,"failure":{"stage":"upstream"},"elapsedMs":0}
+(pass) a cancelled model request does not replace health from the last completed request [3.83ms]
+(pass) a web page cannot start or control turns through the loopback route [3.44ms]
+(pass) a catalog request that outlives the client's deadline completes for its retry [404.48ms]
+[codex-chatgpt-web] model_catalog_failed {"request":3,"at":"2026-10-17T18:52:26.049Z","status":403,"failure":{"stage":"upstream"},"elapsedMs":0}
+(pass) shared catalog attempts stay bound to one request identity and are final once delivered [4.65ms]
+(pass) an abandoned catalog attempt serves the retry once and is cancelled when nobody returns [126.56ms]
+
+tests/turn-broker-lifecycle.test.ts:
+(pass) closing a rejected broker leaves the live socket reachable [3.52ms]
+[chatgpt-web] broker trace=unknown registered tokenHash=a0af9181d89b
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=a0af9181d89b, valid=true)
+[chatgpt-web] broker_retired {"traceId":"unknown","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) a broker whose endpoint was busy at startup recovers once it is released [4.02ms]
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+(pass) explicit browser-turn cancellation aborts and removes every registered session [0.31ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown"}
+(pass) targeted tab cancellation settles one trace and keeps a terminal replay tombstone [0.33ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"traceId":"trace_other","outcome":"error","compaction":false,"submission":"unknown"}
+(pass) native interruption retires only the exact browser turn identity [0.30ms]
+(pass) session cache expiry never cancels a still-active long browser turn [5.22ms]
+(pass) five active turns coexist and a sixth fails closed [0.22ms]
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+(pass) settled replay sessions expire from their last use instead of their creation time [80.48ms]
+[chatgpt-web] broker trace=unknown registered tokenHash=1919a208e084
+[chatgpt-web] broker_retired {"traceId":"unknown","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":0,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) turn broker creates its private runtime directory on a cold start [1.97ms]
+(pass) turn broker rejects a Unix socket path that leaves no room for sun_path's NUL terminator [0.15ms]
+[chatgpt-web] broker trace=unknown registered tokenHash=db59e79e7f6b
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=db59e79e7f6b, valid=true)
+[chatgpt-web] broker_retired {"traceId":"unknown","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) turn broker tokens do not expire while their browser turn is still alive [7.41ms]
+[chatgpt-web] broker trace=trace_target registered tokenHash=81bc8cd67331
+[chatgpt-web] broker trace=trace_other registered tokenHash=16cb09c2c097
+[chatgpt-web] broker_retired {"traceId":"trace_target","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":0,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=81bc8cd67331, valid=false, retiredTurn=trace_target)
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=16cb09c2c097, valid=true)
+[chatgpt-web] broker_retired {"traceId":"trace_other","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) turn broker revokes only channels owned by the closed browser trace [2.88ms]
+(pass) an unbounded broker call fails when the broker closes without answering [2.16ms]
+(pass) bounded broker calls preserve server-owned closure before advancing the lifecycle [27.23ms]
+(pass) broker frame settlement still rejects errors, wrong identities and incomplete replies [11.45ms]
+(pass) an unbounded broker call outlives the bounded default timeout [5302.54ms]
+[chatgpt-web] broker trace=turn-alpha registered tokenHash=fdb10d945bb7
+[chatgpt-web] broker claim received (tokenChars=38, tokenHash=4fda7efacf70, valid=false, retiredTurn=unknown)
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=fdb10d945bb7, valid=true)
+[chatgpt-web] broker_retired {"traceId":"turn-alpha","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":1,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+[chatgpt-web] broker rejected invoke (binding=binding_v3EsZ8kAH, retiredTurn=turn-alpha)
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=fdb10d945bb7, valid=false, retiredTurn=turn-alpha)
+[chatgpt-web] broker rejected invoke (binding=binding_never-iss, retiredTurn=unknown)
+(pass) turn broker names the finished turn that owns a replayed handle [4.63ms]
+
+tests/event-queue.test.ts:
+(pass) a full queue delivers one failure instead of its undelivered backlog [0.18ms]
+(pass) failure releases waiting consumers with one terminal value [0.11ms]
+(pass) normal close drains accepted values and releases idle waiters [0.11ms]
+(pass) return discards undelivered output and closes every waiter [0.09ms]
+
+tests/server-event-pressure.test.ts:
+(pass) non-streaming output is consumed while an asynchronous adapter is still producing [6.81ms]
+(pass) synchronous replay overflow has one explicit failure, stream=false [1.31ms]
+(pass) an observer throwing on output and failure cannot reject the producer, stream=false [0.64ms]
+(pass) synchronous replay overflow has one explicit failure, stream=true [1.13ms]
+(pass) an observer throwing on output and failure cannot reject the producer, stream=true [0.48ms]
+(pass) normal streamed output still completes once [0.66ms]
+(pass) a later adapter failure preserves already delivered text without completing it [0.77ms]
+
+tests/turn-execution-retirement.test.ts:
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+(pass) detaching a response observer keeps its owner and counts cleanup after the final answer [0.35ms]
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+(pass) cache expiry does not revoke a completed response before its helper exits [5.29ms]
+[chatgpt-web] browser_settled {"traceId":"old-trace","outcome":"error","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"traceId":"new-trace","outcome":"final","compaction":false,"submission":"unknown"}
+(pass) native cancellation remains busy and same-key replacement waits for physical exit [0.39ms]
+[chatgpt-web] browser_settled {"outcome":"error","compaction":false,"submission":"unknown"}
+(pass) clear keeps one physical retirement tracked even when called repeatedly [0.22ms]
+[chatgpt-web] browser_settled {"traceId":"failed-trace","outcome":"error","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"traceId":"remaining-trace","outcome":"error","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+(pass) a failed physical retirement is observed and drain still waits for the other helper [0.53ms]
+[chatgpt-web] browser_settled {"outcome":"error","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"error","compaction":false,"submission":"unknown"}
+(pass) a failed helper keeps the retained conversation fenced until every exit (clear) [0.41ms]
+[chatgpt-web] browser_settled {"outcome":"error","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"error","compaction":false,"submission":"unknown"}
+(pass) a failed helper keeps the retained conversation fenced until every exit (conversation) [0.49ms]
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+(pass) legacy runtime without physicalSettlement exits with browser settlement (failed=%s) [0.18ms]
+[chatgpt-web] browser_settled {"outcome":"error","compaction":false,"submission":"unknown"}
+(pass) legacy runtime without physicalSettlement exits with browser settlement (failed=%s) [0.07ms]
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+(pass) capacity is not released by a final answer while all five helpers still run [0.38ms]
+
+tests/server-physical-shutdown.test.ts:
+[chatgpt-web] browser_settled {"traceId":"shutdown-physical-trace","outcome":"final","compaction":false,"submission":"unknown"}
+(pass) a drained runtime refuses shutdown until an interrupted helper physically exits [4.10ms]
+[chatgpt-web] browser_settled {"traceId":"shutdown-physical-trace","outcome":"final","compaction":false,"submission":"unknown"}
+(pass) signal shutdown keeps its listener open until cancelled helper cleanup settles [12.59ms]
+
+tests/server-real-adapter-pressure.test.ts:
+[chatgpt-web] browser_settled {"traceId":"40ecaee8c9b9","outcome":"final","compaction":false,"submission":"accepted"}
+REAL_ADAPTER_PRESSURE {"stream":false,"starts":1,"simulatedSends":1,"physicalModelSubmissions":0,"results":[{"attempt":"feed","httpStatus":200,"terminalCount":1,"status":"completed","errorNotifications":0},{"attempt":"exact-replay","httpStatus":502,"terminalCount":1,"status":"failed","error":{"message":"Adapter event backlog exceeded","type":"server_error","code":"adapter_event_backlog_exceeded"},"retryable":false,"errorNotifications":1}]}
+(pass) real adapter exact replay retains queue failure through observer wrapping, stream=false [160.54ms]
+[chatgpt-web] browser_settled {"traceId":"34825a4675c3","outcome":"final","compaction":false,"submission":"accepted"}
+REAL_ADAPTER_PRESSURE {"stream":true,"starts":1,"simulatedSends":1,"physicalModelSubmissions":0,"results":[{"attempt":"feed","httpStatus":200,"terminalCount":1,"status":"completed","errorNotifications":0},{"attempt":"exact-replay","httpStatus":200,"terminalCount":1,"status":"failed","error":{"message":"Adapter event backlog exceeded","type":"server_error","code":"adapter_event_backlog_exceeded"},"retryable":false,"errorNotifications":1}]}
+(pass) real adapter exact replay retains queue failure through observer wrapping, stream=true [51.68ms]
+
+ 94 pass
+ 0 fail
+ 517 expect() calls
+Ran 94 tests across 9 files. [8.91s]

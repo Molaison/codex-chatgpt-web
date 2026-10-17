@@ -1,0 +1,7 @@
+{"at":"2026-10-17T18:37:52.298Z","event":"http_attempt","n":1,"method":"POST","path":"/v1/responses","encoding":null,"model":"chatgpt-web/gpt-5.6-luna"}
+{"at":"2026-10-17T18:37:52.316Z","event":"worker_start","n":1}
+{"at":"2026-10-17T18:37:52.318Z","event":"send_activated","n":1}
+{"at":"2026-10-17T18:37:52.318Z","event":"submitted","n":1}
+{"at":"2026-10-17T18:37:52.318Z","event":"text_delta","n":1,"text":"OVERNIGHT_CANARY_1"}
+{"at":"2026-10-17T18:37:52.318Z","event":"worker_settled","n":1}
+{"at":"2026-10-17T18:37:56.819Z","event":"harness_error","error":"Error: fixture bound"}

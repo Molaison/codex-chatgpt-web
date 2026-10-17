@@ -1,0 +1,49 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests\server-real-adapter-pressure.test.ts:
+[chatgpt-web] browser_settled {"traceId":"d62bb26775a5","outcome":"final","compaction":false,"submission":"accepted"}
+REAL_ADAPTER_PRESSURE {"stream":false,"starts":1,"simulatedSends":1,"physicalModelSubmissions":0,"results":[{"attempt":"feed","httpStatus":200,"terminalCount":1,"status":"completed","errorNotifications":0},{"attempt":"exact-replay","httpStatus":502,"terminalCount":1,"status":"failed","error":{"message":"Adapter event backlog exceeded","type":"server_error","code":"adapter_event_backlog_exceeded"},"retryable":false,"errorNotifications":1}]}
+(pass) real adapter exact replay retains queue failure through observer wrapping, stream=false [755.95ms]
+[chatgpt-web] browser_settled {"traceId":"3058a312f9d9","outcome":"final","compaction":false,"submission":"accepted"}
+REAL_ADAPTER_PRESSURE {"stream":true,"starts":1,"simulatedSends":1,"physicalModelSubmissions":0,"results":[{"attempt":"feed","httpStatus":200,"terminalCount":1,"status":"failed","error":{"message":"Adapter event backlog exceeded","type":"server_error","code":"adapter_event_backlog_exceeded"},"retryable":false,"errorNotifications":1},{"attempt":"exact-replay","httpStatus":200,"terminalCount":1,"status":"failed","error":{"message":"Adapter event backlog exceeded","type":"server_error","code":"adapter_event_backlog_exceeded"},"retryable":false,"errorNotifications":1}]}
+56 |       expect(starts).toBe(1); expect(sends).toBe(1);
+57 |       expect(browserSignal?.aborted).toBe(false);
+58 |       const [feed, replay] = results;
+59 |       expect(feed.httpStatus).toBe(200);
+60 |       expect(feed.terminalCount).toBe(1);
+61 |       expect(feed.response).toMatchObject({ status: "completed" });
+                                 ^
+error: expect(received).toMatchObject(expected)
+
+  {
+-   "status": "completed",
++   "created_at": 1792263970,
++   "error": {
++     "code": "adapter_event_backlog_exceeded",
++     "message": "Adapter event backlog exceeded",
++     "type": "server_error",
++   },
++   "id": "resp_0fe7df754d384dab983bab4f6ecd2dee",
++   "last_error": {
++     "code": "adapter_event_backlog_exceeded",
++     "message": "Adapter event backlog exceeded",
++     "type": "server_error",
++   },
++   "model": "chatgpt-web/gpt-5.6-sol-instant",
++   "object": "response",
++   "output": [],
++   "retryable": false,
++   "status": "failed",
++   "usage": null,
+  }
+
+- Expected  - 1
++ Received  + 18
+
+      at <anonymous> (<windows-user-home>\Documents\Codex\2026-10-17\task\.codex-tasks\20261017-windows-ci-crash\overnight-source-candidate\tests\server-real-adapter-pressure.test.ts:61:29)
+(fail) real adapter exact replay retains queue failure through observer wrapping, stream=true [25.65ms]
+
+ 1 pass
+ 1 fail
+ 19 expect() calls
+Ran 2 tests across 1 file. [1053.00ms]

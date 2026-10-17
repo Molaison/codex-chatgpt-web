@@ -1,0 +1,50 @@
+{
+  "checkedAt": "2026-10-17T18:50:25.499653Z",
+  "additionalResponsesHttpRequests": 0,
+  "modes": [
+    {
+      "mode": "json",
+      "pid": 3491568,
+      "supervisorChildExited": true,
+      "pidAbsentAtCheck": true,
+      "pidCheckOutput": "",
+      "port": 42425,
+      "cleanupHealth": {
+        "stage": "after-cleanup-before-stop",
+        "activeHttp": 0,
+        "activeBrowser": 0,
+        "pid": 3491568
+      },
+      "portClosed": true,
+      "portCloseError": "ConnectionRefused",
+      "cleaned": true,
+      "responsesHttpRequests": 2,
+      "guardExitCode": 0,
+      "guardStopReason": null,
+      "guardElapsedMs": 657,
+      "guardRssPeak": 209055744
+    },
+    {
+      "mode": "sse",
+      "pid": 3491731,
+      "supervisorChildExited": true,
+      "pidAbsentAtCheck": true,
+      "pidCheckOutput": "",
+      "port": 46505,
+      "cleanupHealth": {
+        "stage": "after-cleanup-before-stop",
+        "activeHttp": 0,
+        "activeBrowser": 0,
+        "pid": 3491731
+      },
+      "portClosed": true,
+      "portCloseError": "ConnectionRefused",
+      "cleaned": true,
+      "responsesHttpRequests": 1,
+      "guardExitCode": 1,
+      "guardStopReason": null,
+      "guardElapsedMs": 658,
+      "guardRssPeak": 206692352
+    }
+  ]
+}

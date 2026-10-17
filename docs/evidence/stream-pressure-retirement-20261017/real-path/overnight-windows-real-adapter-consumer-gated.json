@@ -1,0 +1,187 @@
+{
+  "timestampUtc": "2026-10-17T19:10:51Z",
+  "platform": "win32",
+  "sourceHashes": {
+    "src/server.ts": "c5c75ddc3a83702309f5204d5e729bf55df6bf8423117ae69ad2239415178455",
+    "tests/server-real-adapter-pressure.test.ts": "ec3151ccc9ca6f35952846a2e0311fdbbe9cdf63e8d9f7a10e005567f2465881"
+  },
+  "args": [
+    "<windows-user-home>\\Documents\\Codex\\2026-10-17\\task\\.codex-tasks\\20261017-windows-ci-crash\\overnight-installer\\payload\\unpacked\\resources\\runtime\\runtime\\bun.exe",
+    "test",
+    "tests/server-real-adapter-pressure.test.ts"
+  ],
+  "pid": 2700,
+  "exitCode": 0,
+  "stopReason": null,
+  "elapsedMs": 1155,
+  "rssPeak": 267882496,
+  "samples": [
+    {
+      "ms": 10,
+      "rss": 1585152,
+      "treeRss": 1585152
+    },
+    {
+      "ms": 43,
+      "rss": 31330304,
+      "treeRss": 31330304
+    },
+    {
+      "ms": 77,
+      "rss": 42496000,
+      "treeRss": 42496000
+    },
+    {
+      "ms": 110,
+      "rss": 92172288,
+      "treeRss": 92172288
+    },
+    {
+      "ms": 142,
+      "rss": 105320448,
+      "treeRss": 105320448
+    },
+    {
+      "ms": 175,
+      "rss": 102506496,
+      "treeRss": 102506496
+    },
+    {
+      "ms": 207,
+      "rss": 114601984,
+      "treeRss": 114601984
+    },
+    {
+      "ms": 241,
+      "rss": 131076096,
+      "treeRss": 131076096
+    },
+    {
+      "ms": 273,
+      "rss": 144957440,
+      "treeRss": 144957440
+    },
+    {
+      "ms": 306,
+      "rss": 159854592,
+      "treeRss": 159854592
+    },
+    {
+      "ms": 340,
+      "rss": 190492672,
+      "treeRss": 190492672
+    },
+    {
+      "ms": 374,
+      "rss": 216641536,
+      "treeRss": 216641536
+    },
+    {
+      "ms": 407,
+      "rss": 267882496,
+      "treeRss": 267882496
+    },
+    {
+      "ms": 440,
+      "rss": 251641856,
+      "treeRss": 251641856
+    },
+    {
+      "ms": 475,
+      "rss": 256024576,
+      "treeRss": 256024576
+    },
+    {
+      "ms": 509,
+      "rss": 228802560,
+      "treeRss": 228802560
+    },
+    {
+      "ms": 544,
+      "rss": 225538048,
+      "treeRss": 225538048
+    },
+    {
+      "ms": 578,
+      "rss": 219082752,
+      "treeRss": 219082752
+    },
+    {
+      "ms": 610,
+      "rss": 220094464,
+      "treeRss": 220094464
+    },
+    {
+      "ms": 644,
+      "rss": 218796032,
+      "treeRss": 218796032
+    },
+    {
+      "ms": 677,
+      "rss": 226988032,
+      "treeRss": 226988032
+    },
+    {
+      "ms": 711,
+      "rss": 224305152,
+      "treeRss": 224305152
+    },
+    {
+      "ms": 744,
+      "rss": 247820288,
+      "treeRss": 247820288
+    },
+    {
+      "ms": 778,
+      "rss": 247697408,
+      "treeRss": 247697408
+    },
+    {
+      "ms": 814,
+      "rss": 250109952,
+      "treeRss": 250109952
+    },
+    {
+      "ms": 850,
+      "rss": 218963968,
+      "treeRss": 218963968
+    },
+    {
+      "ms": 883,
+      "rss": 228974592,
+      "treeRss": 228974592
+    },
+    {
+      "ms": 916,
+      "rss": 242565120,
+      "treeRss": 242565120
+    },
+    {
+      "ms": 952,
+      "rss": 225849344,
+      "treeRss": 225849344
+    },
+    {
+      "ms": 985,
+      "rss": 248147968,
+      "treeRss": 248147968
+    },
+    {
+      "ms": 1019,
+      "rss": 253198336,
+      "treeRss": 253198336
+    },
+    {
+      "ms": 1052,
+      "rss": 225284096,
+      "treeRss": 225284096
+    },
+    {
+      "ms": 1084,
+      "rss": 237793280,
+      "treeRss": 237793280
+    }
+  ],
+  "physicalModelSubmissions": 0,
+  "childExited": true
+}

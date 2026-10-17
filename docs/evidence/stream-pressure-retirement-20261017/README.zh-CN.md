@@ -43,3 +43,7 @@ Windows保留原有tee生命周期实现：adapter完成后即使客户端仍暂
 ## 后续阻塞（本证据批次之后）
 
 PR13 的 Windows push CI39058704408/job117471974288 为1350通过、110跳过、10失败：8项生命周期活动数稳定多2，随后2项停机超时。正在诊断前序共享fixture物理清理，未删除断言或加时限。独审另指出真实createChatGptWebAdapter会包装queue.push异常，本批自定义adapter通过不能证明实际adapter错误分类。正在追加该真实adapter接缝回归。此批只绑定ee43d55，不能代表最终分支或全套通过。PR12已由父线程合并，main更新至fbabf15c49a4c11862b88eaf6268845c85808665；后续整合会明确绑定新main。
+
+## 第二批追加证据
+
+实际 createChatGptWebAdapter 的 writer-boundary 修复、有限真实 HTTP/CLI、Windows 原12项fixture前后对照及最终消费端门控测试，见 [real-path/README.zh-CN.md](real-path/README.zh-CN.md)。该批保留原始失败与中间结果，区分自定义adapter、实际adapter、实际HTTP与实际CLI；新模型提交仍为零。上文“后续阻塞”是第一批发布时状态，第二批说明 c6 Windows 的旧10项消失、首发同步假设和额外malformed超时等后续发现；不能将第一批候选矩阵当当前分支全套通过。

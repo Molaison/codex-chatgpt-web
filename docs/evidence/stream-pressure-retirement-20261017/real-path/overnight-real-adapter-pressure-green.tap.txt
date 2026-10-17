@@ -1,0 +1,29 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/event-queue.test.ts:
+(pass) a full queue delivers one failure instead of its undelivered backlog [0.62ms]
+(pass) failure releases waiting consumers with one terminal value [0.17ms]
+(pass) normal close drains accepted values and releases idle waiters [0.10ms]
+(pass) return discards undelivered output and closes every waiter [0.10ms]
+
+tests/server-event-pressure.test.ts:
+(pass) non-streaming output is consumed while an asynchronous adapter is still producing [19.75ms]
+(pass) synchronous replay overflow has one explicit failure, stream=false [2.12ms]
+(pass) an observer throwing on output and failure cannot reject the producer, stream=false [0.79ms]
+(pass) synchronous replay overflow has one explicit failure, stream=true [3.06ms]
+(pass) an observer throwing on output and failure cannot reject the producer, stream=true [0.52ms]
+(pass) normal streamed output still completes once [0.91ms]
+(pass) a later adapter failure preserves already delivered text without completing it [0.87ms]
+
+tests/server-real-adapter-pressure.test.ts:
+[chatgpt-web] browser_settled {"traceId":"1d44e25a853d","outcome":"final","compaction":false,"submission":"accepted"}
+REAL_ADAPTER_PRESSURE {"stream":false,"starts":1,"simulatedSends":1,"physicalModelSubmissions":0,"results":[{"attempt":"feed","httpStatus":200,"terminalCount":1,"status":"completed","errorNotifications":0},{"attempt":"exact-replay","httpStatus":502,"terminalCount":1,"status":"failed","error":{"message":"Adapter event backlog exceeded","type":"server_error","code":"adapter_event_backlog_exceeded"},"retryable":false,"errorNotifications":1}]}
+(pass) real adapter exact replay retains queue failure through observer wrapping, stream=false [181.02ms]
+[chatgpt-web] browser_settled {"traceId":"56d7e373e2a4","outcome":"final","compaction":false,"submission":"accepted"}
+REAL_ADAPTER_PRESSURE {"stream":true,"starts":1,"simulatedSends":1,"physicalModelSubmissions":0,"results":[{"attempt":"feed","httpStatus":200,"terminalCount":1,"status":"completed","errorNotifications":0},{"attempt":"exact-replay","httpStatus":200,"terminalCount":1,"status":"failed","error":{"message":"Adapter event backlog exceeded","type":"server_error","code":"adapter_event_backlog_exceeded"},"retryable":false,"errorNotifications":1}]}
+(pass) real adapter exact replay retains queue failure through observer wrapping, stream=true [49.35ms]
+
+ 13 pass
+ 0 fail
+ 52 expect() calls
+Ran 13 tests across 3 files. [697.00ms]

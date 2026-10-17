@@ -1,0 +1,3740 @@
+[
+  {
+    "at": "2026-10-17T18:42:10.729Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 156577792,
+    "treeRssBytes": 726212608,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 156577792,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 567304192,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452421,
+        "ppid": 3452105,
+        "rssBytes": 2330624,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:10.822Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 156393472,
+    "treeRssBytes": 743723008,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 156393472,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 585129984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452548,
+        "ppid": 3452105,
+        "rssBytes": 2199552,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:10.926Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 157175808,
+    "treeRssBytes": 837300224,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 157175808,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 654077952,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452563,
+        "ppid": 3452404,
+        "rssBytes": 5087232,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452565,
+        "ppid": 3452563,
+        "rssBytes": 5185536,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452566,
+        "ppid": 3452565,
+        "rssBytes": 9207808,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452572,
+        "ppid": 3452404,
+        "rssBytes": 4321280,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452598,
+        "ppid": 3452105,
+        "rssBytes": 2244608,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:11.173Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 212602880,
+    "treeRssBytes": 890105856,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 212602880,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 654077952,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452563,
+        "ppid": 3452404,
+        "rssBytes": 5087232,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452565,
+        "ppid": 3452563,
+        "rssBytes": 5185536,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452566,
+        "ppid": 3452565,
+        "rssBytes": 10952704,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452657,
+        "ppid": 3452105,
+        "rssBytes": 2199552,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:11.277Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 209260544,
+    "treeRssBytes": 897204224,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 209260544,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664494080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452563,
+        "ppid": 3452404,
+        "rssBytes": 5087232,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452565,
+        "ppid": 3452563,
+        "rssBytes": 5185536,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452566,
+        "ppid": 3452565,
+        "rssBytes": 10952704,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452661,
+        "ppid": 3452105,
+        "rssBytes": 2224128,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:11.376Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 202600448,
+    "treeRssBytes": 890580992,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 202600448,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664494080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452563,
+        "ppid": 3452404,
+        "rssBytes": 5087232,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452565,
+        "ppid": 3452563,
+        "rssBytes": 5185536,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452566,
+        "ppid": 3452565,
+        "rssBytes": 10952704,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452668,
+        "ppid": 3452105,
+        "rssBytes": 2260992,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:11.477Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 203309056,
+    "treeRssBytes": 891305984,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 203309056,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664494080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452563,
+        "ppid": 3452404,
+        "rssBytes": 5087232,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452565,
+        "ppid": 3452563,
+        "rssBytes": 5185536,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452566,
+        "ppid": 3452565,
+        "rssBytes": 10952704,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452670,
+        "ppid": 3452105,
+        "rssBytes": 2277376,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:11.578Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 204435456,
+    "treeRssBytes": 892411904,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 204435456,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664494080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452563,
+        "ppid": 3452404,
+        "rssBytes": 5087232,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452565,
+        "ppid": 3452563,
+        "rssBytes": 5185536,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452566,
+        "ppid": 3452565,
+        "rssBytes": 10952704,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452671,
+        "ppid": 3452105,
+        "rssBytes": 2256896,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:11.677Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 205156352,
+    "treeRssBytes": 893112320,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 205156352,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664494080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452563,
+        "ppid": 3452404,
+        "rssBytes": 5087232,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452565,
+        "ppid": 3452563,
+        "rssBytes": 5185536,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452566,
+        "ppid": 3452565,
+        "rssBytes": 10952704,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452672,
+        "ppid": 3452105,
+        "rssBytes": 2236416,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:11.776Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 206143488,
+    "treeRssBytes": 873373696,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 206143488,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452673,
+        "ppid": 3452105,
+        "rssBytes": 2387968,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452674,
+        "ppid": 3452404,
+        "rssBytes": 0,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:11.874Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 207073280,
+    "treeRssBytes": 893587456,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 207073280,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452675,
+        "ppid": 3452105,
+        "rssBytes": 2334720,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 9232384,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:11.970Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 208162816,
+    "treeRssBytes": 896569344,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 208162816,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452681,
+        "ppid": 3452105,
+        "rssBytes": 2277376,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:12.069Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 208252928,
+    "treeRssBytes": 896663552,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 208252928,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452689,
+        "ppid": 3452105,
+        "rssBytes": 2281472,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:12.184Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 203415552,
+    "treeRssBytes": 891932672,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 203415552,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452690,
+        "ppid": 3452105,
+        "rssBytes": 2387968,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:12.291Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 203825152,
+    "treeRssBytes": 892346368,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 203825152,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452693,
+        "ppid": 3452105,
+        "rssBytes": 2392064,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:12.380Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 203444224,
+    "treeRssBytes": 891785216,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 203444224,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452700,
+        "ppid": 3452105,
+        "rssBytes": 2211840,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:12.487Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 204107776,
+    "treeRssBytes": 892440576,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 204107776,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452701,
+        "ppid": 3452105,
+        "rssBytes": 2203648,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:12.583Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 204820480,
+    "treeRssBytes": 893210624,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 204820480,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452702,
+        "ppid": 3452105,
+        "rssBytes": 2260992,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:12.684Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 205680640,
+    "treeRssBytes": 894144512,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 205680640,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452703,
+        "ppid": 3452105,
+        "rssBytes": 2334720,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:12.793Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 206565376,
+    "treeRssBytes": 895025152,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 206565376,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452707,
+        "ppid": 3452105,
+        "rssBytes": 2330624,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:12.895Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 207515648,
+    "treeRssBytes": 900943872,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 207515648,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 5087232,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452815,
+        "ppid": 3452105,
+        "rssBytes": 2211840,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:12.988Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 208220160,
+    "treeRssBytes": 901693440,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 208220160,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 5087232,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452898,
+        "ppid": 3452105,
+        "rssBytes": 2256896,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:13.090Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 209190912,
+    "treeRssBytes": 903323648,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 209190912,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 5750784,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452939,
+        "ppid": 3452105,
+        "rssBytes": 2252800,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:13.188Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 210288640,
+    "treeRssBytes": 904376320,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 210288640,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 5750784,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452941,
+        "ppid": 3452105,
+        "rssBytes": 2207744,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:13.289Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 210210816,
+    "treeRssBytes": 904445952,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 210210816,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 5820416,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452944,
+        "ppid": 3452105,
+        "rssBytes": 2285568,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:13.395Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 203816960,
+    "treeRssBytes": 897921024,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 203816960,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 5820416,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452952,
+        "ppid": 3452105,
+        "rssBytes": 2154496,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:13.490Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 204197888,
+    "treeRssBytes": 898990080,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 204197888,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6356992,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452953,
+        "ppid": 3452105,
+        "rssBytes": 2306048,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:13.591Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 205103104,
+    "treeRssBytes": 900059136,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 205103104,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6627328,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452954,
+        "ppid": 3452105,
+        "rssBytes": 2199552,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:13.692Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 205975552,
+    "treeRssBytes": 900562944,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 205975552,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6111232,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452955,
+        "ppid": 3452105,
+        "rssBytes": 2347008,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:13.789Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 206659584,
+    "treeRssBytes": 901177344,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 206659584,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6111232,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452956,
+        "ppid": 3452105,
+        "rssBytes": 2277376,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:13.889Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 207618048,
+    "treeRssBytes": 902086656,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 207618048,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6111232,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452957,
+        "ppid": 3452105,
+        "rssBytes": 2228224,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:13.992Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 208556032,
+    "treeRssBytes": 903159808,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 208556032,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6283264,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452958,
+        "ppid": 3452105,
+        "rssBytes": 2191360,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:14.091Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 209870848,
+    "treeRssBytes": 904491008,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 209870848,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6283264,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452959,
+        "ppid": 3452105,
+        "rssBytes": 2207744,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:14.190Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 209899520,
+    "treeRssBytes": 904511488,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 209899520,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6283264,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452960,
+        "ppid": 3452105,
+        "rssBytes": 2199552,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:14.297Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 209649664,
+    "treeRssBytes": 904232960,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 209649664,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6283264,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452962,
+        "ppid": 3452105,
+        "rssBytes": 2170880,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:14.395Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 204193792,
+    "treeRssBytes": 898940928,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 204193792,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6283264,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452970,
+        "ppid": 3452105,
+        "rssBytes": 2334720,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:14.500Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 204820480,
+    "treeRssBytes": 899473408,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 204820480,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6283264,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452971,
+        "ppid": 3452105,
+        "rssBytes": 2240512,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:14.605Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 205754368,
+    "treeRssBytes": 900845568,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 205754368,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6549504,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453169,
+        "ppid": 3452105,
+        "rssBytes": 2412544,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:14.696Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 206360576,
+    "treeRssBytes": 901275648,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 206360576,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6549504,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453193,
+        "ppid": 3452105,
+        "rssBytes": 2236416,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:14.802Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 207486976,
+    "treeRssBytes": 902397952,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 207486976,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6549504,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453194,
+        "ppid": 3452105,
+        "rssBytes": 2232320,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:14.893Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 208162816,
+    "treeRssBytes": 903098368,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 208162816,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6549504,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453195,
+        "ppid": 3452105,
+        "rssBytes": 2256896,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:15.000Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 208838656,
+    "treeRssBytes": 903979008,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 208838656,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6819840,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453196,
+        "ppid": 3452105,
+        "rssBytes": 2191360,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:15.100Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 209772544,
+    "treeRssBytes": 904945664,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 209772544,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6819840,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453203,
+        "ppid": 3452105,
+        "rssBytes": 2224128,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:15.200Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 210878464,
+    "treeRssBytes": 906158080,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 210878464,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6819840,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453204,
+        "ppid": 3452105,
+        "rssBytes": 2330624,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:15.298Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 210808832,
+    "treeRssBytes": 905932800,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 210808832,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6819840,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453205,
+        "ppid": 3452105,
+        "rssBytes": 2174976,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:15.404Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 204423168,
+    "treeRssBytes": 899612672,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 204423168,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6819840,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453210,
+        "ppid": 3452105,
+        "rssBytes": 2240512,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:15.506Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 204988416,
+    "treeRssBytes": 900222976,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 204988416,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6819840,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453214,
+        "ppid": 3452105,
+        "rssBytes": 2285568,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:15.603Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 205815808,
+    "treeRssBytes": 900988928,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 205815808,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6819840,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453215,
+        "ppid": 3452105,
+        "rssBytes": 2224128,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:15.701Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 206446592,
+    "treeRssBytes": 901648384,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 206446592,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6819840,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453217,
+        "ppid": 3452105,
+        "rssBytes": 2252800,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:15.811Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 207572992,
+    "treeRssBytes": 902770688,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 207572992,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 5033984,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452678,
+        "ppid": 3452677,
+        "rssBytes": 5070848,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452679,
+        "ppid": 3452678,
+        "rssBytes": 11182080,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452805,
+        "ppid": 3452677,
+        "rssBytes": 6819840,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453218,
+        "ppid": 3452105,
+        "rssBytes": 2248704,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:15.902Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 208576512,
+    "treeRssBytes": 875724800,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 208576512,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3452677,
+        "ppid": 3452404,
+        "rssBytes": 0,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453228,
+        "ppid": 3452105,
+        "rssBytes": 2306048,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:16.008Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 209141760,
+    "treeRssBytes": 897855488,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 209141760,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453242,
+        "ppid": 3452404,
+        "rssBytes": 21626880,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453243,
+        "ppid": 3452105,
+        "rssBytes": 2244608,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:16.110Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 210264064,
+    "treeRssBytes": 907210752,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 210264064,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453242,
+        "ppid": 3452404,
+        "rssBytes": 29859840,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453244,
+        "ppid": 3452105,
+        "rssBytes": 2244608,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:16.213Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 210186240,
+    "treeRssBytes": 908046336,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 210186240,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453242,
+        "ppid": 3452404,
+        "rssBytes": 30806016,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453248,
+        "ppid": 3452105,
+        "rssBytes": 2211840,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:16.311Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 210444288,
+    "treeRssBytes": 910020608,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 210444288,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453242,
+        "ppid": 3452404,
+        "rssBytes": 32452608,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453249,
+        "ppid": 3452105,
+        "rssBytes": 2281472,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:16.414Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 204623872,
+    "treeRssBytes": 907018240,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 204623872,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453242,
+        "ppid": 3452404,
+        "rssBytes": 35328000,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453252,
+        "ppid": 3452105,
+        "rssBytes": 2224128,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:16.515Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 205328384,
+    "treeRssBytes": 872452096,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 205328384,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453242,
+        "ppid": 3452404,
+        "rssBytes": 0,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453257,
+        "ppid": 3452105,
+        "rssBytes": 2281472,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:16.613Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 205967360,
+    "treeRssBytes": 873062400,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 205967360,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664842240,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453258,
+        "ppid": 3452404,
+        "rssBytes": 0,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453259,
+        "ppid": 3452105,
+        "rssBytes": 2252800,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:16.712Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 206831616,
+    "treeRssBytes": 871985152,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 206831616,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453268,
+        "ppid": 3452105,
+        "rssBytes": 2228224,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:16.813Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 207712256,
+    "treeRssBytes": 872861696,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 207712256,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453269,
+        "ppid": 3452105,
+        "rssBytes": 2224128,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:16.943Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 212353024,
+    "treeRssBytes": 877486080,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 212353024,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453271,
+        "ppid": 3452105,
+        "rssBytes": 2207744,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:17.046Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 213262336,
+    "treeRssBytes": 878424064,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 213262336,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453272,
+        "ppid": 3452105,
+        "rssBytes": 2236416,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:17.142Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 214212608,
+    "treeRssBytes": 879419392,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 214212608,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453279,
+        "ppid": 3452105,
+        "rssBytes": 2281472,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:17.240Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 215175168,
+    "treeRssBytes": 880300032,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 215175168,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453280,
+        "ppid": 3452105,
+        "rssBytes": 2199552,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:17.345Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 215048192,
+    "treeRssBytes": 880226304,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 215048192,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453281,
+        "ppid": 3452105,
+        "rssBytes": 2252800,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:17.444Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 204832768,
+    "treeRssBytes": 869957632,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 204832768,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453288,
+        "ppid": 3452105,
+        "rssBytes": 2199552,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:17.545Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 205451264,
+    "treeRssBytes": 870563840,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 205451264,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453289,
+        "ppid": 3452105,
+        "rssBytes": 2187264,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:17.645Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 206082048,
+    "treeRssBytes": 871206912,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 206082048,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453290,
+        "ppid": 3452105,
+        "rssBytes": 2199552,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:17.745Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 206983168,
+    "treeRssBytes": 872239104,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 206983168,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453291,
+        "ppid": 3452105,
+        "rssBytes": 2330624,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:17.849Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 207941632,
+    "treeRssBytes": 873148416,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 207941632,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453292,
+        "ppid": 3452105,
+        "rssBytes": 2281472,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:17.980Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 212635648,
+    "treeRssBytes": 877953024,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 212635648,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453293,
+        "ppid": 3452105,
+        "rssBytes": 2392064,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:18.072Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 212787200,
+    "treeRssBytes": 877940736,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 212787200,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453294,
+        "ppid": 3452105,
+        "rssBytes": 2228224,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:18.182Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 205082624,
+    "treeRssBytes": 870285312,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 205082624,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453295,
+        "ppid": 3452105,
+        "rssBytes": 2277376,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:18.276Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 205639680,
+    "treeRssBytes": 870846464,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 205639680,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453296,
+        "ppid": 3452105,
+        "rssBytes": 2281472,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:18.383Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 206139392,
+    "treeRssBytes": 871325696,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 206139392,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453297,
+        "ppid": 3452105,
+        "rssBytes": 2260992,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:18.485Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 205168640,
+    "treeRssBytes": 870395904,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 205168640,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453304,
+        "ppid": 3452105,
+        "rssBytes": 2301952,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:18.588Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 205778944,
+    "treeRssBytes": 870952960,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 205778944,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453326,
+        "ppid": 3452105,
+        "rssBytes": 2248704,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:18.689Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 206405632,
+    "treeRssBytes": 871555072,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 206405632,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453348,
+        "ppid": 3452105,
+        "rssBytes": 2224128,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:18.798Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 207044608,
+    "treeRssBytes": 872222720,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 207044608,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453454,
+        "ppid": 3452105,
+        "rssBytes": 2252800,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:18.898Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 208093184,
+    "treeRssBytes": 873222144,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 208093184,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453657,
+        "ppid": 3452105,
+        "rssBytes": 2203648,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:19.032Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 212717568,
+    "treeRssBytes": 877977600,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 212717568,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453687,
+        "ppid": 3452105,
+        "rssBytes": 2334720,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:19.130Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 213569536,
+    "treeRssBytes": 878768128,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 213569536,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453694,
+        "ppid": 3452105,
+        "rssBytes": 2273280,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:19.228Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 214388736,
+    "treeRssBytes": 879546368,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 214388736,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453695,
+        "ppid": 3452105,
+        "rssBytes": 2232320,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:19.328Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 215519232,
+    "treeRssBytes": 880775168,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 215519232,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453696,
+        "ppid": 3452105,
+        "rssBytes": 2330624,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:19.426Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 215277568,
+    "treeRssBytes": 880463872,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 215277568,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453697,
+        "ppid": 3452105,
+        "rssBytes": 2260992,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:19.536Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 210178048,
+    "treeRssBytes": 875409408,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 210178048,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453704,
+        "ppid": 3452105,
+        "rssBytes": 2306048,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:19.630Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 206311424,
+    "treeRssBytes": 871489536,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 206311424,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453705,
+        "ppid": 3452105,
+        "rssBytes": 2252800,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:19.730Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 206901248,
+    "treeRssBytes": 872054784,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 206901248,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453706,
+        "ppid": 3452105,
+        "rssBytes": 2228224,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:19.828Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 207491072,
+    "treeRssBytes": 872603648,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 207491072,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453707,
+        "ppid": 3452105,
+        "rssBytes": 2187264,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:19.937Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 208322560,
+    "treeRssBytes": 873492480,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 208322560,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453708,
+        "ppid": 3452105,
+        "rssBytes": 2244608,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:20.062Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 212733952,
+    "treeRssBytes": 877907968,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 212733952,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453711,
+        "ppid": 3452105,
+        "rssBytes": 2248704,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:20.163Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 212836352,
+    "treeRssBytes": 878043136,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 212836352,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453712,
+        "ppid": 3452105,
+        "rssBytes": 2281472,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:20.261Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 206069760,
+    "treeRssBytes": 871219200,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 206069760,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453713,
+        "ppid": 3452105,
+        "rssBytes": 2224128,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:20.359Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 206368768,
+    "treeRssBytes": 871612416,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 206368768,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453714,
+        "ppid": 3452105,
+        "rssBytes": 2318336,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:20.468Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 206581760,
+    "treeRssBytes": 871899136,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 206581760,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453717,
+        "ppid": 3452105,
+        "rssBytes": 2392064,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:20.580Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 204206080,
+    "treeRssBytes": 869330944,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 204206080,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453877,
+        "ppid": 3452105,
+        "rssBytes": 2199552,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:20.675Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 204709888,
+    "treeRssBytes": 869937152,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 204709888,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453936,
+        "ppid": 3452105,
+        "rssBytes": 2301952,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:20.774Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 205275136,
+    "treeRssBytes": 870588416,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 205275136,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662925312,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453937,
+        "ppid": 3452105,
+        "rssBytes": 2387968,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:20.871Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 205877248,
+    "treeRssBytes": 870932480,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 205877248,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662851584,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453938,
+        "ppid": 3452105,
+        "rssBytes": 2203648,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:20.970Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 206442496,
+    "treeRssBytes": 871481344,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 206442496,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662851584,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453939,
+        "ppid": 3452105,
+        "rssBytes": 2187264,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:21.098Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 210870272,
+    "treeRssBytes": 876036096,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 210870272,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 662851584,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453946,
+        "ppid": 3452105,
+        "rssBytes": 2314240,
+        "role": "owned child"
+      }
+    ]
+  },
+  {
+    "at": "2026-10-17T18:42:21.195Z",
+    "proxyPid": 3452105,
+    "proxyRssBytes": 197853184,
+    "treeRssBytes": 864079872,
+    "processes": [
+      {
+        "pid": 3452105,
+        "ppid": 3452103,
+        "rssBytes": 197853184,
+        "role": "Bun proxy/runtime"
+      },
+      {
+        "pid": 3452404,
+        "ppid": 3452105,
+        "rssBytes": 664035328,
+        "role": "owned child"
+      },
+      {
+        "pid": 3453947,
+        "ppid": 3452105,
+        "rssBytes": 2191360,
+        "role": "owned child"
+      }
+    ]
+  }
+]

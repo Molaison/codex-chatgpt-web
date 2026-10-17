@@ -1,0 +1,1 @@
+Setup attempt 1: Python generator SyntaxError before writing the candidate fixture; CLI/model/HTTP attempts=0. The downstream missing-script failure is preserved separately.

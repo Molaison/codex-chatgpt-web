@@ -1,0 +1,18 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/chatgpt-web-harness.test.ts:
+[chatgpt-web] browser_settled {"traceId":"0dc8d0977d6a","outcome":"final","compaction":false,"submission":"prepared"}
+(pass) ChatGPT outer-native harness v4 > an observer failure in the middle of a drained text batch loses no reconnect data [135.98ms]
+[chatgpt-web] browser_settled {"traceId":"8df257f23c6b","outcome":"final","compaction":false,"submission":"accepted"}
+[chatgpt-web] browser_settled {"traceId":"dd6f5b5134fa","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) ChatGPT outer-native harness v4 > a closed response writer detaches without cancelling accepted browser work [10008.56ms]
+[chatgpt-web] browser_settled {"traceId":"a5be9e3c2ce0","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) ChatGPT outer-native harness v4 > overlapping exact reconnect takes over the observer before browser completion [2.32ms]
+[chatgpt-web] browser_settled {"traceId":"aa3f12c92c4e","outcome":"final","compaction":false,"submission":"accepted"}
+(pass) ChatGPT outer-native harness v4 > Responses SSE reconnect delivers offline output without resubmitting the browser prompt [14.18ms]
+
+ 4 pass
+ 101 filtered out
+ 0 fail
+ 22 expect() calls
+Ran 4 tests across 1 file. [10.64s]
