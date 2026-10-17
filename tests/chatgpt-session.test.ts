@@ -77,7 +77,7 @@ test.each(["Target page, context or browser has been closed", "Timeout 3000ms ex
     click: async () => { throw error; },
     dispatchEvent: async () => { throw new Error("must not try pointerdown"); },
   };
-  await expect(activateChatGptEffortMenu({} as never, control as never, { settleMs: 0 })).rejects.toBe(error);
+  await expect(activateChatGptEffortMenu(effortTestPage({}) as never, control as never, { settleMs: 0 })).rejects.toBe(error);
 });
 
 test("effort activation binds the owned menu after the control opens", async () => {

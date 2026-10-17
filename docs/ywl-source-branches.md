@@ -1,8 +1,8 @@
 # ywl source branches
 
-Source checkpoint: 2026-10-16. Both maintained variants include upstream
-[`f137c2f84da5df214c1e228d74f5ff43e7641c48`](https://github.com/miuuyy/codex-chatgpt-web/commit/f137c2f84da5df214c1e228d74f5ff43e7641c48)
-(version 6.1.9).
+Source checkpoint: 2026-10-17. Both maintained variants include upstream
+[`8645a89e6a5fbe011e1bfbb0821a386ca7477ad5`](https://github.com/miuuyy/codex-chatgpt-web/commit/8645a89e6a5fbe011e1bfbb0821a386ca7477ad5)
+(version 6.1.10).
 
 - [`main`](https://github.com/Molaison/codex-chatgpt-web/tree/main) and
   [`ywl/qa-gpt6`](https://github.com/Molaison/codex-chatgpt-web/tree/ywl/qa-gpt6):
@@ -15,7 +15,7 @@ Source checkpoint: 2026-10-16. Both maintained variants include upstream
   Upstream broker-token verification is retained alongside the local receipt path.
 
 These variants are intentionally separate; do not replace one runtime with the other
-merely because both report 6.1.9. The source checkpoint does not deploy services,
+merely because both report 6.1.10. The source checkpoint does not deploy services,
 change model catalogs or credentials, or publish new binary releases. Upstream
 installers do not contain these customizations. Production changes require their own
 approved, draining release and recovery owner.
