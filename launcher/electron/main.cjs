@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const net = require("node:net");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { recordPackageSmokePhase } = require("./package-smoke.cjs");
 const { pathToFileURL } = require("node:url");
 const {
   app,
@@ -1105,7 +1106,15 @@ async function requestQuit() {
   }
 }
 
+function smokePhase(phase) {
+  if (process.argv.includes("--launcher-smoke-test")) {
+    recordPackageSmokePhase(process.env.CODEX_WEB_GPT_SMOKE_FILE, phase);
+  }
+}
+
 async function start() {
+  smokePhase("single-instance-lock");
+  if (process.argv.includes("--launcher-smoke-test")) app.once("will-quit", () => smokePhase("will-quit"));
   const gotLock = app.requestSingleInstanceLock();
   if (!gotLock) {
     app.quit();
@@ -1114,6 +1123,7 @@ async function start() {
   app.on("second-instance", () => showMainWindow());
   app.on("activate", () => showMainWindow());
 
+  smokePhase("runtime-source");
   await waitForPackagedRuntimeSource({ app, resourcesPath: process.resourcesPath });
   let installedRuntimeRoot = null;
   let runtimeRootResolved = false;
@@ -1130,8 +1140,10 @@ async function start() {
     }
     return installedRuntimeRoot;
   };
+  smokePhase("runtime-install");
   installedRuntimeRoot = runtimeRootProvider();
 
+  smokePhase("debug-port");
   cdpPort = await findFreePort();
   if (process.platform === "linux") {
     app.commandLine.appendSwitch("class", IS_DEV_PROFILE ? "codex-web-gpt-dev" : "codex-web-gpt");
@@ -1139,8 +1151,10 @@ async function start() {
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   app.commandLine.appendSwitch("remote-debugging-port", String(cdpPort));
 
+  smokePhase("electron-ready");
   await app.whenReady();
 
+  smokePhase("launcher-state");
   const stateStore = createStateStore(path.join(app.getPath("userData"), "launcher-state.json"));
   limitsController = new LimitsController(path.join(app.getPath("userData"), "limits.json"), {
     getInteractionMode: () => stateStore.read().browserInteractionMode,
@@ -1187,6 +1201,7 @@ async function start() {
     windowStatePath: path.join(app.getPath("userData"), "window-state.json"),
     startHidden,
   });
+  smokePhase("browser-control");
   browserControl = await new BrowserControlServer({
     logger,
     getBrowserHost: () => browserHost,
@@ -1247,6 +1262,7 @@ async function start() {
     showWindow: showMainWindow,
     getBrowserInteractionMode: () => stateStore.read().browserInteractionMode,
   });
+  smokePhase("browser-host");
   await browserHost.ready();
   const updaterRuntimeRoot = runtimeRootProvider();
   updateController = createUpdateController({
@@ -1273,6 +1289,7 @@ async function start() {
       });
     });
   }
+  smokePhase("renderer-load");
   await loadRenderer(mainWindow);
   if (!launcherSmokeTest) void updateController.checkOnce();
   if (launcherSmokeTest) {
@@ -1280,6 +1297,7 @@ async function start() {
     if (app.isPackaged && !smokeRuntimeRoot) {
       throw new Error("Packaged launcher smoke test could not install its durable runtime");
     }
+    smokePhase("runtime-version");
     const versionInvocation = runtimeSupervisor.runtimeCommand(["--version"]);
     const versionResult = spawnSync(versionInvocation.executable, versionInvocation.args, {
       cwd: versionInvocation.cwd,
@@ -1295,6 +1313,7 @@ async function start() {
         + ` stderr=${JSON.stringify(versionResult.stderr.trim())})`,
       );
     }
+    smokePhase("readiness-marker");
     const markerPath = process.env.CODEX_WEB_GPT_SMOKE_FILE?.trim();
     if (!markerPath || !path.isAbsolute(markerPath)) {
       throw new Error("Packaged launcher smoke test requires an absolute CODEX_WEB_GPT_SMOKE_FILE");
@@ -1307,9 +1326,13 @@ async function start() {
       packaged: app.isPackaged,
       runtimeVerified: true,
     })}\n`);
+    smokePhase("browser-destroy");
     browserHost.destroy();
+    smokePhase("control-close");
     await browserControl.close();
+    smokePhase("window-destroy");
     mainWindow.destroy();
+    smokePhase("app-quit");
     app.quit();
     return;
   }

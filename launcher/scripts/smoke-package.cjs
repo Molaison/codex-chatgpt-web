@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { runSmokeCommand } = require("../electron/package-smoke.cjs");
 const { validateRuntimeBundle } = require("../electron/runtime-install.cjs");
 
 const launcherRoot = path.resolve(__dirname, "..");
@@ -16,20 +17,7 @@ const coreHome = path.join(scratch, "core-home");
 let macAppBundle;
 
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, {
-    cwd: options.cwd || scratch,
-    env: options.env || process.env,
-    encoding: "utf8",
-    maxBuffer: 8 * 1024 * 1024,
-    timeout: options.timeout || 45_000,
-    windowsHide: true,
-  });
-  if (result.error) throw result.error;
-  if (result.status !== 0) {
-    throw new Error(
-      `${command} failed with status ${result.status}: ${result.stderr?.trim() || result.stdout?.trim() || "no output"}`,
-    );
-  }
+  return runSmokeCommand(command, args, { ...options, cwd: options.cwd || scratch });
 }
 
 function windowsInstallLocation() {
@@ -109,7 +97,7 @@ try {
   }
 
   if (!fs.existsSync(executable)) throw new Error(`Packaged launcher executable is missing: ${executable}`);
-  run(command, args, { env });
+  run(command, args, { env, markerPath });
   if (!fs.existsSync(markerPath)) throw new Error("Packaged launcher did not write its readiness marker");
   const marker = JSON.parse(fs.readFileSync(markerPath, "utf8"));
   if (marker.ok !== true
