@@ -37,6 +37,15 @@ function awaitWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T
   });
 }
 
+/** A rejected helper must not release an ownership fence while another helper still runs. */
+async function waitForAllPhysicalSettlements(settlements: Iterable<Promise<void>>): Promise<void> {
+  const results = await Promise.allSettled(settlements);
+  const failures = results
+    .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+    .map(result => result.reason);
+  if (failures.length > 0) throw new AggregateError(failures, "ChatGPT browser cleanup failed");
+}
+
 export type ChatGptBrowserOutcome =
   | { type: "final"; answer: string }
   | { type: "error"; error: Error };
@@ -324,7 +333,9 @@ export class ChatGptTurnSession {
     readonly instruction?: string,
   ) {
     this.attachedConversationKey = runtime.conversationKey;
-    this.physicalSettlement = runtime.physicalSettlement.then(
+    // Older runtime adapters expose only browser settlement; keep their cleanup observable too.
+    const physicalSettlement = runtime.physicalSettlement ?? runtime.browser.then(() => undefined, () => undefined);
+    this.physicalSettlement = physicalSettlement.then(
       () => { this.settledPhysical = true; },
       error => {
         this.settledPhysical = true;
@@ -537,6 +548,7 @@ export class ChatGptTurnSession {
 
 export class ChatGptTurnSessions {
   private readonly entries = new Map<string, ChatGptTurnSession>();
+  private readonly physicalSessions = new Set<ChatGptTurnSession>();
   private readonly conversationHeads = new Map<string, ChatGptTurnSession>();
   private readonly retirements = new Map<string, Promise<void>>();
   private readonly ownerRetirements = new Map<string, Promise<void>>();
@@ -563,7 +575,7 @@ export class ChatGptTurnSessions {
       existing.touch();
       return existing;
     }
-    const active = [...this.entries.values()].filter(session => session.isActive()).length;
+    const active = this.activeCount();
     if (active >= MAX_CHATGPT_BROWSER_TABS) {
       throw new ChatGptWebAdapterError(
         `ChatGPT Web supports at most ${MAX_CHATGPT_BROWSER_TABS} simultaneous browser turns; close or finish a browser tab before starting another`,
@@ -573,6 +585,9 @@ export class ChatGptTurnSessions {
     if (this.entries.size >= this.maxEntries) throw new Error(`ChatGPT web session registry is full (${this.maxEntries} entries)`);
     const session = new ChatGptTurnSession(start(), traceId, ownerKey, nativeTurnId, nativeThreadId, instruction);
     this.entries.set(key, session);
+    this.physicalSessions.add(session);
+    const forgetPhysical = () => { this.physicalSessions.delete(session); };
+    void session.physicalSettlement.then(forgetPhysical, forgetPhysical);
     const conversationKey = session.conversationKey();
     if (conversationKey) this.conversationHeads.set(conversationKey, session);
     return session;
@@ -708,7 +723,7 @@ export class ChatGptTurnSessions {
     const release = matches.findLast(([, session]) => (
       session.runtime.releaseRetainedConversation !== undefined
     ))?.[1].runtime.releaseRetainedConversation;
-    const retirement = Promise.all(matches.map(([, session]) => session.physicalSettlement))
+    const retirement = waitForAllPhysicalSettlements(matches.map(([, session]) => session.physicalSettlement))
       .then(async () => { await release?.(); });
     this.conversationRetirements.set(conversationKey, retirement);
     try {
@@ -788,7 +803,7 @@ export class ChatGptTurnSessions {
     const sessions = [...this.entries.values()]
       .filter(session => session.traceId === traceId && session.isActive());
     for (const session of sessions) session.cancel(reason);
-    return { cancelled: sessions.length, settlement: Promise.all(sessions.map(session => session.physicalSettlement)).then(() => undefined) };
+    return { cancelled: sessions.length, settlement: waitForAllPhysicalSettlements(sessions.map(session => session.physicalSettlement)) };
   }
 
   /**
@@ -813,9 +828,9 @@ export class ChatGptTurnSessions {
       this.entries.delete(key);
       this.forgetConversationHead(session);
     }
-    const settlement = Promise.all(
+    const settlement = waitForAllPhysicalSettlements(
       matches.map(([key, session]) => this.beginRetirement(key, session, reason)),
-    ).then(() => undefined);
+    );
     return { cancelled: matches.length, settlement };
   }
 
@@ -832,15 +847,29 @@ export class ChatGptTurnSessions {
 
   activeCount(): number {
     this.prune();
-    let active = 0;
-    for (const session of this.entries.values()) if (session.isActive()) active += 1;
-    return active;
+    // Logical replay ownership may disappear before helper/end acknowledgement does. Count each
+    // execution once, including completed responses that are still releasing their browser.
+    const active = new Set(this.physicalSessions);
+    for (const session of this.entries.values()) if (session.isActive()) active.add(session);
+    return active.size;
+  }
+
+  /** Drain actual helper exits, including sessions already removed by explicit cancellation. */
+  async waitForPhysicalSettlement(): Promise<void> {
+    const failures: unknown[] = [];
+    while (this.physicalSessions.size > 0) {
+      const results = await Promise.allSettled(
+        [...this.physicalSessions].map(session => session.physicalSettlement),
+      );
+      for (const result of results) if (result.status === "rejected") failures.push(result.reason);
+    }
+    if (failures.length > 0) throw new AggregateError(failures, "ChatGPT browser cleanup failed");
   }
 
   private prune(): void {
     const cutoff = Date.now() - this.ttlMs;
     for (const [key, session] of this.entries) {
-      if (session.isActive() || session.lastUsedAt() >= cutoff) continue;
+      if (session.isActive() || !session.isPhysicallySettled() || session.lastUsedAt() >= cutoff) continue;
       session.cancel();
       this.entries.delete(key);
       this.forgetConversationHead(session);
@@ -861,25 +890,27 @@ export class ChatGptTurnSessions {
     session.cancel(reason);
     const retirement = session.physicalSettlement;
     this.retirements.set(key, retirement);
-    void retirement.then(() => {
+    const forgetRetirement = () => {
       if (this.retirements.get(key) === retirement) this.retirements.delete(key);
-    });
+    };
+    void retirement.then(forgetRetirement, forgetRetirement);
     if (session.ownerKey) {
       const previous = this.ownerRetirements.get(session.ownerKey);
       const ownerRetirement = previous
-        ? Promise.all([previous, retirement]).then(() => undefined)
+        ? waitForAllPhysicalSettlements([previous, retirement])
         : retirement;
       this.ownerRetirements.set(session.ownerKey, ownerRetirement);
-      void ownerRetirement.then(() => {
+      const forgetOwnerRetirement = () => {
         if (this.ownerRetirements.get(session.ownerKey!) === ownerRetirement) {
           this.ownerRetirements.delete(session.ownerKey!);
         }
-      });
+      };
+      void ownerRetirement.then(forgetOwnerRetirement, forgetOwnerRetirement);
     }
     if (conversationKey) {
       const previous = this.conversationRetirements.get(conversationKey);
       const conversationRetirement = previous
-        ? Promise.all([previous, retirement]).then(() => undefined)
+        ? waitForAllPhysicalSettlements([previous, retirement])
         : retirement;
       this.conversationRetirements.set(conversationKey, conversationRetirement);
       const forgetConversationRetirement = () => {
