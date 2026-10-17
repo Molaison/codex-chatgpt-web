@@ -1,0 +1,120 @@
+{
+  "scenario": "count-json",
+  "platform": "win32",
+  "exitCode": 1,
+  "stopReason": null,
+  "elapsedMs": 1267,
+  "samples": [
+    {
+      "ms": 34,
+      "rss": 1613824,
+      "treeRss": 1613824
+    },
+    {
+      "ms": 95,
+      "rss": 14245888,
+      "treeRss": 14245888
+    },
+    {
+      "ms": 151,
+      "rss": 22560768,
+      "treeRss": 22560768
+    },
+    {
+      "ms": 208,
+      "rss": 23547904,
+      "treeRss": 23547904
+    },
+    {
+      "ms": 266,
+      "rss": 38686720,
+      "treeRss": 38686720
+    },
+    {
+      "ms": 324,
+      "rss": 47267840,
+      "treeRss": 47267840
+    },
+    {
+      "ms": 381,
+      "rss": 59756544,
+      "treeRss": 59756544
+    },
+    {
+      "ms": 438,
+      "rss": 70017024,
+      "treeRss": 70017024
+    },
+    {
+      "ms": 495,
+      "rss": 74100736,
+      "treeRss": 74100736
+    },
+    {
+      "ms": 554,
+      "rss": 75091968,
+      "treeRss": 75091968
+    },
+    {
+      "ms": 610,
+      "rss": 80592896,
+      "treeRss": 80592896
+    },
+    {
+      "ms": 667,
+      "rss": 91398144,
+      "treeRss": 91398144
+    },
+    {
+      "ms": 725,
+      "rss": 100761600,
+      "treeRss": 100761600
+    },
+    {
+      "ms": 782,
+      "rss": 142204928,
+      "treeRss": 142204928
+    },
+    {
+      "ms": 840,
+      "rss": 150556672,
+      "treeRss": 150556672
+    },
+    {
+      "ms": 901,
+      "rss": 157732864,
+      "treeRss": 157732864
+    },
+    {
+      "ms": 958,
+      "rss": 160079872,
+      "treeRss": 160079872
+    },
+    {
+      "ms": 1016,
+      "rss": 159514624,
+      "treeRss": 159514624
+    },
+    {
+      "ms": 1073,
+      "rss": 155181056,
+      "treeRss": 155181056
+    },
+    {
+      "ms": 1132,
+      "rss": 154103808,
+      "treeRss": 154103808
+    },
+    {
+      "ms": 1191,
+      "rss": 148758528,
+      "treeRss": 148758528
+    }
+  ],
+  "rssPeak": 160079872,
+  "cpuBusyThreads": 0,
+  "cpuBurstUpperSeconds": 0,
+  "physicalModelSubmissions": 0,
+  "childExited": true,
+  "stressExited": true
+}

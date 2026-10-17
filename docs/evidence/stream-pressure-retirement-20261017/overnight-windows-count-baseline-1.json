@@ -1,0 +1,157 @@
+{
+  "scenario": "count",
+  "platform": "win32",
+  "bun": "1.4.0",
+  "revision": "34cbb9a40b4bd1bd767d134a7065e66c2432a676",
+  "inputs": {
+    "count": 10001,
+    "bytesPerMessage": 256,
+    "stream": true
+  },
+  "physicalModelSubmissions": 0,
+  "emitted": 10000,
+  "emitErrors": [
+    {
+      "index": 10000,
+      "error": "Error: Adapter event backlog exceeded"
+    }
+  ],
+  "unhandledRejections": [
+    "Error: Adapter event backlog exceeded"
+  ],
+  "upstreamCalls": 0,
+  "adapterCalls": 1,
+  "receivedBytes": 14770993,
+  "paused": true,
+  "resumed": true,
+  "samples": [
+    {
+      "stage": "before",
+      "activeHttp": 0,
+      "activeBrowser": 0,
+      "accepting": true,
+      "rss": 160178176,
+      "pid": 194016
+    },
+    {
+      "stage": "paused-after-adapter",
+      "activeHttp": 0,
+      "activeBrowser": 0,
+      "accepting": true,
+      "rss": 209424384,
+      "pid": 194016
+    },
+    {
+      "stage": "after-read",
+      "activeHttp": 0,
+      "activeBrowser": 0,
+      "accepting": true,
+      "rss": 256843776,
+      "pid": 194016
+    }
+  ],
+  "rssSamples": [
+    {
+      "elapsedMs": 59,
+      "phase": "awaiting-headers",
+      "rss": 166866944,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 132,
+      "phase": "paused",
+      "rss": 211648512,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 159,
+      "phase": "paused",
+      "rss": 217284608,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 184,
+      "phase": "paused",
+      "rss": 210219008,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 209,
+      "phase": "paused",
+      "rss": 210219008,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 234,
+      "phase": "paused",
+      "rss": 210231296,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 260,
+      "phase": "paused",
+      "rss": 209395712,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 287,
+      "phase": "paused",
+      "rss": 209395712,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 312,
+      "phase": "paused",
+      "rss": 209420288,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 337,
+      "phase": "reading",
+      "rss": 229699584,
+      "receivedBytes": 7744809
+    },
+    {
+      "elapsedMs": 363,
+      "phase": "reading",
+      "rss": 225677312,
+      "receivedBytes": 14770993
+    },
+    {
+      "elapsedMs": 415,
+      "phase": "parsed",
+      "rss": 256839680,
+      "receivedBytes": 14770993
+    },
+    {
+      "elapsedMs": 415,
+      "phase": "parsed",
+      "rss": 256839680,
+      "receivedBytes": 14770993
+    },
+    {
+      "elapsedMs": 416,
+      "phase": "cleanup",
+      "rss": 257429504,
+      "receivedBytes": 14770993
+    }
+  ],
+  "rssStart": 158875648,
+  "httpStatus": 200,
+  "pauseAt": 1792260891782,
+  "bytesAtPause": 0,
+  "bytesWhilePaused": 0,
+  "adapterFinishedWhilePaused": true,
+  "responseReadableLengthWhilePaused": 517509,
+  "resumeRateBytesPerSecond": null,
+  "resumeAt": 1792260892033,
+  "terminalTypes": [
+    "response.incomplete"
+  ],
+  "doneSentinels": 1,
+  "errorFrames": [],
+  "terminalCount": 1,
+  "processAlive": true,
+  "rssPeak": 257429504,
+  "cleaned": true
+}

@@ -1,0 +1,88 @@
+{
+  "scenario": "count-json",
+  "platform": "win32",
+  "variant": "candidate",
+  "pid": 168300,
+  "timestampUtc": "2026-10-17T18:33:40Z",
+  "exitCode": 0,
+  "stopReason": null,
+  "elapsedMs": 825,
+  "samples": [
+    {
+      "ms": 35,
+      "rss": 1650688,
+      "treeRss": 1650688
+    },
+    {
+      "ms": 94,
+      "rss": 38457344,
+      "treeRss": 38457344
+    },
+    {
+      "ms": 152,
+      "rss": 63623168,
+      "treeRss": 63623168
+    },
+    {
+      "ms": 211,
+      "rss": 68694016,
+      "treeRss": 68694016
+    },
+    {
+      "ms": 271,
+      "rss": 84230144,
+      "treeRss": 84230144
+    },
+    {
+      "ms": 332,
+      "rss": 97566720,
+      "treeRss": 97566720
+    },
+    {
+      "ms": 392,
+      "rss": 144478208,
+      "treeRss": 144478208
+    },
+    {
+      "ms": 452,
+      "rss": 148221952,
+      "treeRss": 148221952
+    },
+    {
+      "ms": 510,
+      "rss": 158629888,
+      "treeRss": 158629888
+    },
+    {
+      "ms": 568,
+      "rss": 154460160,
+      "treeRss": 154460160
+    },
+    {
+      "ms": 626,
+      "rss": 154480640,
+      "treeRss": 154480640
+    },
+    {
+      "ms": 684,
+      "rss": 152928256,
+      "treeRss": 152928256
+    },
+    {
+      "ms": 741,
+      "rss": 152764416,
+      "treeRss": 152764416
+    },
+    {
+      "ms": 799,
+      "rss": 152285184,
+      "treeRss": 152285184
+    }
+  ],
+  "rssPeak": 158629888,
+  "cpuBusyThreads": 0,
+  "cpuBurstUpperSeconds": 0,
+  "physicalModelSubmissions": 0,
+  "childExited": true,
+  "stressExited": true
+}

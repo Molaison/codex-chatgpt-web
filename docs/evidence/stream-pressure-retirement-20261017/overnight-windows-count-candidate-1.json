@@ -1,0 +1,164 @@
+{
+  "scenario": "count",
+  "platform": "win32",
+  "bun": "1.4.0",
+  "revision": "34cbb9a40b4bd1bd767d134a7065e66c2432a676",
+  "inputs": {
+    "count": 10001,
+    "bytesPerMessage": 256,
+    "stream": true
+  },
+  "physicalModelSubmissions": 0,
+  "emitted": 10000,
+  "emitErrors": [
+    {
+      "index": 10000,
+      "error": "Error: Adapter event backlog exceeded"
+    }
+  ],
+  "unhandledRejections": [],
+  "upstreamCalls": 0,
+  "adapterCalls": 1,
+  "receivedBytes": 788,
+  "paused": true,
+  "resumed": true,
+  "samples": [
+    {
+      "stage": "before",
+      "activeHttp": 0,
+      "activeBrowser": 0,
+      "accepting": true,
+      "rss": 158654464,
+      "pid": 203572
+    },
+    {
+      "stage": "paused-after-adapter",
+      "activeHttp": 0,
+      "activeBrowser": 0,
+      "accepting": true,
+      "rss": 151846912,
+      "pid": 203572
+    },
+    {
+      "stage": "after-read",
+      "activeHttp": 0,
+      "activeBrowser": 0,
+      "accepting": true,
+      "rss": 152027136,
+      "pid": 203572
+    }
+  ],
+  "rssSamples": [
+    {
+      "elapsedMs": 57,
+      "phase": "awaiting-headers",
+      "rss": 163823616,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 83,
+      "phase": "paused",
+      "rss": 164069376,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 109,
+      "phase": "paused",
+      "rss": 164069376,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 136,
+      "phase": "paused",
+      "rss": 164118528,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 161,
+      "phase": "paused",
+      "rss": 160522240,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 187,
+      "phase": "paused",
+      "rss": 157511680,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 213,
+      "phase": "paused",
+      "rss": 157511680,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 239,
+      "phase": "paused",
+      "rss": 157589504,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 264,
+      "phase": "paused",
+      "rss": 157597696,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 290,
+      "phase": "paused",
+      "rss": 151834624,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 317,
+      "phase": "reading",
+      "rss": 152006656,
+      "receivedBytes": 788
+    },
+    {
+      "elapsedMs": 344,
+      "phase": "reading",
+      "rss": 152010752,
+      "receivedBytes": 788
+    },
+    {
+      "elapsedMs": 346,
+      "phase": "parsed",
+      "rss": 152023040,
+      "receivedBytes": 788
+    },
+    {
+      "elapsedMs": 348,
+      "phase": "cleanup",
+      "rss": 152551424,
+      "receivedBytes": 788
+    }
+  ],
+  "rssStart": 155918336,
+  "httpStatus": 200,
+  "pauseAt": 1792261997072,
+  "bytesAtPause": 0,
+  "bytesWhilePaused": 0,
+  "adapterFinishedWhilePaused": true,
+  "responseReadableLengthWhilePaused": 788,
+  "resumeRateBytesPerSecond": null,
+  "resumeAt": 1792261997327,
+  "terminalTypes": [
+    "response.failed"
+  ],
+  "doneSentinels": 1,
+  "errorFrames": [
+    {
+      "type": "response.failed",
+      "error": {
+        "message": "Adapter event backlog exceeded",
+        "type": "server_error",
+        "code": "adapter_event_backlog_exceeded"
+      }
+    }
+  ],
+  "terminalCount": 1,
+  "processAlive": true,
+  "rssPeak": 164118528,
+  "cleaned": true
+}

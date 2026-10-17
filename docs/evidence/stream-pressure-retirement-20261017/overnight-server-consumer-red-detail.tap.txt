@@ -1,0 +1,31 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/server-event-pressure.test.ts:
+18 |       }
+19 |       emit({ type: "done", endTurn: true });
+20 |     },
+21 |   }));
+22 |   const body = await response.json() as any;
+23 |   expect(body).toMatchObject({ status: "completed" });
+                    ^
+error: expect(received).toMatchObject(expected)
+
+  {
+-   "status": "completed",
++   "error": {
++     "code": "invalid_request_error",
++     "message": "Luna (Web) is only available for Luna-only accounts",
++     "type": "invalid_request_error",
++   },
+  }
+
+- Expected  - 1
++ Received  + 5
+
+      at <anonymous> (<user-home>/mol184185-live-20261017-1000/overnight-pressure/tests/server-event-pressure.test.ts:23:16)
+(fail) non-streaming output is consumed while an asynchronous adapter is still producing [5.78ms]
+
+ 0 pass
+ 1 fail
+ 1 expect() calls
+Ran 1 test across 1 file. [461.00ms]

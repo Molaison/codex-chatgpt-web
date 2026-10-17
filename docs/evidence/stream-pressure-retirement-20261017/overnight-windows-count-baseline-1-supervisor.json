@@ -1,0 +1,130 @@
+{
+  "scenario": "count",
+  "platform": "win32",
+  "exitCode": 0,
+  "stopReason": null,
+  "elapsedMs": 1303,
+  "samples": [
+    {
+      "ms": 33,
+      "rss": 1609728,
+      "treeRss": 1609728
+    },
+    {
+      "ms": 87,
+      "rss": 14229504,
+      "treeRss": 14229504
+    },
+    {
+      "ms": 142,
+      "rss": 21929984,
+      "treeRss": 21929984
+    },
+    {
+      "ms": 198,
+      "rss": 29847552,
+      "treeRss": 29847552
+    },
+    {
+      "ms": 257,
+      "rss": 38469632,
+      "treeRss": 38469632
+    },
+    {
+      "ms": 314,
+      "rss": 90025984,
+      "treeRss": 90025984
+    },
+    {
+      "ms": 372,
+      "rss": 105312256,
+      "treeRss": 105312256
+    },
+    {
+      "ms": 429,
+      "rss": 105238528,
+      "treeRss": 105238528
+    },
+    {
+      "ms": 484,
+      "rss": 104558592,
+      "treeRss": 104558592
+    },
+    {
+      "ms": 540,
+      "rss": 107872256,
+      "treeRss": 107872256
+    },
+    {
+      "ms": 595,
+      "rss": 120729600,
+      "treeRss": 120729600
+    },
+    {
+      "ms": 651,
+      "rss": 130912256,
+      "treeRss": 130912256
+    },
+    {
+      "ms": 709,
+      "rss": 141758464,
+      "treeRss": 141758464
+    },
+    {
+      "ms": 765,
+      "rss": 145612800,
+      "treeRss": 145612800
+    },
+    {
+      "ms": 822,
+      "rss": 152084480,
+      "treeRss": 152084480
+    },
+    {
+      "ms": 879,
+      "rss": 157581312,
+      "treeRss": 157581312
+    },
+    {
+      "ms": 936,
+      "rss": 165613568,
+      "treeRss": 165613568
+    },
+    {
+      "ms": 996,
+      "rss": 196636672,
+      "treeRss": 196636672
+    },
+    {
+      "ms": 1050,
+      "rss": 217284608,
+      "treeRss": 217284608
+    },
+    {
+      "ms": 1106,
+      "rss": 210231296,
+      "treeRss": 210231296
+    },
+    {
+      "ms": 1161,
+      "rss": 209395712,
+      "treeRss": 209395712
+    },
+    {
+      "ms": 1218,
+      "rss": 229699584,
+      "treeRss": 229699584
+    },
+    {
+      "ms": 1277,
+      "rss": 231641088,
+      "treeRss": 231641088
+    }
+  ],
+  "rssPeak": 231641088,
+  "cpuBusyThreads": 0,
+  "cpuBurstUpperSeconds": 0,
+  "physicalModelSubmissions": 0,
+  "childExited": true,
+  "stressExited": true
+}

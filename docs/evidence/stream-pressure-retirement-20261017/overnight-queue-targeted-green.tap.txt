@@ -1,0 +1,21 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/event-queue.test.ts:
+(pass) a full queue delivers one failure instead of its undelivered backlog [0.63ms]
+(pass) failure releases waiting consumers with one terminal value [0.19ms]
+(pass) normal close drains accepted values and releases idle waiters [0.11ms]
+(pass) return discards undelivered output and closes every waiter [0.13ms]
+
+tests/server-event-pressure.test.ts:
+(pass) non-streaming output is consumed while an asynchronous adapter is still producing [13.83ms]
+(pass) synchronous replay overflow has one explicit failure, stream=false [2.10ms]
+(pass) an observer throwing on output and failure cannot reject the producer, stream=false [0.82ms]
+(pass) synchronous replay overflow has one explicit failure, stream=true [3.23ms]
+(pass) an observer throwing on output and failure cannot reject the producer, stream=true [0.56ms]
+(pass) normal streamed output still completes once [0.75ms]
+(pass) a later adapter failure preserves already delivered text without completing it [0.87ms]
+
+ 11 pass
+ 0 fail
+ 24 expect() calls
+Ran 11 tests across 2 files. [474.00ms]

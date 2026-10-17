@@ -1,0 +1,85 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/server-lifecycle.test.ts:
+(pass) DEV harness configuration cannot bind a Responses listener [1.20ms]
+(pass) Luna Bigger Context reaches the adapter for every Free route and response mode [13.76ms]
+(pass) HTTP turn tracking follows the response stream instead of Bun's global request count [0.79ms]
+(pass) HTTP turn tracking releases a cancelled response stream [0.30ms]
+(pass) HTTP turn tracking uses a tee branch on Windows [5.39ms]
+(pass) HTTP turn tracking uses direct pull and cancellation outside Windows [0.23ms]
+(pass) HTTP turn tracking records privacy-safe client stream failure evidence [0.30ms]
+(pass) HTTP turn tracking records privacy-safe Windows lifecycle failure evidence [0.24ms]
+(pass) HTTP stream diagnostics cannot replace the source failure or retain turn ownership [0.18ms]
+(pass) HTTP turn tracking releases a stream whose client disconnected without cancelling [0.16ms]
+(pass) HTTP turn tracking releases a stream requested by an already disconnected client [0.11ms]
+(pass) a real HTTP peer disconnect releases a streaming turn [15.59ms]
+(pass) HTTP turn cancellation aborts the tracked request and waits for lifecycle release [0.44ms]
+(pass) native Codex interrupt cancels only HTTP streams owned by the exact thread and turn [0.55ms]
+(pass) native Codex interrupt remains authoritative when it arrives before HTTP identity binding [0.24ms]
+(pass) native passthrough response and compaction requests expose their exact interrupt identity [1.53ms]
+[chatgpt-web] browser_settled {"traceId":"interrupt-hook-trace","outcome":"error","compaction":false,"submission":"unknown"}
+(pass) authenticated Interrupt hook endpoint releases the exact routed Web turn [6.86ms]
+(pass) authenticated Interrupt hook endpoint also releases the exact native compaction request [6.87ms]
+[chatgpt-web] browser_settled {"outcome":"final","compaction":false,"submission":"unknown"}
+(pass) Interrupt acknowledges after exact browser cancellation starts without waiting for helper teardown [13.13ms]
+[chatgpt-web] browser_settled {"traceId":"logical-complete-trace","outcome":"final","compaction":false,"submission":"unknown"}
+(pass) Interrupt retires a logically complete browser turn whose helper is still physically stuck [2.22ms]
+(pass) Interrupt cancels a detached structured compaction by exact native turn identity [2.19ms]
+(pass) authenticated lifecycle control cancels orphaned browser turns [2.06ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown","code":"client_cancelled","retryable":false}
+(pass) targeted cancellation preserves peer turns and its cause: user close [2.32ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown","code":"browser_surface_bootstrap_timeout","retryable":false}
+(pass) targeted cancellation preserves peer turns and its cause: browser_surface_bootstrap_timeout [1.79ms]
+[chatgpt-web] browser_settled {"traceId":"trace_target","outcome":"error","compaction":false,"submission":"unknown","code":"helper_heartbeat_expired","retryable":false}
+(pass) targeted cancellation preserves peer turns and its cause: helper_heartbeat_expired [1.70ms]
+(pass) authenticated targeted cancellation aborts a shared structured compaction owner [1.89ms]
+(pass) authenticated cancel-all aborts fresh structured compaction work [1.77ms]
+[chatgpt-web] browser_settled {"traceId":"1c2c6e5feda9","outcome":"error","compaction":false,"submission":"unknown","code":"client_cancelled","retryable":false}
+(pass) a Codex retry after tab cancellation receives terminal HTTP 400 without a new browser [1.18ms]
+(pass) a restart recovery turn without a new user instruction fails terminally instead of replaying the stopped prompt [0.83ms]
+(pass) a native turn with no instruction fails before browser construction, stream=%s [0.50ms]
+(pass) a native turn with no instruction fails before browser construction, stream=%s [0.33ms]
+(pass) authenticated lifecycle control aborts active alpha/search before acknowledging cancellation [2.60ms]
+(pass) authenticated lifecycle control aborts active images/generations before acknowledging cancellation [2.02ms]
+[chatgpt-web] broker claim received (tokenChars=21, tokenHash=b54ec6d0088f, valid=false, retiredTurn=unknown)
+(pass) a full-mode runtime exposes its broker endpoint before any turn registers [7.55ms]
+[chatgpt-web] broker trace=dev-lifecycle registered tokenHash=68b5d5af6d2d
+[chatgpt-web] broker_retired {"traceId":"dev-lifecycle","pendingTools":0,"queuedTools":0,"deliveredTools":0,"activeMcpRequests":0,"completionCommitted":false,"pendingCalls":[],"omittedPendingCalls":0}
+(pass) lifecycle drain and cancellation include browser turns owned by the external DEV driver [7.16ms]
+(pass) a drained runtime rejects new model-catalog work before shutdown [2.25ms]
+(pass) health proves that Codex received a successful augmented model catalog [4.78ms]
+(pass) server exposes authenticated standalone Web Search on the routed v1 base URL [1.98ms]
+(pass) standalone native image generation and edits preserve their upstream protocol [4.73ms]
+(pass) authenticated shutdown requires a verified idle drain [22.93ms]
+[codex-chatgpt-web] model_catalog_failed {"request":1,"at":"2026-10-17T18:24:46.055Z","status":502,"failure":{"stage":"request"},"elapsedMs":0}
+[codex-chatgpt-web] model_catalog_failed {"request":2,"at":"2026-10-17T18:24:46.056Z","status":502,"failure":{"stage":"transport","code":"UnsupportedProxyProtocol"},"elapsedMs":0}
+[codex-chatgpt-web] model_catalog_failed {"request":3,"at":"2026-10-17T18:24:46.056Z","status":403,"failure":{"stage":"upstream"},"elapsedMs":0}
+[codex-chatgpt-web] model_catalog_failed {"request":4,"at":"2026-10-17T18:24:46.057Z","status":502,"failure":{"stage":"catalog"},"elapsedMs":0}
+(pass) model catalog health distinguishes no request, transport failure, upstream denial, and recovery without secrets [4.72ms]
+[codex-chatgpt-web] model_catalog_failed {"request":1,"at":"2026-10-17T18:24:46.060Z","status":403,"failure":{"stage":"upstream"},"elapsedMs":0}
+(pass) a cancelled model request does not replace health from the last completed request [4.03ms]
+(pass) a web page cannot start or control turns through the loopback route [3.88ms]
+(pass) a catalog request that outlives the client's deadline completes for its retry [405.31ms]
+[codex-chatgpt-web] model_catalog_failed {"request":3,"at":"2026-10-17T18:24:46.474Z","status":403,"failure":{"stage":"upstream"},"elapsedMs":0}
+(pass) shared catalog attempts stay bound to one request identity and are final once delivered [4.59ms]
+(pass) an abandoned catalog attempt serves the retry once and is cancelled when nobody returns [126.50ms]
+
+tests/event-queue.test.ts:
+(pass) a full queue delivers one failure instead of its undelivered backlog [0.17ms]
+(pass) failure releases waiting consumers with one terminal value [0.11ms]
+(pass) normal close drains accepted values and releases idle waiters [0.15ms]
+(pass) return discards undelivered output and closes every waiter [0.13ms]
+
+tests/server-event-pressure.test.ts:
+(pass) non-streaming output is consumed while an asynchronous adapter is still producing [7.47ms]
+(pass) synchronous replay overflow has one explicit failure, stream=false [1.57ms]
+(pass) an observer throwing on output and failure cannot reject the producer, stream=false [0.73ms]
+(pass) synchronous replay overflow has one explicit failure, stream=true [1.67ms]
+(pass) an observer throwing on output and failure cannot reject the producer, stream=true [0.55ms]
+(pass) normal streamed output still completes once [0.68ms]
+(pass) a later adapter failure preserves already delivered text without completing it [0.84ms]
+
+ 57 pass
+ 0 fail
+ 345 expect() calls
+Ran 57 tests across 3 files. [1152.00ms]

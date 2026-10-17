@@ -1,0 +1,123 @@
+{
+  "scenario": "count",
+  "platform": "win32",
+  "variant": "candidate",
+  "pid": 203572,
+  "timestampUtc": "2026-10-17T18:33:17Z",
+  "exitCode": 0,
+  "stopReason": null,
+  "elapsedMs": 1244,
+  "samples": [
+    {
+      "ms": 39,
+      "rss": 1622016,
+      "treeRss": 1622016
+    },
+    {
+      "ms": 97,
+      "rss": 14577664,
+      "treeRss": 14577664
+    },
+    {
+      "ms": 155,
+      "rss": 22859776,
+      "treeRss": 22859776
+    },
+    {
+      "ms": 214,
+      "rss": 28606464,
+      "treeRss": 28606464
+    },
+    {
+      "ms": 275,
+      "rss": 44793856,
+      "treeRss": 44793856
+    },
+    {
+      "ms": 335,
+      "rss": 46071808,
+      "treeRss": 46071808
+    },
+    {
+      "ms": 395,
+      "rss": 45735936,
+      "treeRss": 45735936
+    },
+    {
+      "ms": 455,
+      "rss": 85602304,
+      "treeRss": 85602304
+    },
+    {
+      "ms": 513,
+      "rss": 96071680,
+      "treeRss": 96071680
+    },
+    {
+      "ms": 572,
+      "rss": 100605952,
+      "treeRss": 100605952
+    },
+    {
+      "ms": 630,
+      "rss": 106844160,
+      "treeRss": 106844160
+    },
+    {
+      "ms": 689,
+      "rss": 118841344,
+      "treeRss": 118841344
+    },
+    {
+      "ms": 747,
+      "rss": 129912832,
+      "treeRss": 129912832
+    },
+    {
+      "ms": 808,
+      "rss": 141180928,
+      "treeRss": 141180928
+    },
+    {
+      "ms": 866,
+      "rss": 151195648,
+      "treeRss": 151195648
+    },
+    {
+      "ms": 925,
+      "rss": 159277056,
+      "treeRss": 159277056
+    },
+    {
+      "ms": 984,
+      "rss": 164069376,
+      "treeRss": 164069376
+    },
+    {
+      "ms": 1042,
+      "rss": 164118528,
+      "treeRss": 164118528
+    },
+    {
+      "ms": 1101,
+      "rss": 157511680,
+      "treeRss": 157511680
+    },
+    {
+      "ms": 1159,
+      "rss": 151834624,
+      "treeRss": 151834624
+    },
+    {
+      "ms": 1219,
+      "rss": 152006656,
+      "treeRss": 152006656
+    }
+  ],
+  "rssPeak": 164118528,
+  "cpuBusyThreads": 0,
+  "cpuBurstUpperSeconds": 0,
+  "physicalModelSubmissions": 0,
+  "childExited": true,
+  "stressExited": true
+}

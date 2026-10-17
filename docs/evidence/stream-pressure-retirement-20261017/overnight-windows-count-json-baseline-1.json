@@ -1,0 +1,154 @@
+{
+  "scenario": "count-json",
+  "platform": "win32",
+  "bun": "1.4.0",
+  "revision": "34cbb9a40b4bd1bd767d134a7065e66c2432a676",
+  "inputs": {
+    "count": 10001,
+    "bytesPerMessage": 256,
+    "stream": false
+  },
+  "physicalModelSubmissions": 0,
+  "emitted": 10000,
+  "emitErrors": [
+    {
+      "index": 10000,
+      "error": "Error: Adapter event backlog exceeded"
+    }
+  ],
+  "unhandledRejections": [],
+  "upstreamCalls": 0,
+  "adapterCalls": 1,
+  "receivedBytes": 51316,
+  "paused": true,
+  "resumed": true,
+  "samples": [
+    {
+      "stage": "before",
+      "activeHttp": 0,
+      "activeBrowser": 0,
+      "accepting": true,
+      "rss": 159199232,
+      "pid": 83396
+    },
+    {
+      "stage": "paused-after-adapter",
+      "activeHttp": 0,
+      "activeBrowser": 0,
+      "accepting": true,
+      "rss": 148791296,
+      "pid": 83396
+    },
+    {
+      "stage": "after-read",
+      "activeHttp": 0,
+      "activeBrowser": 0,
+      "accepting": true,
+      "rss": 149004288,
+      "pid": 83396
+    }
+  ],
+  "rssSamples": [
+    {
+      "elapsedMs": 53,
+      "phase": "awaiting-headers",
+      "rss": 165466112,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 79,
+      "phase": "paused",
+      "rss": 159514624,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 105,
+      "phase": "paused",
+      "rss": 159514624,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 130,
+      "phase": "paused",
+      "rss": 159522816,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 157,
+      "phase": "paused",
+      "rss": 156594176,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 183,
+      "phase": "paused",
+      "rss": 156422144,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 209,
+      "phase": "paused",
+      "rss": 154034176,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 236,
+      "phase": "paused",
+      "rss": 154103808,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 261,
+      "phase": "paused",
+      "rss": 154103808,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 287,
+      "phase": "paused",
+      "rss": 154050560,
+      "receivedBytes": 0
+    },
+    {
+      "elapsedMs": 312,
+      "phase": "reading",
+      "rss": 148959232,
+      "receivedBytes": 51316
+    },
+    {
+      "elapsedMs": 337,
+      "phase": "reading",
+      "rss": 148959232,
+      "receivedBytes": 51316
+    },
+    {
+      "elapsedMs": 340,
+      "phase": "parsed",
+      "rss": 149004288,
+      "receivedBytes": 51316
+    },
+    {
+      "elapsedMs": 341,
+      "phase": "cleanup",
+      "rss": 149520384,
+      "receivedBytes": 51316
+    }
+  ],
+  "rssStart": 156758016,
+  "httpStatus": 500,
+  "pauseAt": 1792260945577,
+  "bytesAtPause": 0,
+  "bytesWhilePaused": 0,
+  "adapterFinishedWhilePaused": true,
+  "responseReadableLengthWhilePaused": 51316,
+  "resumeRateBytesPerSecond": null,
+  "resumeAt": 1792260945829,
+  "terminalTypes": [],
+  "doneSentinels": 0,
+  "errorFrames": [],
+  "nonJsonResponsePreview": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>Internal Server Error</title>\n  </head>\n  <body>\n    <!-- The bracketed placeholders below are filled in by DevErrorPage.rs; keep prettier aw",
+  "terminalCount": 0,
+  "processAlive": true,
+  "rssPeak": 165466112,
+  "cleaned": true
+}

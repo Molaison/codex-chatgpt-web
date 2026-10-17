@@ -1,0 +1,48 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/event-queue.test.ts:
+(pass) a full queue delivers one failure instead of its undelivered backlog [0.62ms]
+(pass) failure releases waiting consumers with one terminal value [0.18ms]
+(pass) normal close drains accepted values and releases idle waiters [0.10ms]
+34 | test("return discards undelivered output and closes every waiter", async () => {
+35 |   const queue = new AsyncEventQueue<string>();
+36 |   queue.push("unused");
+37 |   const iterator = queue[Symbol.asyncIterator]();
+38 |   await iterator.return!();
+39 |   expect(await iterator.next()).toEqual({ value: undefined, done: true });
+                                     ^
+error: expect(received).toEqual(expected)
+
+  {
+-   "done": true,
+-   "value": undefined,
++   "done": false,
++   "value": "unused",
+  }
+
+- Expected  - 2
++ Received  + 2
+
+      at <anonymous> (<user-home>/mol184185-live-20261017-1000/overnight-pressure/tests/event-queue.test.ts:39:33)
+(fail) return discards undelivered output and closes every waiter [0.40ms]
+
+tests/server-event-pressure.test.ts:
+18 |       }
+19 |       emit({ type: "done", endTurn: true });
+20 |     },
+21 |   }));
+22 |   const body = await response.json() as any;
+23 |   expect(body.status).toBe("completed");
+                           ^
+error: expect(received).toBe(expected)
+
+Expected: "completed"
+Received: undefined
+
+      at <anonymous> (<user-home>/mol184185-live-20261017-1000/overnight-pressure/tests/server-event-pressure.test.ts:23:23)
+(fail) non-streaming output is consumed while an asynchronous adapter is still producing [5.60ms]
+
+ 3 pass
+ 2 fail
+ 8 expect() calls
+Ran 5 tests across 2 files. [445.00ms]
