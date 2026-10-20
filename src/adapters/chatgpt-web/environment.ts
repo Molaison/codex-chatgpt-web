@@ -3,7 +3,7 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { isReadableCompactionSummaryText, OPAQUE_COMPACTION_NOTE } from "../../responses/compaction";
 import { parseCodexDelegation } from "../../responses/delegation";
 import { isNativeAgentsMdContext } from "../../responses/native-context";
-import type { CodexContentPart, CodexParsedRequest, CodexTool } from "../../types";
+import { namespacedToolName, type CodexContentPart, type CodexParsedRequest, type CodexTool, type CodexToolChoice } from "../../types";
 import { isAcceptedCompactionContinuation, recoverCompactionInstruction } from "./compaction-continuation";
 
 export type ChatGptSandboxPolicy =
@@ -17,6 +17,20 @@ export interface ChatGptTurnEnvironment {
   writableRoots: string[];
   sandboxPolicy: ChatGptSandboxPolicy;
   tools: CodexTool[];
+}
+
+export function filterChatGptToolsForChoice(
+  tools: CodexTool[] | undefined,
+  choice: CodexToolChoice | undefined,
+): CodexTool[] {
+  const all = tools ?? [];
+  if (!choice || choice === "auto" || choice === "required") return all;
+  if (choice === "none") return [];
+  const allowed = new Set(
+    "name" in choice ? [choice.name] : choice.allowedTools,
+  );
+  return all.filter(tool => allowed.has(namespacedToolName(tool.namespace, tool.name))
+    || (!tool.namespace && allowed.has(tool.name)));
 }
 
 export interface ChatGptTurnIdentity {
@@ -894,7 +908,8 @@ function matchesPath(root: string, path: string): boolean {
 }
 
 export function extractChatGptTurnEnvironment(parsed: CodexParsedRequest): ChatGptTurnEnvironment {
-  return parseChatGptEnvironmentText(parsed, trustedEnvironmentText(parsed));
+  const environment = parseChatGptEnvironmentText(parsed, trustedEnvironmentText(parsed));
+  return { ...environment, tools: filterChatGptToolsForChoice(environment.tools, parsed.options.toolChoice) };
 }
 
 export function extractChatGptTurnEnvironmentClaim(parsed: CodexParsedRequest): ChatGptEnvironmentClaim {
