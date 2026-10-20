@@ -147,6 +147,40 @@ test("daemon streams browser lifecycle through the real helper process", async (
   }
 });
 
+test("closing before helper ready rejects the startup wait", async () => {
+  const root = mkdtempSync(join(tmpdir(), "codex-launcher-helper-not-ready-"));
+  roots.push(root);
+  const helper = join(root, "helper.ts");
+  writeFileSync(helper, "setTimeout(() => {}, 60_000);\n", { mode: 0o700 });
+  const descriptorPath = join(root, "launcher.json");
+  writeFileSync(descriptorPath, `${JSON.stringify({
+    version: 3, kind: LAUNCHER_BROWSER_HOST_KIND, profile: "production", pid: process.pid,
+    endpoint: "http://127.0.0.1:39011",
+    control: { endpoint: "http://127.0.0.1:39012", token: "launcher-control-token-0123456789abcdefghijklmnop" },
+    helper: { executable: process.execPath, script: helper },
+    partition: "persist:codex-web-gpt-chatgpt", idleUrl: LAUNCHER_BROWSER_IDLE_URL,
+    surfaceId: "launcher_surface_id_0123456789AB",
+    createdAt: new Date().toISOString(),
+  })}\n`, { mode: 0o600 });
+  const client = new LauncherBrowserHelperClient({
+    appName: "Codex Native2", browserHost: "launcher", browserHostDescriptorPath: descriptorPath,
+    browserHelperScriptPath: helper, storageStatePath: join(root, "unused-state.json"),
+    chromeExecutablePath: join(root, "unused-chrome"), turnTimeoutMs: 60_000, headed: true,
+    autoApproveToolCalls: false, useSavedChats: false,
+  });
+  const run = client.run({
+    traceId: "not-ready", modelId: "gpt-5.6-sol", reasoning: "high",
+    capabilities: { localToolsEnabled: false, solAvailable: true, extraHighAvailable: false, proAvailable: false },
+    prepare: async () => ({ text: "inspect", images: [], release() {} }), onTextDelta() {},
+  });
+  try {
+    await client.close();
+    await expect(run).rejects.toMatchObject({ name: "AbortError" });
+  } finally {
+    await client.close();
+  }
+});
+
 test("accepted compaction retires through the helper as completed without hiding cancellations or errors", async () => {
   const root = mkdtempSync(join(tmpdir(), "codex-helper-compaction-end-"));
   roots.push(root);
