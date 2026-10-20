@@ -330,7 +330,11 @@ export class TurnBroker implements TurnBrokerOwner {
   private readonly retiredTokens = new Map<string, string>();
   private acceptingExternalOwners = true;
   private server?: Server;
+  private readonly sockets = new Set<Socket>();
+  private readonly probes = new Set<Socket>();
   private startPromise?: Promise<void>;
+  private startReject?: (error: Error) => void;
+  private startGeneration = 0;
   private socketIdentity?: { dev: number; ino: number };
 
   private constructor(readonly socketPath: string) {}
@@ -824,16 +828,33 @@ export class TurnBroker implements TurnBrokerOwner {
   async close(): Promise<void> {
     this.compactionTransactions.close();
     for (const token of [...this.channels.keys()]) this.revoke(token);
+
+    // Invalidate every asynchronous start callback before tearing down the endpoint. A stale
+    // socket probe may finish after close; its callback must not resurrect this broker.
+    this.startGeneration += 1;
+    this.startReject?.(new DOMException("ChatGPT web turn broker is closing", "AbortError"));
+    this.startReject = undefined;
     const server = this.server;
     this.server = undefined;
     this.startPromise = undefined;
     if (brokers.get(this.socketPath) === this) brokers.delete(this.socketPath);
-    if (server?.listening) {
-      await new Promise<void>((resolveClose, rejectClose) => server.close(error => {
-        if (!error || (error as NodeJS.ErrnoException).code === "ERR_SERVER_NOT_RUNNING") resolveClose();
-        else rejectClose(error);
-      }));
+
+    for (const socket of this.sockets) socket.destroy();
+    for (const probe of this.probes) probe.destroy();
+    if (server) {
+      await new Promise<void>((resolveClose, rejectClose) => {
+        try {
+          server.close(error => {
+            if (!error || (error as NodeJS.ErrnoException).code === "ERR_SERVER_NOT_RUNNING") resolveClose();
+            else rejectClose(error);
+          });
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException)?.code === "ERR_SERVER_NOT_RUNNING") resolveClose();
+          else rejectClose(error);
+        }
+      });
     }
+
     const identity = this.socketIdentity;
     this.socketIdentity = undefined;
     if (identity && existsSync(this.socketPath)) {
@@ -846,7 +867,10 @@ export class TurnBroker implements TurnBrokerOwner {
 
   private start(): Promise<void> {
     if (this.startPromise) return this.startPromise;
+    const generation = ++this.startGeneration;
+    const isCurrent = () => this.startGeneration === generation;
     const attempt = new Promise<void>((resolveStart, rejectStart) => {
+      this.startReject = rejectStart;
       const windowsPipe = isWindowsPipeEndpoint(this.socketPath);
       if (!windowsPipe) {
         // sun_path is a fixed-size field in the kernel, so an over-long path fails inside listen()
@@ -863,6 +887,7 @@ export class TurnBroker implements TurnBrokerOwner {
         mkdirSync(dirname(this.socketPath), { recursive: true, mode: 0o700 });
       }
       const listen = () => {
+        if (!isCurrent()) return;
         const server = createServer(socket => this.handleSocket(socket));
         this.server = server;
         server.once("error", rejectStart);
@@ -872,6 +897,10 @@ export class TurnBroker implements TurnBrokerOwner {
           );
         });
         server.listen(this.socketPath, () => {
+          if (!isCurrent()) {
+            server.close(() => {});
+            return;
+          }
           server.off("error", rejectStart);
           if (!windowsPipe) {
             const { dev, ino } = lstatSync(this.socketPath);
@@ -905,23 +934,26 @@ export class TurnBroker implements TurnBrokerOwner {
         return;
       }
       const probe = createConnection(this.socketPath);
+      this.probes.add(probe);
       let probeSettled = false;
       const finishProbe = (action: () => void) => {
         if (probeSettled) return;
         probeSettled = true;
+        this.probes.delete(probe);
         probe.destroy();
         action();
       };
       probe.setTimeout(2_000, () => finishProbe(() => {
-        rejectStart(new Error(`Timed out while checking existing ChatGPT web broker socket: ${this.socketPath}`));
+        if (isCurrent()) rejectStart(new Error(`Timed out while checking existing ChatGPT web broker socket: ${this.socketPath}`));
       }));
       probe.once("connect", () => {
         finishProbe(() => {
-          rejectStart(new Error(`ChatGPT web broker socket is already owned by another process: ${this.socketPath}`));
+          if (isCurrent()) rejectStart(new Error(`ChatGPT web broker socket is already owned by another process: ${this.socketPath}`));
         });
       });
       probe.once("error", error => {
         finishProbe(() => {
+          if (!isCurrent()) return;
           const code = (error as NodeJS.ErrnoException).code;
           if (code !== "ECONNREFUSED" && code !== "ENOENT") {
             rejectStart(new Error(
@@ -951,12 +983,16 @@ export class TurnBroker implements TurnBrokerOwner {
   }
 
   private handleSocket(socket: Socket): void {
+    this.sockets.add(socket);
     let buffered = "";
     let handled = false;
     const disconnected = new AbortController();
     socket.setEncoding("utf8");
     socket.on("error", () => {});
-    socket.once("close", () => disconnected.abort());
+    socket.once("close", () => {
+      this.sockets.delete(socket);
+      disconnected.abort();
+    });
     socket.on("data", chunk => {
       if (handled) return;
       buffered += chunk;
