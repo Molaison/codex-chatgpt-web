@@ -17,6 +17,14 @@ export interface ChatGptTurnEnvironment {
   writableRoots: string[];
   sandboxPolicy: ChatGptSandboxPolicy;
   tools: CodexTool[];
+  toolChoice?: CodexToolChoice;
+}
+
+export function chatGptToolChoiceAllows(choice: CodexToolChoice | undefined, wireToolName: string): boolean {
+  if (!choice || choice === "auto" || choice === "required") return true;
+  if (choice === "none") return false;
+  const allowed = "name" in choice ? [choice.name] : choice.allowedTools;
+  return allowed.includes(wireToolName);
 }
 
 export function filterChatGptToolsForChoice(
@@ -909,7 +917,11 @@ function matchesPath(root: string, path: string): boolean {
 
 export function extractChatGptTurnEnvironment(parsed: CodexParsedRequest): ChatGptTurnEnvironment {
   const environment = parseChatGptEnvironmentText(parsed, trustedEnvironmentText(parsed));
-  return { ...environment, tools: filterChatGptToolsForChoice(environment.tools, parsed.options.toolChoice) };
+  return {
+    ...environment,
+    tools: filterChatGptToolsForChoice(environment.tools, parsed.options.toolChoice),
+    toolChoice: parsed.options.toolChoice,
+  };
 }
 
 export function extractChatGptTurnEnvironmentClaim(parsed: CodexParsedRequest): ChatGptEnvironmentClaim {
