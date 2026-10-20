@@ -152,6 +152,17 @@ function allowedAuthUrl(value) {
   return AUTH_PROVIDER_HOSTS.has(parsed.hostname);
 }
 
+function chatConversationId(value) {
+  try {
+    const parsed = new URL(value);
+    if (parsed.origin !== CHATGPT_ORIGIN) return null;
+    const match = parsed.pathname.match(/^\/c\/([^/]+)/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
 function navigationOriginForLog(value) {
   try {
     const parsed = new URL(value);
@@ -597,6 +608,8 @@ class BrowserHost {
       conversationKey,
       connectorIdentity,
       connectorBound: false,
+      chatConversationId: null,
+      conversationObserved: false,
       helperPid,
       view,
       status: "running",
@@ -836,10 +849,34 @@ class BrowserHost {
       event.preventDefault();
       this.markTurnAuthenticationRequired(tab);
     };
+    const invalidateRetainedConversation = (url) => {
+      const nextId = chatConversationId(url);
+      if (!tab.conversationObserved) {
+        tab.chatConversationId = nextId;
+        if (nextId) tab.conversationObserved = true;
+        return;
+      }
+      if (tab.chatConversationId === nextId) return;
+      const previousId = tab.chatConversationId;
+      tab.chatConversationId = nextId;
+      tab.conversationKey = undefined;
+      tab.connectorIdentity = undefined;
+      tab.connectorBound = false;
+      tab.failedAt = Date.now();
+      tab.status = "error";
+      tab.message = "ChatGPT page changed to a different conversation. Start a new Codex turn to resend the full context.";
+      this.logger.info("browser.conversation_invalidated", {
+        tabId: tab.id,
+        traceId: tab.traceId,
+        previousConversationId: previousId,
+        nextConversationId: nextId,
+      });
+    };
     contents.on("will-navigate", blockAuthenticationNavigation);
     contents.on("will-redirect", blockAuthenticationNavigation);
     contents.on("did-start-navigation", (_event, url, inPlace, mainFrame) => {
       if (!mainFrame) return;
+      invalidateRetainedConversation(url);
       tab.url = url;
       tab.loading = true;
       if (!inPlace) {
@@ -894,7 +931,10 @@ class BrowserHost {
       this.publishState?.(this.snapshot());
     });
     contents.on("did-navigate-in-page", (_event, url, mainFrame) => {
-      if (mainFrame) tab.url = url;
+      if (mainFrame) {
+        invalidateRetainedConversation(url);
+        tab.url = url;
+      }
       this.publishState?.(this.snapshot());
     });
     contents.on("did-fail-load", (_event, errorCode, errorDescription, url, mainFrame) => {
