@@ -327,7 +327,9 @@ export class LauncherBrowserHelperClient {
 
   async close(): Promise<void> {
     const child = this.child;
+    const readyError = new DOMException("Launcher browser helper is closing", "AbortError");
     this.child = undefined;
+    this.readyReject?.(readyError);
     this.ready = undefined;
     this.readyResolve = undefined;
     this.readyReject = undefined;
