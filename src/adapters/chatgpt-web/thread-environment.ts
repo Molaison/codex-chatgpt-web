@@ -182,7 +182,11 @@ export class ChatGptThreadEnvironmentStore {
         throw new MissingTrustedCodexEnvironmentError("network access");
       }
       if (identity.threadId) this.set(identity.threadId, environment);
-      return { ...environment, tools: filterChatGptToolsForChoice(environment.tools, parsed.options.toolChoice) };
+      return {
+        ...environment,
+        tools: filterChatGptToolsForChoice(environment.tools, parsed.options.toolChoice),
+        toolChoice: parsed.options.toolChoice,
+      };
     } catch (error) {
       if (!(error instanceof MissingTrustedCodexEnvironmentError) || !identity.threadId) throw error;
       const hasCurrentContext = hasCurrentChatGptEnvironmentContext(parsed);
@@ -232,7 +236,11 @@ export class ChatGptThreadEnvironmentStore {
             throw new Error(`${source} environment conflicts with its current Codex rollout (fields: ${conflicts.join(", ")})`);
           }
           this.set(rolloutIdentity.threadId, rolloutEnvironment);
-          return { ...rolloutEnvironment, tools: filterChatGptToolsForChoice(rolloutEnvironment.tools, parsed.options.toolChoice) };
+          return {
+            ...rolloutEnvironment,
+            tools: filterChatGptToolsForChoice(rolloutEnvironment.tools, parsed.options.toolChoice),
+            toolChoice: parsed.options.toolChoice,
+          };
         }
       }
       // Only a current native rollout can supersede an unrecognized historical envelope. Without
@@ -245,6 +253,7 @@ export class ChatGptThreadEnvironmentStore {
         writableRoots: sameThread.writableRoots,
         sandboxPolicy: sameThread.sandboxPolicy,
         tools: filterChatGptToolsForChoice(parsed.context.tools, parsed.options.toolChoice),
+        toolChoice: parsed.options.toolChoice,
       };
 
       if (!lineage) throw error;
@@ -267,6 +276,7 @@ export class ChatGptThreadEnvironmentStore {
         writableRoots: parent.writableRoots,
         sandboxPolicy: parent.sandboxPolicy,
         tools: filterChatGptToolsForChoice(parsed.context.tools, parsed.options.toolChoice),
+        toolChoice: parsed.options.toolChoice,
       };
       this.set(lineage.threadId, inherited);
       return inherited;
