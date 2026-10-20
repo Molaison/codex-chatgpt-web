@@ -5,7 +5,7 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import * as z from "zod/v4";
 import { namespacedToolName, type CodexTool } from "../../types";
 import { VERSION } from "../../version";
-import type { ChatGptTurnEnvironment } from "./environment";
+import { chatGptToolChoiceAllows, type ChatGptTurnEnvironment } from "./environment";
 import { CODEX_COMPACTION_CONTROL_WIRE_NAME } from "./native-compaction-control";
 import { callTurnBroker, TurnBrokerTimeoutError, type BrokerRetirementDiagnostics, type BrokerToolResult } from "./turn-broker";
 import { observeMcpToolCalls } from "./mcp-observation";
@@ -932,7 +932,7 @@ export function createChatGptMcpServer(options: ChatGptMcpServerOptions): McpSer
         if (!tool) {
           const gateway = execGateway(bound);
           const hiddenOuterTool = bound.tools.some(candidate => wireName(candidate) === wire_name);
-          if (!gateway || hiddenOuterTool || !gatewayToolNameIsValid(wire_name)) {
+          if (!gateway || hiddenOuterTool || !chatGptToolChoiceAllows(bound.toolChoice, wire_name) || !gatewayToolNameIsValid(wire_name)) {
             throw new Error(`Codex tool is not available in this turn: ${wire_name}`);
           }
           if (input !== undefined && args && Object.keys(args).length > 0) {

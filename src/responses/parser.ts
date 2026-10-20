@@ -22,6 +22,25 @@ function isObj(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+function assertSupportedMedia(value: unknown): void {
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    if (!isObj(node)) return;
+    const type = node.type;
+    if (type === "input_audio" || type === "audio" || type === "output_audio" || type === "audio_url") {
+      throw new Error("unsupported_media: ChatGPT Web does not support audio content");
+    }
+    if (type === "input_image" && typeof node.image_url !== "string") {
+      throw new Error("unsupported_media: ChatGPT Web requires an inline image_url");
+    }
+    for (const child of Object.values(node)) visit(child);
+  };
+  visit(value);
+}
+
 type InputBlock =
   | { type: "input_text"; text: string }
   | { type: "text"; text: string }
@@ -61,7 +80,7 @@ function inputContentParts(blocks: unknown[] | string | undefined): string | Cod
         // NEVER inline the (often base64 data-URL) image_url as text: that explodes the token count.
         parts.push({ type: "image", imageUrl: b.image_url, ...(b.detail ? { detail: normalizeImageDetail(b.detail) } : {}) });
       } else {
-        parts.push({ type: "text", text: `[image: ${b.file_id ?? "?"}]` }); // file_id ref → no inline data
+        throw new Error("unsupported_media: ChatGPT Web requires an inline image_url");
       }
     } else if (block.type === "input_file") {
       if (!block.file_data || !block.filename) {
@@ -264,9 +283,14 @@ function outputToToolResultContent(output: string | unknown[] | undefined): stri
       if (typeof raw.text === "string") parts.push({ type: "text", text: raw.text });
     } else if (raw.type === "refusal" && typeof raw.refusal === "string") {
       parts.push({ type: "text", text: `[refusal: ${raw.refusal}]` });
-    } else if (raw.type === "input_image" && typeof raw.image_url === "string") {
+    } else if (raw.type === "input_image") {
+      if (typeof raw.image_url !== "string") {
+        throw new Error("unsupported_media: ChatGPT Web requires an inline image_url");
+      }
       parts.push({ type: "image", imageUrl: raw.image_url, ...(typeof raw.detail === "string" ? { detail: normalizeImageDetail(raw.detail) } : {}) });
       hasImage = true;
+    } else if (raw.type === "input_audio" || raw.type === "audio" || raw.type === "output_audio" || raw.type === "audio_url") {
+      throw new Error("unsupported_media: ChatGPT Web does not support audio content");
     } else if (raw.type === "encrypted_content") {
       // codex-rs FunctionCallOutputContentItem::EncryptedContent — opaque to routed models.
       parts.push({ type: "text", text: "[encrypted content omitted]" });
@@ -304,6 +328,7 @@ export function parseRequest(body: unknown): CodexParsedRequest {
     throw new Error(`responses parse error: ${parsed.error.message}`);
   }
   const data = parsed.data;
+  assertSupportedMedia(data.input);
   const now = Date.now();
   const messages: CodexMessage[] = [];
   const systemPrompt: string[] = [];
