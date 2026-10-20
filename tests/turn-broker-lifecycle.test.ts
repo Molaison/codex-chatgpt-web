@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { ChatGptTextFeed, ChatGptTraceFeed, ChatGptTurnSessions } from "../src/adapters/chatgpt-web/turn-execution";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
-import { createServer, type Socket } from "node:net";
+import { createConnection, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { callTurnBroker, TurnBroker } from "../src/adapters/chatgpt-web/turn-broker";
@@ -52,6 +52,51 @@ test.skipIf(process.platform === "win32")("a broker whose endpoint was busy at s
     }, 10_000);
     await expect(callTurnBroker<{ bindingId: string }>(endpoint, { method: "claim", token }))
       .resolves.toMatchObject({ bindingId: expect.any(String) });
+  } finally {
+    await broker.close();
+    if (previousOwner.listening) await new Promise<void>(resolve => previousOwner.close(() => resolve()));
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test.skipIf(process.platform === "win32")("broker close destroys an idle accepted socket", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cgw-broker-idle-close-"));
+  const endpoint = join(root, "broker.sock");
+  const broker = TurnBroker.forSocket(endpoint);
+  const client = createConnection(endpoint);
+  try {
+    await broker.listen();
+    await new Promise<void>((resolve, reject) => {
+      client.once("connect", () => resolve());
+      client.once("error", reject);
+    });
+    const outcome = await Promise.race([
+      broker.close().then(() => "closed" as const),
+      new Promise<"pending">(resolve => setTimeout(() => resolve("pending"), 1_000)),
+    ]);
+    expect(outcome).toBe("closed");
+    expect(client.destroyed).toBeTrue();
+  } finally {
+    client.destroy();
+    await broker.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test.skipIf(process.platform === "win32")("closing a broker startup probe cannot resurrect its listener", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cgw-broker-probe-close-"));
+  const endpoint = join(root, "broker.sock");
+  const previousOwner = createServer(() => {});
+  const broker = TurnBroker.forSocket(endpoint);
+  try {
+    await new Promise<void>(resolve => previousOwner.listen(endpoint, resolve));
+    chmodSync(endpoint, 0o600);
+    const start = broker.listen();
+    await broker.close();
+    await expect(start).rejects.toThrow();
+    await new Promise<void>(resolve => previousOwner.close(() => resolve()));
+    await Bun.sleep(50);
+    expect(existsSync(endpoint)).toBeFalse();
   } finally {
     await broker.close();
     if (previousOwner.listening) await new Promise<void>(resolve => previousOwner.close(() => resolve()));
