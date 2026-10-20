@@ -892,6 +892,11 @@ export class TurnBroker implements TurnBrokerOwner {
         });
         server.listen(this.socketPath, () => {
           server.off("error", rejectStart);
+          if (this.closed || this.generation !== generation) {
+            server.close();
+            rejectStart(new Error("turn broker closed while listening"));
+            return;
+          }
           if (!windowsPipe) {
             const { dev, ino } = lstatSync(this.socketPath);
             this.socketIdentity = { dev, ino };
