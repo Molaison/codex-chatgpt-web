@@ -858,12 +858,15 @@ class BrowserHost {
       }
       if (tab.chatConversationId === nextId) return;
       const previousId = tab.chatConversationId;
+      const active = tab.status === "running";
       tab.chatConversationId = nextId;
       tab.conversationKey = undefined;
       tab.connectorIdentity = undefined;
       tab.connectorBound = false;
-      tab.failedAt = Date.now();
-      tab.status = "error";
+      if (!active) {
+        tab.failedAt = Date.now();
+        tab.status = "error";
+      }
       tab.message = "ChatGPT page changed to a different conversation. Start a new Codex turn to resend the full context.";
       this.logger.info("browser.conversation_invalidated", {
         tabId: tab.id,
