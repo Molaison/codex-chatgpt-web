@@ -181,6 +181,8 @@ function executionKey(parsed: CodexParsedRequest, payload: unknown): string {
   return createHash("sha256").update(JSON.stringify({
     modelId: parsed.modelId,
     reasoning: parsed.options.reasoning,
+    // The output contract is part of replay identity. A schema change must not reuse an old success.
+    outputFormat: parsed.options.outputFormat,
     payload,
   })).digest("hex");
 }
