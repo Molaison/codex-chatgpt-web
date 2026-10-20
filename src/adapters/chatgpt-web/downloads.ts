@@ -9,6 +9,15 @@ const DOWNLOAD_PATHS = [
   /^\/backend-api\/estuary\/content$/,
 ];
 
+function downloadIdentity(source: string): string {
+  const url = new URL(source);
+  const fileId = url.searchParams.get("id");
+  if (DOWNLOAD_PATHS[1]!.test(url.pathname) && fileId) return `file:${fileId}`;
+  const sandboxPath = url.searchParams.get("sandbox_path");
+  if (DOWNLOAD_PATHS[0]!.test(url.pathname) && sandboxPath) return JSON.stringify([url.pathname, sandboxPath]);
+  return source;
+}
+
 /** 只记录本次点击真实发生过的 ChatGPT 下载端点，不猜测其它文件接口。 */
 export function rememberChatGptDownloadSource(sources: string[], raw: string): void {
   try {
@@ -71,10 +80,14 @@ export async function collectGeneratedChatGptFiles(page: Page, response: Locator
         return { mime: blob.type || "application/octet-stream", base64: btoa(binary) };
       }, GENERATED_FILE_MAX_BYTES);
       const bytes = Buffer.from(data.base64, "base64");
-      const duplicate = sources.length > 0
-        ? files.some(file => sources.some(source => file.sources.includes(source)))
-        : files.some(file => file.filename === filename && file.mime === data.mime && Buffer.compare(file.bytes, bytes) === 0);
-      if (!duplicate) files.push({ filename, mime: data.mime, bytes, sources });
+      const identities = new Set(sources.map(downloadIdentity));
+      const duplicate = files.find(file => file.mime === data.mime && Buffer.compare(file.bytes, bytes) === 0
+        && (identities.size > 0
+          ? file.sources.some(source => identities.has(downloadIdentity(source)))
+          : file.sources.length === 0 && file.filename === filename));
+      if (duplicate) {
+        for (const source of sources) rememberChatGptDownloadSource(duplicate.sources, source);
+      } else files.push({ filename, mime: data.mime, bytes, sources });
     } finally {
       page.off("download", cancelNativeCopy);
       page.off("request", observeRequests);

@@ -197,6 +197,6 @@ export class PaperRegistry {
     if (!row?.in_flight) return;
     const expires = row.state === "reserved" && (row.expires_at === null || row.expires_at <= now) ? now + 900_000 : row.expires_at;
     this.db.query("UPDATE papers SET in_flight=0,expires_at=? WHERE paper_id=?").run(expires,id);
-    this.event(id,"dispatch_not_submitted","Confirmed pre-send attachment failure; reservation kept for retry");
+    this.event(id,"dispatch_not_submitted","Confirmed pre-send refusal; reservation kept for retry");
   }
 }

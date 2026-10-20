@@ -127,14 +127,14 @@ const hostedToolType = z.enum([
   "code_interpreter", "image_generation", "mcp",
 ]);
 
-const allowedToolEntrySchema = z.object({ type: z.string(), name: z.string().optional() });
+const allowedToolEntrySchema = z.object({ type: z.string(), name: z.string().optional(), namespace: z.string().optional() });
 
 export const toolChoiceSchema = z.union([
   z.literal("auto"),
   z.literal("none"),
   z.literal("required"),
-  z.object({ type: z.literal("function"), name: z.string().min(1) }),
-  z.object({ type: z.literal("custom"), name: z.string().min(1) }),
+  z.object({ type: z.literal("function"), name: z.string().min(1), namespace: z.string().optional() }),
+  z.object({ type: z.literal("custom"), name: z.string().min(1), namespace: z.string().optional() }),
   z.object({ type: hostedToolType }),
   z.object({ type: z.literal("allowed_tools"), mode: z.enum(["auto", "required"]), tools: z.array(allowedToolEntrySchema) }),
 ]);

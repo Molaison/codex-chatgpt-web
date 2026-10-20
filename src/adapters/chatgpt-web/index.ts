@@ -29,7 +29,7 @@ import { createChatGptStructuredOutputValidator } from "./output-validation";
 import { chatGptWebTurnRetryPolicy } from "./retry-policy";
 import { TurnBroker, type BrokerToolRequest, type BrokerToolResult, type TurnBrokerOwner } from "./turn-broker";
 import type { ChatGptChartWidget } from "./rich-widget";
-import { ChatGptTextFeed, ChatGptTraceFeed, chatGptCompactionSourceExecutionKey, chatGptInstructionLineage, chatGptThreadOwnershipKey, chatGptTurnExecutionKey, chatGptTurnRetryKey, chatGptTurnRoundKey, chatGptTurnSessions, type ChatGptBrowserOutcome, type ChatGptTraceEvent, type ChatGptTurnRuntime, type ChatGptTurnSession } from "./turn-execution";
+import { ChatGptTextFeed, ChatGptTraceFeed, chatGptCompactionSourceExecutionKey, chatGptInstructionLineage, chatGptRequestContract, chatGptThreadOwnershipKey, chatGptTurnExecutionKey, chatGptTurnRetryKey, chatGptTurnSessions, type ChatGptBrowserOutcome, type ChatGptTraceEvent, type ChatGptTurnRuntime, type ChatGptTurnSession } from "./turn-execution";
 import { estimateChatGptWebUsage, resolveBiggerContextMultipartParts } from "./usage";
 import { ChatGptThreadEnvironmentStore } from "./thread-environment";
 import {
@@ -946,6 +946,14 @@ export function createChatGptWebAdapter(
         const mode = manualRequest
           ? { localTools: true }
           : resolveChatGptWebModelMode(parsed.modelId, parsed.options.reasoning, turnCapabilities);
+        const toolChoice = parsed.options.toolChoice;
+        if (!parsed._compactionRequest && (toolChoice === "required"
+          || (typeof toolChoice === "object" && ("name" in toolChoice || toolChoice.mode === "required")))) {
+          throw new ChatGptWebAdapterError(
+            "ChatGPT Web cannot guarantee a required tool invocation. Use tool_choice auto, none, or allowed_tools with mode auto.",
+            { status: 400, errorType: "invalid_request_error", code: "unsupported_tool_choice", retryable: false },
+          );
+        }
         const structuredOutputValidator = parsed._compactionRequest
           ? undefined
           : createChatGptStructuredOutputValidator(parsed.options.outputFormat);
@@ -1285,6 +1293,7 @@ export function createChatGptWebAdapter(
           chatGptTurnSessions.retireAbortedOwnerTurns(ownerKey, abortedTurnIds, executionKey);
         }
         const traceId = chatGptWebTraceId(provider, parsed);
+        const requestContract = chatGptRequestContract(parsed);
         const session = await chatGptTurnSessions.getOrCreateAfterOwnerRetirement(
           executionKey,
           ownerKey,
@@ -1296,10 +1305,11 @@ export function createChatGptWebAdapter(
           // Ordinary questions queue on their shared chat. Native tool steering
           // alone may supersede an unfinished instruction and retire its surface.
           mode.localTools ? chatGptInstructionLineage(parsed) : undefined,
+          requestContract,
         );
         // A reconnect may disconnect while awaiting the registry; it must not evict a live observer.
         if (incoming.abortSignal?.aborted) throw new DOMException("ChatGPT web turn aborted", "AbortError");
-        const roundKey = chatGptTurnRoundKey(parsed);
+        const roundKey = requestContract.round;
         const emitRoundEvents = (events: readonly AdapterEvent[]): void => {
           // Journal the complete synchronous event batch before touching the HTTP observer. If the
           // observer disconnects midway through emission, an exact reconnect can replay the entire

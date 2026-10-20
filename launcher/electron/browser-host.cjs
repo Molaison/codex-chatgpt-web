@@ -155,8 +155,9 @@ function allowedAuthUrl(value) {
 function chatConversationId(value) {
   try {
     const parsed = new URL(value);
-    if (parsed.origin !== CHATGPT_ORIGIN) return null;
-    const match = parsed.pathname.match(/^\/c\/([^/]+)/);
+    if (parsed.origin !== CHATGPT_ORIGIN || parsed.username || parsed.password
+      || parsed.searchParams.get("temporary-chat") === "true") return null;
+    const match = parsed.pathname.match(/^(?:\/g\/g-p-[a-f0-9]{32}(?:-[^/]+)?)?\/c\/([A-Za-z0-9][A-Za-z0-9_-]{0,127})\/?$/);
     return match ? match[1] : null;
   } catch {
     return null;
@@ -610,6 +611,7 @@ class BrowserHost {
       connectorBound: false,
       chatConversationId: null,
       conversationObserved: false,
+      nativeConversationSealed: false,
       helperPid,
       view,
       status: "running",
@@ -849,20 +851,23 @@ class BrowserHost {
       event.preventDefault();
       this.markTurnAuthenticationRequired(tab);
     };
-    const invalidateRetainedConversation = (url) => {
+    const invalidateRetainedConversation = (url, inPlace) => {
+      if (this.turnTabs.get(tab.id) !== tab) return true;
+      if (inPlace && url.split("#", 1)[0] === tab.url?.split("#", 1)[0]) return;
       const nextId = chatConversationId(url);
-      if (!tab.conversationObserved) {
+      if (!tab.conversationObserved && !tab.nativeConversationSealed) {
         tab.chatConversationId = nextId;
         if (nextId) tab.conversationObserved = true;
         return;
       }
-      if (tab.chatConversationId === nextId) return;
+      if (tab.chatConversationId === nextId && (nextId !== null || !tab.nativeConversationSealed)) return;
       const previousId = tab.chatConversationId;
       const active = tab.status === "running";
       tab.chatConversationId = nextId;
       tab.conversationKey = undefined;
       tab.connectorIdentity = undefined;
       tab.connectorBound = false;
+      tab.nativeConversationSealed = false;
       if (!active) {
         tab.failedAt = Date.now();
         tab.status = "error";
@@ -874,12 +879,24 @@ class BrowserHost {
         previousConversationId: previousId,
         nextConversationId: nextId,
       });
+      if (active) {
+        // A helper may already have captured reused=true and connected to this document.
+        // Closing it revokes that authority while removeTurnTab preserves the end ACK owner.
+        this.removeTurnTab(tab, true);
+        if (this.cancelTurn) void Promise.resolve().then(() => this.cancelTurn(tab.traceId)).catch(error => {
+          this.logger.error("browser.invalidated_turn_cancellation_failed", {
+            traceId: tab.traceId,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        });
+        return true;
+      }
     };
     contents.on("will-navigate", blockAuthenticationNavigation);
     contents.on("will-redirect", blockAuthenticationNavigation);
     contents.on("did-start-navigation", (_event, url, inPlace, mainFrame) => {
       if (!mainFrame) return;
-      invalidateRetainedConversation(url);
+      if (invalidateRetainedConversation(url, inPlace)) return;
       tab.url = url;
       tab.loading = true;
       if (!inPlace) {
@@ -905,6 +922,7 @@ class BrowserHost {
       this.syncViewVisibility();
     });
     contents.on("did-finish-load", () => {
+      if (this.turnTabs.get(tab.id) !== tab) return;
       tab.url = contents.getURL();
       tab.loading = false;
       tab.rendererReady = true;
@@ -935,7 +953,7 @@ class BrowserHost {
     });
     contents.on("did-navigate-in-page", (_event, url, mainFrame) => {
       if (mainFrame) {
-        invalidateRetainedConversation(url);
+        if (invalidateRetainedConversation(url, true)) return;
         tab.url = url;
       }
       this.publishState?.(this.snapshot());
@@ -2600,6 +2618,7 @@ class BrowserHost {
     const existing = sameTrace?.status === "running" ? sameTrace : exactRetained;
     if (existing) {
       const reused = existing.status === "ready";
+      if (reused && existing.connectorIdentity && existing.connectorBound) existing.nativeConversationSealed = true;
       if (existing.status === "running" && existing.helperPid !== helperPid) {
         if (processRunning(existing.helperPid)) {
           throw new Error(`ChatGPT browser turn ${traceId} is owned by another helper process`);
@@ -2705,6 +2724,8 @@ class BrowserHost {
       && tab.conversationKey
       && (!tab.connectorIdentity || connectorBound)) {
       tab.connectorBound = connectorBound === true;
+      // Temporary native chats have retained context even without a saved-chat URL.
+      tab.nativeConversationSealed = Boolean(tab.connectorIdentity && tab.connectorBound);
       tab.lastHeartbeatAt = Date.now();
       if (hideAfterTurn && !this.activeTraceId) this.hide();
       this.logger.info("browser.tab_retained", { tabId: tab.id, traceId });

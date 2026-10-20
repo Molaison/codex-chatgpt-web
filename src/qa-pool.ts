@@ -20,10 +20,10 @@ const nonempty = (value: unknown): string | undefined => typeof value === "strin
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 // These adapter codes are emitted before Send. HTTP status alone is not proof.
 const PRE_SEND_ATTACHMENT_FAILURE = "prompt_attachments_not_submitted";
-function preSendAttachmentFailure(value: unknown, allowAdmissionFailure = false): boolean {
+function preSendFailure(value: unknown): boolean {
   const event = record(value);
   return [event, record(event.error), record(record(event.response).error)]
-    .some(entry => entry.code === PRE_SEND_ATTACHMENT_FAILURE || (allowAdmissionFailure && entry.code === "concurrency_limit_exceeded"));
+    .some(entry => entry.code === PRE_SEND_ATTACHMENT_FAILURE || entry.code === "concurrency_limit_exceeded");
 }
 
 // Only the configured runtime's pre-admission 503 contract proves no execution.
@@ -525,7 +525,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
         let parsed: unknown; try { parsed = JSON.parse(new TextDecoder().decode(bytes)); } catch { parsed = undefined; }
         if (response.ok) completed(parsed);
         // A 200 stream-less body can still carry status:"failed" with the explicit adapter code.
-        if (!paperCompleted && parsed !== undefined && (preSendAttachmentFailure(parsed, Boolean(retainHistory))
+        if (!paperCompleted && parsed !== undefined && (preSendFailure(parsed)
           || responseNotAdmitted(parsed, response.status))) notSubmitted = true;
         body = bytes; release(notSubmitted);
       } else if ((retainHistory || paper) && response.body && response.ok) {
@@ -575,7 +575,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
                   const committed = completed(event.response, receipt && cacheable ? Buffer.concat(wire) : undefined, cacheable);
                   if (receipt && !committed) throw new Error("Invalid completed response");
                   terminalSaved = true;
-                } else if ((event.type === "response.failed" || event.type === "error") && preSendAttachmentFailure(event, Boolean(retainHistory))) notSubmitted = true;
+                } else if ((event.type === "response.failed" || event.type === "error") && preSendFailure(event)) notSubmitted = true;
               }
               if (!observerCancelled) controller.enqueue(chunk.value);
               if (receipt && terminalSaved) {
