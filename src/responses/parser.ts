@@ -328,7 +328,7 @@ export function parseRequest(body: unknown): CodexParsedRequest {
     throw new Error(`responses parse error: ${parsed.error.message}`);
   }
   const data = parsed.data;
-  assertSupportedMedia(data);
+  assertSupportedMedia(data.input);
   const now = Date.now();
   const messages: CodexMessage[] = [];
   const systemPrompt: string[] = [];
