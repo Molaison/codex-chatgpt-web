@@ -34,7 +34,7 @@ export async function collectGeneratedChatGptFiles(page: Page, response: Locator
       if (!assistant || element.closest('[data-user-message-bubble]')) return undefined;
       return element.querySelector<HTMLElement>('span[title]')?.getAttribute('title') || undefined;
     });
-    if (!filename || files.some(file => file.filename === filename)) continue;
+    if (!filename) continue;
     const button = row.locator('button[aria-label="下载文件"], button[aria-label="Download file"]');
     if (await button.count() !== 1) continue;
     // ChatGPT 在触发原生下载后立即撤销 blob URL。短暂保留 Blob 对象本身以读取
@@ -70,7 +70,11 @@ export async function collectGeneratedChatGptFiles(page: Page, response: Locator
         for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
         return { mime: blob.type || "application/octet-stream", base64: btoa(binary) };
       }, GENERATED_FILE_MAX_BYTES);
-      files.push({ filename, mime: data.mime, bytes: Buffer.from(data.base64, "base64"), sources });
+      const bytes = Buffer.from(data.base64, "base64");
+      const duplicate = sources.length > 0
+        ? files.some(file => sources.some(source => file.sources.includes(source)))
+        : files.some(file => file.filename === filename && file.mime === data.mime && Buffer.compare(file.bytes, bytes) === 0);
+      if (!duplicate) files.push({ filename, mime: data.mime, bytes, sources });
     } finally {
       page.off("download", cancelNativeCopy);
       page.off("request", observeRequests);
