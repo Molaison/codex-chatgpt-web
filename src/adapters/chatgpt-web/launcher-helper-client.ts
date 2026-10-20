@@ -327,12 +327,17 @@ export class LauncherBrowserHelperClient {
 
   async close(): Promise<void> {
     const child = this.child;
+    const closingError = new DOMException("Launcher browser helper is closing", "AbortError");
+    const rejectReady = this.readyReject;
+    this.readyReject = undefined;
+    this.readyResolve = undefined;
+    // Settle ensureChild() before clearing the promise. Otherwise a never-ready helper
+    // leaves every run and worker shutdown awaiting a promise that can no longer settle.
+    rejectReady?.(closingError);
     this.child = undefined;
     this.ready = undefined;
-    this.readyResolve = undefined;
-    this.readyReject = undefined;
     for (const id of [...this.pending.keys()]) {
-      this.finishWithError(id, new DOMException("Launcher browser helper is closing", "AbortError"));
+      this.finishWithError(id, closingError);
     }
     if (!child) return;
     await this.sendTo(child, { type: "shutdown" }).catch(() => {});
