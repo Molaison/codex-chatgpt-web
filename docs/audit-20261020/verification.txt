@@ -63,3 +63,14 @@ Downstream final integrated tests at 013c1b8
 Final upstream tsc durable exit code: 0
 Downstream npm run typecheck: previously observed exit 0; both tsconfig checks completed.
 Launcher host group: reviewer observed 145 pass / 0 fail / 0 skip; controlled Electron API boundary.
+
+First complete remote CI, source 9696909281a072cd80993ae8073d267b0648fa89:
+Linux: 1393 pass / 101 skip / 1 fail; 1495 tests across 118 files.
+macOS: 1394 pass / 100 skip / 1 fail; 1495 tests across 118 files.
+Windows: 1381 pass / 113 skip / 1 fail; 1495 tests across 118 files.
+Each sole failure: mol185-event-replay-identity.test.ts:168.
+
+Independent reviewer final correction at be09f5f835460e2566ce35c5034313d08e311b6c:
+34 pass / 0 fail / 135 assertions; two files; 5.02s.
+TypeScript durable result: 0 be09f5f835460e2566ce35c5034313d08e311b6c
+Latest full native CI gate: https://github.com/Molaison/codex-chatgpt-web/pull/18/checks

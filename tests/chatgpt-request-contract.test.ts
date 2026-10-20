@@ -3,7 +3,9 @@ import { ChatGptBrowserWorker } from "../src/adapters/chatgpt-web/browser-worker
 import { createChatGptWebAdapter } from "../src/adapters/chatgpt-web/index";
 import { CHATGPT_WEB_MODEL_ID } from "../src/adapters/chatgpt-web/model";
 import { chatGptInstructionLineage, chatGptTurnExecutionKey, chatGptTurnRoundKey } from "../src/adapters/chatgpt-web/turn-execution";
+import { defaultConfig } from "../src/config";
 import { parseRequest } from "../src/responses/parser";
+import { routeChatGptWebRequest } from "../src/server";
 import type { AdapterEvent, CodexParsedRequest, CodexProviderConfig } from "../src/types";
 
 function requestBody() {
@@ -232,38 +234,60 @@ for (const tool_choice of [
   });
 }
 
-test("a conflicting active retry does not detach its original observer", async () => {
-  const provider: CodexProviderConfig = {
-    adapter: "chatgpt-web", baseUrl: `browser://active-contract-${crypto.randomUUID()}`,
-    chatgptWeb: { localToolsEnabled: false, solAvailable: true, extraHighAvailable: true, proAvailable: true },
-  };
-  const entered = Promise.withResolvers<void>();
-  const finish = Promise.withResolvers<string>();
-  const browser = spyOn(ChatGptBrowserWorker.forProvider(provider), "run").mockImplementation(async turn => {
-    entered.resolve();
-    const answer = await finish.promise;
-    turn.onTextDelta(answer);
-    return answer;
+for (const control of ["tool choice", "model", "reasoning"] as const) {
+  test(`a conflicting active ${control} retry returns 409 without detaching its original observer`, async () => {
+    const provider: CodexProviderConfig = {
+      adapter: "chatgpt-web", baseUrl: `browser://active-contract-${crypto.randomUUID()}`,
+      chatgptWeb: { localToolsEnabled: false, solAvailable: true, extraHighAvailable: true, proAvailable: true },
+    };
+    const observedPrefix = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    const browser = spyOn(ChatGptBrowserWorker.forProvider(provider), "run").mockImplementation(async turn => {
+      turn.onTextDelta("Retained prefix. ");
+      await finish.promise;
+      turn.onTextDelta("Original result.");
+      return "Retained prefix. Original result.";
+    });
+    const adapter = createChatGptWebAdapter(provider);
+    const body = { ...requestBody(), model: "chatgpt-web/gpt-5.6-sol", text: undefined };
+    const changedBody = {
+      ...body,
+      ...(control === "tool choice" ? { tool_choice: "none" } : {}),
+      ...(control === "model" ? { model: "chatgpt-web/gpt-6-sol" } : {}),
+      ...(control === "reasoning" ? { reasoning: { effort: "medium" } } : {}),
+    };
+    const original = parseRequest(body);
+    const changed = parseRequest(changedBody);
+    // Route legitimate public models exactly as Responses does, including family and effort.
+    // An arbitrary invalid model would fail validation before reaching the replay contract.
+    routeChatGptWebRequest(original, defaultConfig("browser-only"));
+    routeChatGptWebRequest(changed, defaultConfig("browser-only"));
+    const firstEvents: AdapterEvent[] = [];
+    const retryEvents: AdapterEvent[] = [];
+    let first: Promise<void> | undefined;
+    try {
+      first = adapter.runTurn!(original, { headers: new Headers() }, event => {
+        firstEvents.push(event);
+        if (event.type === "text_delta") observedPrefix.resolve();
+      });
+      // Wait for an emitted event, proving that the original observer is already attached.
+      await observedPrefix.promise;
+      await expect(adapter.runTurn!(changed, { headers: new Headers() }, event => retryEvents.push(event)))
+        .rejects.toMatchObject({ status: 409, code: "request_contract_conflict", retryable: false });
+      finish.resolve();
+      await first;
+      expect(firstEvents.at(-1)).toMatchObject({ type: "done", endTurn: true });
+      expect(firstEvents.filter(event => event.type === "text_delta").map(event => event.text).join(""))
+        .toBe("Retained prefix. Original result.");
+      expect(retryEvents.filter(event => event.type !== "heartbeat")).toEqual([]);
+      expect(browser).toHaveBeenCalledTimes(1);
+    } finally {
+      finish.resolve();
+      await first?.catch(() => {});
+      browser.mockRestore();
+    }
   });
-  const adapter = createChatGptWebAdapter(provider);
-  const body = requestBody();
-  const firstEvents: AdapterEvent[] = [];
-  const retryEvents: AdapterEvent[] = [];
-  try {
-    const first = adapter.runTurn!(parseRequest(body), { headers: new Headers() }, event => firstEvents.push(event));
-    await entered.promise;
-    const retry = adapter.runTurn!(parseRequest({ ...body, tool_choice: "none" }), { headers: new Headers() }, event => retryEvents.push(event));
-    const rejection = expect(retry).rejects.toMatchObject({ code: "request_contract_conflict", retryable: false });
-    finish.resolve('{"ok":true}');
-    await Promise.all([first, rejection]);
-    expect(firstEvents.at(-1)).toMatchObject({ type: "done", endTurn: true });
-    expect(retryEvents.filter(event => event.type !== "heartbeat")).toEqual([]);
-    expect(browser).toHaveBeenCalledTimes(1);
-  } finally {
-    finish.resolve('{"ok":true}');
-    browser.mockRestore();
-  }
-});
+}
 
 test("tool schema examples and message metadata are not media content", () => {
   const schema = { type: "object", examples: [{ type: "input_audio" }, { type: "input_image", file_id: "example" }] };

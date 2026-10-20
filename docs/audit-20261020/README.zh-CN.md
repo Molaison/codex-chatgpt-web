@@ -91,6 +91,23 @@ bun test tests/event-queue.test.ts tests/server-event-pressure.test.ts \
 
 `ELECTRON_OVERRIDE_DIST_PATH` 仅允许 Node 加载 Electron 包的路径入口；这些 host 测试使用受控原生 API 夹具，不会启动一个真实 Electron 浏览器。回归中的 runtime、dispatch、Send 计数属于实际生产模块与受控边界，不能写成真实模型调用数。
 
+### 远端完整 CI 对回归层次的补充校验
+
+第一次源码交付的三平台 CI 都进入了 118 文件、1495 项根目录测试，并在同一项旧断言失败：`tests/mol185-event-replay-identity.test.ts:168` 要求 model/reasoning 改变逻辑 round key。Linux 为 1393 pass / 101 skip / 1 fail，macOS 为 1394 / 100 / 1，Windows 为 1381 / 113 / 1。可追溯到 [Linux 日志](https://github.com/Molaison/codex-chatgpt-web/actions/runs/39470523598/job/118793078016)、[macOS 日志](https://github.com/Molaison/codex-chatgpt-web/actions/runs/39470523598/job/118793078163)、[Windows 日志](https://github.com/Molaison/codex-chatgpt-web/actions/runs/39470503731/job/118793101027)。
+
+独立复审确认，MOL-201 已将逻辑身份和执行契约分开；控制参数必须命中原 session 后接受契约检查，不能靠生成新 key 绕过检查。绑定检查在 observer 替换之前发生。补修提交 `be09f5f835460e2566ce35c5034313d08e311b6c` 仅调整两份测试：保留输入数组、精确字符串、值、指令、消息和 thread/turn 身份差异断言；另断言 model/reasoning 变化保持逻辑 key、改变执行契约。
+
+同时增强了实际路由与 adapter 的在途请求回归：等待原 observer 收到前缀后，再改变工具选择、合法模型或 reasoning；冲突请求得到不可重试 409，冲突流没有答案，原 observer 得到完整前后缀及 done，worker 计数为 1。没有降低产品保护或重新打开已完成的 MOL-185；这次回归调整追记 MOL-201。
+
+该两文件完整运行 **34 pass / 0 fail / 135 assertions**，旧断言先在本地复现 1 fail；源码 `be09f5f835460e2566ce35c5034313d08e311b6c` 的 TypeScript 检查也已确认退出 0。命令：
+
+```bash
+bun test tests/mol185-event-replay-identity.test.ts tests/chatgpt-request-contract.test.ts
+bun node_modules/typescript/bin/tsc --noEmit
+```
+
+最终远端状态见 [PR #18 Checks](https://github.com/Molaison/codex-chatgpt-web/pull/18/checks)。完整门禁还包括 launcher 类型检查和全套测试、renderer/runtime 构建、runtime smoke、三平台安装包构建与原生 smoke、产物上传，以及独立 actionlint；根目录测试通过不能代替这些步骤。没有触发 tag release。
+
 ## 尚未满足的验收条件
 
 - [MOL-187](https://linear.app/molaison/issue/MOL-187)：仍缺少来自已有完成会话、可追溯且脱敏的真实 Pro 子代理 DOM/任务身份样本。没有凭空设计 DOM 或上游事件；本轮没有任何 GPT-6 Pro、别名或隐式 fallback 的真实调用。
