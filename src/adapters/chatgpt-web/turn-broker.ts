@@ -332,6 +332,9 @@ export class TurnBroker implements TurnBrokerOwner {
   private server?: Server;
   private startPromise?: Promise<void>;
   private socketIdentity?: { dev: number; ino: number };
+  private readonly sockets = new Set<Socket>();
+  private closed = false;
+  private generation = 0;
 
   private constructor(readonly socketPath: string) {}
 
@@ -822,11 +825,15 @@ export class TurnBroker implements TurnBrokerOwner {
   }
 
   async close(): Promise<void> {
+    this.closed = true;
+    this.generation += 1;
     this.compactionTransactions.close();
     for (const token of [...this.channels.keys()]) this.revoke(token);
     const server = this.server;
     this.server = undefined;
     this.startPromise = undefined;
+    for (const socket of this.sockets) socket.destroy();
+    this.sockets.clear();
     if (brokers.get(this.socketPath) === this) brokers.delete(this.socketPath);
     if (server?.listening) {
       await new Promise<void>((resolveClose, rejectClose) => server.close(error => {
@@ -845,7 +852,9 @@ export class TurnBroker implements TurnBrokerOwner {
   }
 
   private start(): Promise<void> {
+    if (this.closed) return Promise.reject(new Error("turn broker is closed"));
     if (this.startPromise) return this.startPromise;
+    const generation = this.generation;
     const attempt = new Promise<void>((resolveStart, rejectStart) => {
       const windowsPipe = isWindowsPipeEndpoint(this.socketPath);
       if (!windowsPipe) {
@@ -863,7 +872,17 @@ export class TurnBroker implements TurnBrokerOwner {
         mkdirSync(dirname(this.socketPath), { recursive: true, mode: 0o700 });
       }
       const listen = () => {
-        const server = createServer(socket => this.handleSocket(socket));
+        if (this.closed || this.generation !== generation) {
+          rejectStart(new Error("turn broker closed while starting"));
+          return;
+        }
+        const server = createServer(socket => {
+          this.sockets.add(socket);
+          const remove = () => this.sockets.delete(socket);
+          socket.once("close", remove);
+          socket.once("error", remove);
+          this.handleSocket(socket);
+        });
         this.server = server;
         server.once("error", rejectStart);
         server.on("error", error => {
@@ -930,6 +949,10 @@ export class TurnBroker implements TurnBrokerOwner {
             return;
           }
           try {
+            if (this.closed || this.generation !== generation) {
+              rejectStart(new Error("turn broker closed while checking its socket"));
+              return;
+            }
             if (existsSync(this.socketPath)) unlinkSync(this.socketPath);
             listen();
           } catch (cleanupError) {
