@@ -13,6 +13,33 @@ export interface PaperRow {
   state: "reserved" | "ready" | "uncertain"; upload_token: string | null; expires_at: number | null;
   conversation_url: string | null; pdf_sha256: string | null; in_flight: number;
 }
+function declaredPdfHash(metadata: Record<string, unknown>): string | undefined {
+  const hash = metadata.paper_pdf_sha256;
+  if (hash === undefined) return undefined;
+  if (typeof hash !== "string" || !/^[a-f0-9]{64}$/.test(hash)) {
+    throw new PaperError("paper_pdf_sha256_invalid", "Supply a lowercase PDF SHA256", 400);
+  }
+  return hash;
+}
+function assertReadyPdfHash(row: PaperRow, hash: string) {
+  const expected = row.pdf_sha256 ?? (row.paper_id.startsWith("sha256:") ? row.paper_id.slice(7) : undefined);
+  if (!expected) {
+    throw new PaperError("paper_pdf_identity_unverified", "The saved paper has no verified PDF hash; verify the original upload before supplying PDF content");
+  }
+  if (expected !== hash) throw new PaperError("paper_identity_conflict", "Paper already binds a different PDF hash");
+}
+function inlinePdfHash(files: Array<{ file_data?: unknown }>): string {
+  if (files.length !== 1 || typeof files[0]?.file_data !== "string") {
+    throw new PaperError("paper_pdf_required", "Supply exactly one inline PDF", 400);
+  }
+  const match = /^data:application\/pdf;base64,([A-Za-z0-9+/]*={0,2})$/.exec(files[0].file_data);
+  if (!match) throw new PaperError("paper_pdf_invalid", "Expected a base64 PDF data URL", 400);
+  const bytes = Buffer.from(match[1]!, "base64");
+  if (!bytes.subarray(0, 5).equals(Buffer.from("%PDF-"))) {
+    throw new PaperError("paper_pdf_invalid", "Inline content is not a PDF", 400);
+  }
+  return createHash("sha256").update(bytes).digest("hex");
+}
 export const poolSessionHash = (scope: string | string[], thread: string) => createHash("sha256").update(JSON.stringify(["qa-pool/v1", scope, thread])).digest("hex");
 export function normalizePaperId(value: unknown): string {
   if (typeof value !== "string") throw new PaperError("paper_id_invalid", "paper_id is required", 400);
@@ -63,14 +90,13 @@ export class PaperRegistry {
   resolve(id: string, scope: PaperScope, metadata: Record<string, unknown>) {
     return this.db.transaction(() => {
       let row = this.get(id);
-      const suppliedSha = metadata.paper_pdf_sha256;
-      if (suppliedSha !== undefined && (typeof suppliedSha !== "string" || !/^[a-f0-9]{64}$/.test(suppliedSha))) throw new PaperError("paper_pdf_sha256_invalid", "Supply a lowercase PDF SHA256",400);
-      const sha = id.startsWith("sha256:") ? id.slice(7) : typeof suppliedSha === "string" ? suppliedSha : undefined;
+      const suppliedSha = declaredPdfHash(metadata);
+      const sha = id.startsWith("sha256:") ? id.slice(7) : suppliedSha;
       if (id.startsWith("sha256:") && suppliedSha !== undefined && suppliedSha !== sha) throw new PaperError("paper_identity_conflict", "SHA identity disagrees with PDF hash");
       if (sha) {
         const matches = this.db.query<PaperRow,[string,string]>("SELECT * FROM papers WHERE pdf_sha256=? OR paper_id=?").all(sha,"sha256:"+sha);
         const candidates = matches.filter(candidate => candidate.paper_id !== row?.paper_id);
-        if (row?.state === "ready" && (row.pdf_sha256 && row.pdf_sha256 !== sha || row.paper_id.startsWith("sha256:") && row.paper_id !== "sha256:"+sha)) throw new PaperError("paper_identity_conflict", "Paper already binds a different PDF hash");
+        if (row?.state === "ready") assertReadyPdfHash(row, sha);
         if (candidates.length) {
           if (candidates.length !== 1 || candidates[0]!.state !== "ready" || candidates[0]!.in_flight || row && (row.state !== "reserved" || row.in_flight)) throw new PaperError("paper_hash_conflict", "PDF hash has conflicting or unresolved paper bindings");
           if (row && (row.upload_token !== metadata.paper_upload_token || row.expires_at! <= Date.now())) throw new PaperError("paper_upload_token_invalid", "Only the valid reservation owner may link this DOI");
@@ -88,7 +114,10 @@ export class PaperRegistry {
         if (uploaded && !legacy) throw new PaperError("paper_legacy_mapping_missing", "Legacy uploaded paper requires its original thread and saved mapping");
         const thread = uploaded ? legacy : "paper-" + randomUUID();
         row = { paper_id:id, account_id:scope.accountId, project_id:scope.projectId, thread_id:thread, session_hash:poolSessionHash(scope.sessionScope,thread), state:"reserved", upload_token:randomUUID(), expires_at:Date.now()+900_000, conversation_url:null, pdf_sha256:null, in_flight:0 };
-        if (uploaded) { row.conversation_url = this.mapping(row, scope); row.state = "ready"; row.upload_token = null; row.expires_at = null; }
+        if (uploaded) {
+          row.conversation_url = this.mapping(row, scope); row.state = "ready"; row.upload_token = null; row.expires_at = null;
+          if (sha) assertReadyPdfHash(row, sha);
+        }
         this.db.query("INSERT INTO papers VALUES (?,?,?,?,?,?,?,?,?,?,?)").run(id,row.account_id,row.project_id,thread,row.session_hash,row.state,row.upload_token,row.expires_at,row.conversation_url,null,0);
         this.event(id, uploaded ? "legacy_adopted" : "reserved");
         return this.result(row, true);
@@ -155,22 +184,33 @@ export class PaperRegistry {
     if (row.state === "uncertain") throw new PaperError("paper_uncertain", "Earlier submission is uncertain; inspect it before retrying");
     if (row.account_id !== scope.accountId || row.project_id !== scope.projectId || row.session_hash !== poolSessionHash(scope.sessionScope,row.thread_id)) throw new PaperError("paper_scope_mismatch", "Original paper scope required");
     if (row.state === "ready") this.mapping(row,scope);
-    const clean = paperInput(input,row.state === "ready");
+    const suppliedSha = declaredPdfHash(metadata);
+    if (id.startsWith("sha256:") && suppliedSha !== undefined && suppliedSha !== id.slice(7)) {
+      throw new PaperError("paper_identity_conflict", "SHA identity disagrees with PDF hash");
+    }
+    const original = paperInput(input, false);
+    const files = original.flatMap((item:any) => item.content.filter((part:any) => part.type === "input_file"));
+    if (row.state === "ready") {
+      if (suppliedSha) assertReadyPdfHash(row, suppliedSha);
+      if (files.length) {
+        const hash = inlinePdfHash(files);
+        if (suppliedSha && suppliedSha !== hash) {
+          throw new PaperError("paper_pdf_sha256_mismatch", "Actual PDF does not match declared SHA256", 400);
+        }
+        assertReadyPdfHash(row, hash);
+      }
+    }
     if (row.state === "reserved") {
       if (metadata.paper_upload_token !== row.upload_token || row.expires_at! <= Date.now()) throw new PaperError("paper_upload_token_invalid", "Resolve for a valid upload reservation");
-      const files = clean.flatMap((item:any) => item.content.filter((part:any) => part.type === "input_file"));
-      if (files.length !== 1 || typeof files[0].file_data !== "string") throw new PaperError("paper_pdf_required", "Supply exactly one inline PDF",400);
-      const match = /^data:application\/pdf;base64,([A-Za-z0-9+/]*={0,2})$/.exec(files[0].file_data);
-      if (!match) throw new PaperError("paper_pdf_invalid", "Expected a base64 PDF data URL",400);
-      const bytes = Buffer.from(match[1]!,"base64"), sha = createHash("sha256").update(bytes).digest("hex");
-      if (!bytes.subarray(0,5).equals(Buffer.from("%PDF-")) || sha !== metadata.paper_pdf_sha256 || id.startsWith("sha256:") && id !== "sha256:"+sha) {
+      const sha = inlinePdfHash(files);
+      if (sha !== suppliedSha || id.startsWith("sha256:") && id !== "sha256:"+sha) {
         throw new PaperError("paper_pdf_sha256_mismatch", "Actual PDF does not match declared SHA256",400);
       }
       const duplicate = this.db.query<{paper_id:string},[string,string,string]>("SELECT paper_id FROM papers WHERE (pdf_sha256=? OR paper_id=?) AND paper_id!=?").get(sha,"sha256:"+sha,row.paper_id);
       if (duplicate) throw new PaperError("paper_hash_resolve_required", "Resolve with paper_pdf_sha256 before uploading an already registered PDF");
       this.db.query("UPDATE papers SET pdf_sha256=? WHERE paper_id=?").run(sha,row.paper_id);
     }
-    return {row,input:clean};
+    return {row,input:row.state === "ready" ? paperInput(original, true) : original};
     } catch (error) {
       if (error instanceof PaperError) this.event(id,"pre_upload_rejected",error.code);
       throw error;

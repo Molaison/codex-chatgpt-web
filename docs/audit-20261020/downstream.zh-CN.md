@@ -1,5 +1,7 @@
 # 论文上传与 Responses 终态增量修复
 
+`papers/*` 路径的后续内容校验及实际上下游接线证据见 [2026-10-21 第二轮补修](followup-20261021.zh-CN.md)。本文记录第一轮直接 Web 账本及 Responses 消费者修复。
+
 基线：`codex/papers@0b9e0774f4e675963c6fd77a1dd5b4844fc10e1d`。本轮与上游 `Molaison/codex-chatgpt-web` 联合开展五路增量审查，新增问题去重写入 Linear，并由不同实施与审查代理检查最终行为。
 
 交付：[PR #9](https://github.com/Molaison/llm-for-zotero-papers/pull/9)，发布提交 `7f30576336f57198ed0d9b6571ce503f791d42a0`。本地测试提交为 `013c1b8eb88d135dca9db238bfa35db25ba41ffb`，逐文件 blob 与完整 tree `a620e5da1a3e1f4fc944b7ac2af7fd519d13c734` 已核对一致。GitHub API 生成新的提交身份，代码内容没有变化。

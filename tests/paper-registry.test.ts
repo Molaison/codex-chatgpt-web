@@ -130,8 +130,6 @@ test("a confirmed pre-send attachment failure keeps the reservation retryable wh
     for (const event of events) controller.enqueue(new TextEncoder().encode("data: "+JSON.stringify(event)+"\n\n"));
     controller.close();
   }}),{headers:{"content-type":"text/event-stream"}});
-  // Bun's HTTP layer turns a server-side stream error into a clean end, so the reachable
-  // pull-path failure after the explicit event is a corrupted continuation line.
   const sseGarbled=(event:unknown) => new Response(new ReadableStream({start(controller){
     controller.enqueue(new TextEncoder().encode(": opened\n\n"));
     controller.enqueue(new TextEncoder().encode("data: "+JSON.stringify(event)+"\n\n"));
@@ -210,13 +208,15 @@ test("a confirmed pre-send attachment failure keeps the reservation retryable wh
     mode="ok";
     const okRetry=await chat(okId,okFirst.upload_token,false,op); expect(okRetry.status).toBe(200); await okRetry.text();
     expect((await resolve(okId)).status).toBe("ready");
-    // A stream corrupted after the explicit failure event must keep the confirmed pre-send release.
+    // Data after the first explicit terminal cannot alter the paper outcome.
     const errId="doi:10.1234/pre-send-stream-error",ep=pdf("four");
     const errFirst=await resolve(errId);
     mode="sse_error";
     const errFailure=await chat(errId,errFirst.upload_token,true,ep);
     expect(errFailure.status).toBe(200);
-    await expect(errFailure.text()).rejects.toThrow();
+    const errText = await errFailure.text();
+    expect(errText).toContain('"type":"response.failed"');
+    expect(errText).not.toContain("not json");
     expect((await resolve(errId,{paper_upload_token:errFirst.upload_token})).upload_token).toBe(errFirst.upload_token);
     mode="ok";
     const errRetry=await chat(errId,errFirst.upload_token,true,ep); expect(errRetry.status).toBe(200); await errRetry.text();
@@ -232,4 +232,121 @@ test("a confirmed pre-send attachment failure keeps the reservation retryable wh
       mode="ok";
     }
   } finally {pool.close();backend.stop(true);rmSync(root,{recursive:true,force:true});}
+});
+
+test("ready papers validate content at resolve and direct chat without losing text-only resume", async () => {
+  const root = mkdtempSync(join(tmpdir(), "paper-ready-content-"));
+  const key = "c".repeat(32), projectId = "g-p-" + "c".repeat(32), accountId = "account";
+  writeFileSync(join(root, "key"), key);
+  const store = new ChatGptConversationStore(join(root, "conversations"), accountId);
+  const calls: any[] = [];
+  const backend = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
+    const body = await request.json() as any;
+    calls.push(body);
+    const thread = JSON.parse(body.client_metadata["x-codex-turn-metadata"]).thread_id;
+    const nativeKey = chatGptQuestionAnswerKey(thread, chatGptQuestionAnswerNamespace(accountId));
+    if (!store.lookup(nativeKey)) {
+      store.bind(nativeKey, store.reserve(nativeKey), `https://chatgpt.com/g/${projectId}/c/registered-paper`);
+    }
+    return Response.json({ id: `response-${calls.length}`, status: "completed", output: [] });
+  }});
+  const config: QaPoolConfig = {
+    host: "127.0.0.1", port: 0, databasePath: join(root, "sessions.sqlite"),
+    clients: [{ id: "cpr", keyFile: join(root, "key") }],
+    accounts: [{ id: accountId, origin: backend.url.origin, models: ["standard"], sessionModes: true,
+      conversationStoreDirectory: join(root, "conversations") }],
+    projectRoutes: [{ name: "papers", sessionNamespace: "papers", accountId, projectId }],
+  };
+  const pool = createQaPool(config);
+  const db = new Database(config.databasePath);
+  const request = (metadata: object, input: unknown = "continue the paper") => pool.fetch(new Request(
+    "http://pool/project/papers/v1/responses", {
+      method: "POST", headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+      body: JSON.stringify({ model: "standard", stream: false, input,
+        client_metadata: { "x-codex-turn-metadata": JSON.stringify(metadata) } }),
+    },
+  ));
+  const resolve = async (paperId: string, extra: object = {}) => {
+    const response = await request({ paper_id: paperId, paper_operation: "resolve", ...extra });
+    expect(response.status).toBe(200);
+    return JSON.parse((await response.json() as any).output[0].content[0].text);
+  };
+  const pdf = (label: string) => {
+    const bytes = Buffer.from(`%PDF-1.4\n${label}\n%%EOF`);
+    return { hash: createHash("sha256").update(bytes).digest("hex"),
+      part: { type: "input_file", filename: "paper.pdf", file_data: `data:application/pdf;base64,${bytes.toString("base64")}` } };
+  };
+  const original = pdf("original"), replacement = pdf("replacement");
+  const question = (files: object[]) => [{ role: "user", content: [...files, { type: "input_text", text: "continue the paper" }] }];
+  const id = "doi:10.1234/ready-content";
+  try {
+    const first = await resolve(id);
+    const uploaded = await request({ paper_id: id, paper_operation: "chat", paper_upload_token: first.upload_token,
+      paper_pdf_sha256: original.hash }, question([original.part]));
+    expect(uploaded.status).toBe(200);
+    expect((await uploaded.json() as any).status).toBe("completed");
+    const ready = await resolve(id);
+    expect(ready.status).toBe("ready");
+    expect(calls).toHaveLength(1);
+
+    const rejected: Array<{ operation: string; metadata: object; input?: unknown; status: number; code: string }> = [
+      { operation: "resolve", metadata: { paper_pdf_sha256: replacement.hash }, status: 409, code: "paper_identity_conflict" },
+      { operation: "chat", metadata: { paper_pdf_sha256: replacement.hash }, status: 409, code: "paper_identity_conflict" },
+      { operation: "chat", metadata: { paper_pdf_sha256: "invalid" }, status: 400, code: "paper_pdf_sha256_invalid" },
+      { operation: "chat", metadata: {}, input: question([replacement.part]), status: 409, code: "paper_identity_conflict" },
+      { operation: "chat", metadata: { paper_pdf_sha256: original.hash }, input: question([replacement.part]), status: 400, code: "paper_pdf_sha256_mismatch" },
+      { operation: "chat", metadata: {}, input: question([{ type: "input_file", file_data: "data:application/pdf;base64,aGVsbG8=" }]), status: 400, code: "paper_pdf_invalid" },
+      { operation: "chat", metadata: {}, input: question([{ type: "input_file", file_url: "https://example.invalid/new.pdf" }]), status: 400, code: "paper_pdf_required" },
+      { operation: "chat", metadata: {}, input: question([original.part, replacement.part]), status: 400, code: "paper_pdf_required" },
+    ];
+    for (const item of rejected) {
+      const response = await request({ paper_id: id, paper_operation: item.operation, ...item.metadata }, item.input);
+      expect(response.status).toBe(item.status);
+      expect((await response.json() as any).error.code).toBe(item.code);
+      expect(calls).toHaveLength(1);
+      expect(await resolve(id)).toEqual(ready);
+    }
+
+    for (const [metadata, input] of [
+      [{}, "continue the paper"],
+      [{ paper_pdf_sha256: original.hash }, "continue the paper"],
+      [{}, question([original.part])],
+    ] as const) {
+      const response = await request({ paper_id: id, paper_operation: "chat", ...metadata }, input);
+      expect(response.status).toBe(200);
+      await response.json();
+      expect(calls.at(-1).input).toHaveLength(1);
+      expect(calls.at(-1).input[0].role).toBe("user");
+      expect(calls.at(-1).input[0].content).toEqual([{ type: "input_text", text: "continue the paper" }]);
+      expect(JSON.parse(calls.at(-1).client_metadata["x-codex-turn-metadata"]).thread_id)
+        .toBe(JSON.parse(calls[0].client_metadata["x-codex-turn-metadata"]).thread_id);
+    }
+    expect(calls).toHaveLength(4);
+
+    const legacyThread = "legacy-no-hash", legacyId = "doi:10.1234/legacy-no-hash";
+    const sessionHash = poolSessionHash(["cpr", "papers"], legacyThread);
+    db.query("INSERT INTO sessions(session_hash,account_id,created_at,project_id,project_name) VALUES(?,?,?,?,?)")
+      .run(sessionHash, accountId, new Date().toISOString(), projectId, "papers");
+    const nativeKey = chatGptQuestionAnswerKey(`qa-pool-${sessionHash}`, chatGptQuestionAnswerNamespace(accountId));
+    store.bind(nativeKey, store.reserve(nativeKey), `https://chatgpt.com/g/${projectId}/c/legacy-no-hash`);
+    const legacy = await resolve(legacyId, { paper_legacy_thread_id: legacyThread, paper_legacy_uploaded: true });
+    expect(legacy.status).toBe("ready");
+    for (const operation of ["resolve", "chat"]) {
+      const response = await request({ paper_id: legacyId, paper_operation: operation, paper_pdf_sha256: original.hash });
+      expect(response.status).toBe(409);
+      expect((await response.json() as any).error.code).toBe("paper_pdf_identity_unverified");
+    }
+    const unverifiedFile = await request({ paper_id: legacyId, paper_operation: "chat" }, question([original.part]));
+    expect(unverifiedFile.status).toBe(409);
+    expect((await unverifiedFile.json() as any).error.code).toBe("paper_pdf_identity_unverified");
+    expect(calls).toHaveLength(4);
+    expect(db.query<{ pdf_sha256: string | null }, [string]>("SELECT pdf_sha256 FROM papers WHERE paper_id=?").get(legacyId)?.pdf_sha256).toBeNull();
+    const resumed = await request({ paper_id: legacyId, paper_operation: "chat" });
+    expect(resumed.status).toBe(200);
+    await resumed.json();
+    expect(calls).toHaveLength(5);
+    expect((await resolve(legacyId)).thread_id).toBe(legacy.thread_id);
+  } finally {
+    db.close(); pool.close(); backend.stop(true); rmSync(root, { recursive: true, force: true });
+  }
 });
