@@ -1,0 +1,25 @@
+{
+  "status": "passed",
+  "checks": 13,
+  "details": [
+    "initial actual downstream preparation and pool chat persist one verified upload",
+    "fresh device with original local PDF validates hash and preserves conversation without upload",
+    "replacement bytes at identical path rejected before any backend chat",
+    "explicitly selected different attachment rejected despite correct best attachment",
+    "no attachment continues saved thread with text alone",
+    "attachment without local path continues saved thread with text alone",
+    "no DOI uses content hash alias and preserves canonical conversation without upload",
+    "new DOI with original PDF resolves hash alias instead of uploading twice",
+    "direct ready chat validates declared hash and actual bytes even without a resolve call",
+    "direct ready chat with original PDF verifies then strips duplicate upload",
+    "legacy DOI with no trusted hash rejects new hash or PDF claims without backfilling history",
+    "legacy DOI without local attachment still continues original conversation with unknown hash unchanged",
+    "pool restart preserves verified identity and thread with only one lifetime fixture upload"
+  ],
+  "controlledBackendCalls": 9,
+  "controlledBackendPdfCount": 1,
+  "realNetworkCalls": 0,
+  "realZoteroWrites": 0,
+  "upstream": "233a38f90f0575df0a4feeb2a547e692148a3d34",
+  "downstream": "a257c7dc6e79a4b81c0a605989365de58978c3eb"
+}

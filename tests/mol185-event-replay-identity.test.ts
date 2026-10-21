@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ChatGptBrowserWorker } from "../src/adapters/chatgpt-web/browser-worker";
 import { createChatGptWebAdapter } from "../src/adapters/chatgpt-web/index";
-import { chatGptTurnExecutionKey, chatGptTurnRoundKey } from "../src/adapters/chatgpt-web/turn-execution";
+import { chatGptRequestContract, chatGptTurnExecutionKey, chatGptTurnRoundKey } from "../src/adapters/chatgpt-web/turn-execution";
 import { defaultConfig } from "../src/config";
 import { parseRequest } from "../src/responses/parser";
 import { responseRequest } from "../src/server";
@@ -161,9 +161,23 @@ test("MOL-185 round identity retains array order, exact strings, values, and nat
     { ...baseline, input: [baseline.input[0], { ...baseline.input[1], output: "changed result" }, baseline.input[2]] },
     { ...baseline, input: [{ ...original.input[0], content: [{ type: "input_text", text: "Changed instruction" }] }, ...baseline.input.slice(1)] },
     { ...baseline, input: [{ ...original.input[0], id: "msg_changed" }, ...baseline.input.slice(1)] },
-    { ...baseline, model: "different-model" },
-    { ...baseline, reasoning: { effort: "low" } },
     { ...baseline, client_metadata: { "x-codex-turn-metadata": JSON.stringify({ thread_id: "thread_other", turn_id: "turn_other" }) } },
   ];
   for (const variant of variants) expect(chatGptTurnRoundKey(parseRequest(variant))).not.toBe(key);
+});
+
+test("MOL-201 model and reasoning changes preserve logical identity but conflict with the bound contract", () => {
+  const original = body();
+  const baseline = parseRequest(original);
+  const contract = chatGptRequestContract(baseline);
+  // Controls must not create a fresh execution/round that could bypass conflict checking.
+  // The actual routed adapter rejection and active observer are covered in chatgpt-request-contract.
+  for (const controls of [{ model: "different-model" }, { reasoning: { effort: "low" } }]) {
+    const changed = parseRequest({ ...original, ...controls });
+    const changedContract = chatGptRequestContract(changed);
+    expect(chatGptTurnExecutionKey(changed)).toBe(chatGptTurnExecutionKey(baseline));
+    expect(chatGptTurnRoundKey(changed)).toBe(contract.round);
+    expect(changedContract.execution).not.toBe(contract.execution);
+    expect(changedContract.request).not.toBe(contract.request);
+  }
 });

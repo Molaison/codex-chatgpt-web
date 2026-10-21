@@ -1,0 +1,15 @@
+bun test v1.4.0 (34cbb9a40)
+
+paper-terminal-counterexamples.test.ts:
+{"audit":"paper-terminal-counterexamples","upstream":"233a38f90f0575df0a4feeb2a547e692148a3d34"}
+(pass) verified completion already enqueued settles despite observer cancellation [34.27ms]
+(pass) malformed JSON completion remains uncertain [20.47ms]
+(pass) completed JSON with missing saved mapping cannot become ready [17.21ms]
+(pass) completed SSE with missing saved mapping cannot become ready [14.64ms]
+(pass) terminal truncation preserves every possible split boundary [3507.02ms]
+(pass) late prior cancellation rejection cannot release a newer paper owner [28.06ms]
+
+ 6 pass
+ 0 fail
+ 713 expect() calls
+Ran 6 tests across 1 file. [4.22s]

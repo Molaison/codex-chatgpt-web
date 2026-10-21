@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import * as z from "zod/v4";
-import { namespacedToolName, type CodexTool } from "../../types";
+import { namespacedToolName, type CodexTool, type CodexToolChoice } from "../../types";
 import { VERSION } from "../../version";
 import { chatGptToolChoiceAllows, type ChatGptTurnEnvironment } from "./environment";
 import { CODEX_COMPACTION_CONTROL_WIRE_NAME } from "./native-compaction-control";
@@ -124,8 +124,15 @@ function gatewayToolNameIsValid(name: string): boolean {
   return /^[A-Za-z0-9_$]+$/.test(name);
 }
 
+function rawExecIsRestricted(environment: ChatGptTurnEnvironment): boolean {
+  return environment.toolChoice !== undefined && environment.toolChoice !== "auto";
+}
+
 function safeVisibleTools(environment: ChatGptTurnEnvironment, contract: ChatGptMcpContract): CodexTool[] {
-  if (contract === "native") return environment.tools;
+  if (contract === "native") {
+    const gateway = rawExecIsRestricted(environment) ? execGateway(environment) : undefined;
+    return environment.tools.filter(tool => tool !== gateway);
+  }
   const bridgeNamespaces = new Set(environment.tools
     .filter(tool => tool.namespace && BRIDGE_TOOL_NAMES.has(tool.name))
     .map(tool => tool.namespace!));
@@ -259,14 +266,20 @@ function gatewayToolCatalogProgram(options: {
   limit: number;
   excludedNames: string[];
   marker: string;
+  toolChoice?: CodexToolChoice;
 }): string {
   const needle = options.query?.trim().toLowerCase() ?? "";
+  const choice = options.toolChoice;
+  const allowedNames = typeof choice === "object"
+    ? "name" in choice ? [choice.name] : choice.allowedTools
+    : choice === "none" ? [] : null;
   return [
     "if (typeof ALL_TOOLS === \"undefined\" || !Array.isArray(ALL_TOOLS)) throw new Error(\"Native nested tool registry is unavailable\");",
     `const excludedNames = new Set(${JSON.stringify(options.excludedNames)});`,
+    `const allowedNames = ${JSON.stringify(allowedNames)};`,
     `const needle = ${JSON.stringify(needle)};`,
     "const visibleName = name => {",
-    "  return typeof name === \"string\" && /^[A-Za-z0-9_$]+$/.test(name) && !excludedNames.has(name);",
+    "  return typeof name === \"string\" && /^[A-Za-z0-9_$]+$/.test(name) && !excludedNames.has(name) && (allowedNames === null || allowedNames.includes(name));",
     "};",
     "const matches = ALL_TOOLS",
     "  .filter(tool => visibleName(tool?.name))",
@@ -280,7 +293,7 @@ function gatewayToolCatalogProgram(options: {
 function gatewayToolCatalogPage(response: {
   content: unknown[];
   isError?: boolean;
-}, excludedNames: ReadonlySet<string>, marker: string): GatewayToolCatalogPage {
+}, excludedNames: ReadonlySet<string>, marker: string, toolChoice?: CodexToolChoice): GatewayToolCatalogPage {
   const textBlocks = response.content
     .map(item => item && typeof item === "object" && !Array.isArray(item)
       ? item as Record<string, unknown>
@@ -318,6 +331,7 @@ function gatewayToolCatalogPage(response: {
     if (typeof tool.name !== "string"
       || typeof tool.description !== "string"
       || !gatewayToolNameIsValid(tool.name)
+      || !chatGptToolChoiceAllows(toolChoice, tool.name)
       || excludedNames.has(tool.name)) {
       throw new Error("Native nested tool inventory returned an invalid tool descriptor");
     }
@@ -432,13 +446,13 @@ function transportBoundRawExecProgram(input: string, blockedExecName: string): s
 function execCommandGatewayProgram(
   execCommandArguments: Record<string, unknown>,
   shellCommandArguments: Record<string, unknown>,
+  allowedNames: string[],
 ): string {
   const execCommandName = gatewayNestedToolName("exec_command");
-  const shellCommandName = gatewayNestedToolName("shell_command");
   return execGatewayResultProgram([
     "if (typeof ALL_TOOLS === \"undefined\" || !Array.isArray(ALL_TOOLS)) throw new Error(\"Native command tool registry is unavailable\");",
     "const nativeCommandNames = new Set(ALL_TOOLS.map(tool => tool?.name));",
-    `const nativeCommandCandidates = ${JSON.stringify([execCommandName, shellCommandName])}.filter(name => nativeCommandNames.has(name));`,
+    `const nativeCommandCandidates = ${JSON.stringify(allowedNames)}.filter(name => nativeCommandNames.has(name));`,
     "if (nativeCommandCandidates.length !== 1) throw new Error(\"Expected exactly one native command tool; found \" + (nativeCommandCandidates.join(\", \") || \"none\"));",
     "const nativeCommandName = nativeCommandCandidates[0];",
     "const nativeCommand = tools[nativeCommandName];",
@@ -560,6 +574,9 @@ export function createChatGptMcpServer(options: ChatGptMcpServerOptions): McpSer
     payload: { arguments?: Record<string, unknown>; input?: string },
     signal?: AbortSignal,
   ) => {
+    if (!chatGptToolChoiceAllows(bound.toolChoice, wireName(tool))) {
+      throw new Error(`Codex tool is not available in this turn: ${wireName(tool)}`);
+    }
     const timeoutMs = chatGptMcpInvocationTimeout(bound);
     try {
       const response = await callTurnBroker<BrokerToolResult>(options.brokerSocketPath, {
@@ -618,7 +635,7 @@ export function createChatGptMcpServer(options: ChatGptMcpServerOptions): McpSer
     signal?: AbortSignal,
   ) => {
     const gateway = execGateway(bound);
-    if (!gateway) {
+    if (!gateway || !chatGptToolChoiceAllows(bound.toolChoice, nestedToolName)) {
       throw new Error(`This Codex turn did not advertise ${nestedToolName} or the native exec gateway`);
     }
     return invoke(bindingId, bound, gateway, {
@@ -686,11 +703,13 @@ export function createChatGptMcpServer(options: ChatGptMcpServerOptions): McpSer
           return invoke(claimed.bindingId, bound, tool, { arguments: args }, extra.signal);
         }
         const gateway = execGateway(bound);
-        if (!gateway) {
+        const allowedCommandNames = ["exec_command", "shell_command"]
+          .filter(name => chatGptToolChoiceAllows(bound.toolChoice, name));
+        if (!gateway || allowedCommandNames.length === 0) {
           throw new Error("This Codex turn did not advertise a native command tool or the native exec gateway");
         }
         return invoke(claimed.bindingId, bound, gateway, {
-          input: execCommandGatewayProgram(execCommandArguments, shellCommandArguments),
+          input: execCommandGatewayProgram(execCommandArguments, shellCommandArguments, allowedCommandNames),
         }, extra.signal);
       },
     ),
@@ -840,9 +859,10 @@ export function createChatGptMcpServer(options: ChatGptMcpServerOptions): McpSer
               // our own MCP namespace in Zero Risk).
               excludedNames: excludedGatewayNames,
               marker,
+              toolChoice: bound.toolChoice,
             }),
           }, extra.signal);
-          const catalog = gatewayToolCatalogPage(response, new Set(excludedGatewayNames), marker);
+          const catalog = gatewayToolCatalogPage(response, new Set(excludedGatewayNames), marker, bound.toolChoice);
           nestedTotal = catalog.total;
           nestedPage = catalog.tools.map(tool => ({
             wire_name: tool.name,
@@ -927,6 +947,13 @@ export function createChatGptMcpServer(options: ChatGptMcpServerOptions): McpSer
       }
       return withClaimedTurn("codex_tool_call", requestId, extra, async claimed => {
         const bound = claimed.environment;
+        const rawExec = execGateway(bound);
+        if (rawExec && wire_name === wireName(rawExec) && rawExecIsRestricted(bound)) {
+          // Arbitrary JavaScript can recover the original tools object through reflection.
+          // The transport Proxy is not a sandbox; only generated structured calls are safe
+          // to send through the gateway when tool_choice restricts the available tools.
+          throw new Error("Raw JavaScript exec is unavailable with a restricted tool_choice. Use an allowed structured tool call.");
+        }
         const tool = safeVisibleTools(bound, contract)
           .find(candidate => wireName(candidate) === wire_name);
         if (!tool) {

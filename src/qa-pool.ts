@@ -20,10 +20,10 @@ const nonempty = (value: unknown): string | undefined => typeof value === "strin
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 // These adapter codes are emitted before Send. HTTP status alone is not proof.
 const PRE_SEND_ATTACHMENT_FAILURE = "prompt_attachments_not_submitted";
-function preSendAttachmentFailure(value: unknown, allowAdmissionFailure = false): boolean {
+function preSendFailure(value: unknown): boolean {
   const event = record(value);
   return [event, record(event.error), record(record(event.response).error)]
-    .some(entry => entry.code === PRE_SEND_ATTACHMENT_FAILURE || (allowAdmissionFailure && entry.code === "concurrency_limit_exceeded"));
+    .some(entry => entry.code === PRE_SEND_ATTACHMENT_FAILURE || entry.code === "concurrency_limit_exceeded");
 }
 
 // Only the configured runtime's pre-admission 503 contract proves no execution.
@@ -433,8 +433,11 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
     let observationTimer: ReturnType<typeof setTimeout> | undefined;
     let cancelRead: (() => void) | undefined;
     let detachObserverAbort = () => {};
+    let released = false;
     const stopObservation = () => { detachObserverAbort(); if (observationTimer) clearTimeout(observationTimer); observation?.abort(); cancelRead?.(); settleReceipt(); };
     const release = (notSubmitted = false) => {
+      if (released) return;
+      released = true;
       activeHistories.delete(hash);
       settleReceipt();
       detachObserverAbort();
@@ -465,7 +468,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
       if (paper) {
         if (!paperCompleted) { papers.complete(paper.id, paper.scope); paperCompleted = true; }
         promoteHistory(hash);
-        return;
+        return true;
       }
       try { commitHistory(value, wire, cacheable); }
       catch (error) {
@@ -525,13 +528,13 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
         let parsed: unknown; try { parsed = JSON.parse(new TextDecoder().decode(bytes)); } catch { parsed = undefined; }
         if (response.ok) completed(parsed);
         // A 200 stream-less body can still carry status:"failed" with the explicit adapter code.
-        if (!paperCompleted && parsed !== undefined && (preSendAttachmentFailure(parsed, Boolean(retainHistory))
+        if (!paperCompleted && parsed !== undefined && (preSendFailure(parsed)
           || responseNotAdmitted(parsed, response.status))) notSubmitted = true;
         body = bytes; release(notSubmitted);
       } else if ((retainHistory || paper) && response.body && response.ok) {
         const reader = response.body.getReader(); let buffered = Buffer.alloc(0);
         cancelRead = () => { resumeRead?.(); void reader.cancel().catch(() => {}); };
-        const wire: Uint8Array[] = []; let wireBytes = 0; let terminalSaved = false; let cacheable = true;
+        const wire: Uint8Array[] = []; let wireBytes = 0; let terminal = false; let cacheable = true;
         let observerCancelled = false;
         let resumeRead: (() => void) | undefined;
         const observerAborted = () => { observerCancelled = true; resumeRead?.(); };
@@ -553,7 +556,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
               const chunk = await reader.read();
               if (closed || observation?.signal.aborted) throw new Error("Observation ended");
               if (chunk.done) { release(notSubmitted); if (!observerCancelled) controller.close(); return; }
-              if (receipt && !terminalSaved) {
+              if (receipt && !terminal) {
                 wireBytes += chunk.value.byteLength;
                 if (wireBytes > MAX_RECEIPT_BYTES) { cacheable = false; wire.length = 0; }
               }
@@ -565,32 +568,47 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
                 if (end < 0) break;
                 const length = end + (end === crlf ? 4 : 2);
                 const frame = buffered.subarray(0, length); buffered = buffered.subarray(length);
-                if (receipt && !terminalSaved && cacheable) wire.push(frame);
+                if (receipt && !terminal && cacheable) wire.push(frame);
                 const data = frame.toString("utf8").split(/\r?\n/).filter(line => line.startsWith("data:"))
                   .map(line => line.slice(5).replace(/^ /, "")).join("\n");
                 if (!data || data.trim() === "[DONE]") continue;
                 const event = record(JSON.parse(data));
                 if (event.type === "response.completed") {
-                  if (terminalSaved) throw new Error("Duplicate terminal event");
+                  if (terminal) throw new Error("Duplicate terminal event");
                   const committed = completed(event.response, receipt && cacheable ? Buffer.concat(wire) : undefined, cacheable);
-                  if (receipt && !committed) throw new Error("Invalid completed response");
-                  terminalSaved = true;
-                } else if ((event.type === "response.failed" || event.type === "error") && preSendAttachmentFailure(event, Boolean(retainHistory))) notSubmitted = true;
+                  if ((receipt || paper) && !committed) throw new Error("Invalid completed response");
+                  terminal = true;
+                } else if (event.type === "response.failed" || event.type === "error") {
+                  if (preSendFailure(event)) notSubmitted = true;
+                  if (paper) terminal = true;
+                } else if (paper && event.type === "response.incomplete") terminal = true;
+                if (paper && terminal) break;
               }
-              if (!observerCancelled) controller.enqueue(chunk.value);
-              if (receipt && terminalSaved) {
+              // A paper's first terminal owns its outcome, including when later frames share a chunk.
+              const outgoing = paper && terminal ? chunk.value.subarray(0, chunk.value.byteLength - buffered.byteLength) : chunk.value;
+              if (!observerCancelled) controller.enqueue(outgoing);
+              if ((receipt || paper) && terminal) {
                 release(notSubmitted); if (!observerCancelled) controller.close();
+                if (paper) { void reader.cancel().catch(() => {}); return; }
                 await reader.cancel(); return;
               }
               if (!receipt) return;
               }
-            } catch (error) { release(notSubmitted); if (!observerCancelled) controller.error(error); }
+            } catch (error) {
+              release(notSubmitted);
+              if (!observerCancelled) controller.error(error);
+              if (paper) void reader.cancel().catch(() => {});
+            }
         };
         body = new ReadableStream<Uint8Array>({
           ...(receipt ? { start: (controller: ReadableStreamDefaultController<Uint8Array>) => { void consume(controller); }, pull: () => { resumeRead?.(); } } : { pull: consume }),
           async cancel(reason) {
             observerAborted(); detachObserverAbort();
-            if (!receipt || !historyReserved) { release(notSubmitted); await reader.cancel(reason); }
+            if (!receipt || !historyReserved) {
+              release(notSubmitted);
+              if (paper) { void reader.cancel(reason).catch(() => {}); return; }
+              await reader.cancel(reason);
+            }
           },
         });
       } else release();

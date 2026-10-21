@@ -1,0 +1,26 @@
+{
+  "status": "passed",
+  "upstreamHead": "93ba34b61e5163f398aeaa010788621cb4a559d5",
+  "sourceSha256": {
+    "scripts/live-web-smoke-guard.ts": "84d5c30426ca04371d8d628ef280658755ba65c07a1c4106b6314e87cae11d9e",
+    "src/server.ts": "cf67b8245423a3956835ceb974b19fd63484412b48cc66053cb735a655e5588c",
+    "src/config.ts": "7853bab5e67cf5f05092a27f70ede372cca6cabfde0d7c14ebefbc4504133512",
+    "src/responses/parser.ts": "0a9115dade6f5a6919b871efd01d69ec9a6fe5f1a762df5f5e475b1df43932cb",
+    "src/chatgpt-web-models.ts": "4779a15aa463aab2fd2eaea542e7f8a18859e224b208de93177a74c153bfd58e",
+    "src/model-catalog.ts": "acbe75da80818be647367946884f300cad10e5e8f9dff8a0d3ef9dd2dc50c3f0"
+  },
+  "runtime": {
+    "bun": "1.4.0",
+    "platform": "linux",
+    "arch": "x64"
+  },
+  "productionHandlerRequests": 21,
+  "syntheticAdapterCalls": 20,
+  "allowedInjectionVariants": 20,
+  "deniedVariants": 10,
+  "missingPreviousResponseSafelyRejected": true,
+  "realNetworkCalls": 0,
+  "realModelCalls": 0,
+  "realBrowserSend": 0,
+  "realPdfUploads": 0
+}

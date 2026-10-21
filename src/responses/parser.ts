@@ -22,23 +22,15 @@ function isObj(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-function assertSupportedMedia(value: unknown): void {
-  const visit = (node: unknown): void => {
-    if (Array.isArray(node)) {
-      for (const child of node) visit(child);
-      return;
-    }
-    if (!isObj(node)) return;
-    const type = node.type;
-    if (type === "input_audio" || type === "audio" || type === "output_audio" || type === "audio_url") {
-      throw new Error("unsupported_media: ChatGPT Web does not support audio content");
-    }
-    if (type === "input_image" && typeof node.image_url !== "string") {
-      throw new Error("unsupported_media: ChatGPT Web requires an inline image_url");
-    }
-    for (const child of Object.values(node)) visit(child);
-  };
-  visit(value);
+function assertSupportedMediaBlock(value: unknown): void {
+  if (!isObj(value)) return;
+  const type = value.type;
+  if (type === "input_audio" || type === "audio" || type === "output_audio" || type === "audio_url") {
+    throw new Error("unsupported_media: ChatGPT Web does not support audio content");
+  }
+  if (type === "input_image" && (typeof value.image_url !== "string" || value.image_url.length === 0)) {
+    throw new Error("unsupported_media: ChatGPT Web requires an inline image_url");
+  }
 }
 
 type InputBlock =
@@ -70,6 +62,7 @@ function inputContentParts(blocks: unknown[] | string | undefined): string | Cod
   if (!blocks) return [];
   const parts: CodexContentPart[] = [];
   for (const raw of blocks) {
+    assertSupportedMediaBlock(raw);
     const block = raw as InputBlock;
     if (block.type === "input_text" || block.type === "text") {
       parts.push({ type: "text", text: (block as { text: string }).text });
@@ -109,6 +102,7 @@ function outputTextOf(blocks: unknown[] | string | undefined): CodexTextContent[
   if (!blocks) return [];
   const out: CodexTextContent[] = [];
   for (const raw of blocks) {
+    assertSupportedMediaBlock(raw);
     const b = raw as OutputBlock;
     if (b.type === "output_text" || b.type === "text") out.push({ type: "text", text: (b as { text: string }).text });
     else if (b.type === "refusal") out.push({ type: "text", text: `[refusal: ${(b as { refusal: string }).refusal}]` });
@@ -122,13 +116,13 @@ function mapToolChoice(value: unknown): CodexRequestOptions["toolChoice"] {
   if (isObj(value) && "type" in value) {
     const t = (value as { type: string }).type;
     if ((t === "function" || t === "custom") && "name" in value) {
-      return { name: (value as { name: string }).name };
+      return { name: namespacedToolName(normalizedToolNamespace(value.namespace), (value as { name: string }).name) };
     }
     if (t === "allowed_tools" && Array.isArray(value.tools)) {
       const names = value.tools
         .map(allowedToolName)
         .filter((name): name is string => Boolean(name));
-      return names.length > 0
+      return names.length > 0 || value.mode === "required"
         ? { allowedTools: [...new Set(names)], mode: value.mode === "required" ? "required" : "auto" }
         : "none";
     }
@@ -139,7 +133,7 @@ function mapToolChoice(value: unknown): CodexRequestOptions["toolChoice"] {
 
 function allowedToolName(tool: unknown): string | undefined {
   if (!isObj(tool)) return undefined;
-  if (typeof tool.name === "string" && tool.name.length > 0) return tool.name;
+  if (typeof tool.name === "string" && tool.name.length > 0) return namespacedToolName(normalizedToolNamespace(tool.namespace), tool.name);
   if (tool.type === "web_search" || tool.type === "web_search_preview") return "web_search";
   if (tool.type === "tool_search") return "tool_search";
   return undefined;
@@ -279,6 +273,7 @@ function outputToToolResultContent(output: string | unknown[] | undefined): stri
   let hasImage = false;
   for (const raw of output) {
     if (!isObj(raw)) continue;
+    assertSupportedMediaBlock(raw);
     if (raw.type === "output_text" || raw.type === "text" || raw.type === "input_text") {
       if (typeof raw.text === "string") parts.push({ type: "text", text: raw.text });
     } else if (raw.type === "refusal" && typeof raw.refusal === "string") {
@@ -289,8 +284,6 @@ function outputToToolResultContent(output: string | unknown[] | undefined): stri
       }
       parts.push({ type: "image", imageUrl: raw.image_url, ...(typeof raw.detail === "string" ? { detail: normalizeImageDetail(raw.detail) } : {}) });
       hasImage = true;
-    } else if (raw.type === "input_audio" || raw.type === "audio" || raw.type === "output_audio" || raw.type === "audio_url") {
-      throw new Error("unsupported_media: ChatGPT Web does not support audio content");
     } else if (raw.type === "encrypted_content") {
       // codex-rs FunctionCallOutputContentItem::EncryptedContent — opaque to routed models.
       parts.push({ type: "text", text: "[encrypted content omitted]" });
@@ -328,7 +321,6 @@ export function parseRequest(body: unknown): CodexParsedRequest {
     throw new Error(`responses parse error: ${parsed.error.message}`);
   }
   const data = parsed.data;
-  assertSupportedMedia(data.input);
   const now = Date.now();
   const messages: CodexMessage[] = [];
   const systemPrompt: string[] = [];
@@ -360,6 +352,7 @@ export function parseRequest(body: unknown): CodexParsedRequest {
     messages.push({ role: "user", content: data.input, timestamp: now });
   } else if (data.input) {
     for (const item of data.input) {
+      assertSupportedMediaBlock(item);
       const effectiveType = (item as { type?: string }).type ?? ("role" in item ? "message" : undefined);
 
       if (effectiveType === "compaction_trigger") {

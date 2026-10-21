@@ -3871,8 +3871,8 @@ describe("ChatGPT outer-native harness v4", () => {
     environment.tools = [
       { name: "exec_command", description: "Run a Codex command", parameters: { type: "object" } },
     ];
-    const abandonedToken = await broker.register(environment, 3_000);
-    const replacementToken = await broker.register(environment);
+    let abandonedToken: string | undefined;
+    let replacementToken: string | undefined;
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: ["src/cli.ts", "mcp", "--broker-socket", socketPath],
@@ -3885,12 +3885,21 @@ describe("ChatGPT outer-native harness v4", () => {
       expect(chatGptMcpInvocationTimeout(environment)).toBe(CHATGPT_WEB_MCP_INVOCATION_TIMEOUT_MS);
       expect(chatGptMcpInvocationTimeout({ ...environment, expiresAt: 1_500 }, 1_000)).toBe(500);
       await client.connect(transport);
+      const activeAbandonedToken = await broker.register(environment, 3_000);
+      const activeReplacementToken = await broker.register(environment);
+      abandonedToken = activeAbandonedToken;
+      replacementToken = activeReplacementToken;
       const abort = new AbortController();
       const abandoned = client.callTool({
         name: "codex_exec",
-        arguments: { turn_token: abandonedToken, cmd: "sleep forever", yield_time_ms: 30_000 },
+        arguments: { turn_token: activeAbandonedToken, cmd: "sleep forever", yield_time_ms: 30_000 },
       }, undefined, { signal: abort.signal });
-      const [request] = await broker.nextToolBatch(abandonedToken);
+      const [request] = await Promise.race([
+        broker.nextToolBatch(activeAbandonedToken),
+        abandoned.then(response => {
+          throw new Error(`codex_exec settled before reaching the broker: ${JSON.stringify(response.content)}`);
+        }),
+      ]);
       expect(request).toMatchObject({ wireName: "exec_command" });
       abort.abort(new Error("synthetic MCP client cancellation"));
       await expect(abandoned).rejects.toBeDefined();
@@ -3899,7 +3908,7 @@ describe("ChatGPT outer-native harness v4", () => {
       let abandonedError: unknown;
       do {
         try {
-          await callTurnBroker(socketPath, { method: "claim", token: abandonedToken });
+          await callTurnBroker(socketPath, { method: "claim", token: activeAbandonedToken });
         } catch (error) {
           abandonedError = error;
           break;
@@ -3910,7 +3919,7 @@ describe("ChatGPT outer-native harness v4", () => {
 
       const inventory = await client.callTool({
         name: "codex_tool_inventory",
-        arguments: { turn_token: replacementToken, query: "exec_command", include_schema: false },
+        arguments: { turn_token: activeReplacementToken, query: "exec_command", include_schema: false },
       });
       expect(inventory.structuredContent).toMatchObject({
         total: 1,
@@ -3918,8 +3927,8 @@ describe("ChatGPT outer-native harness v4", () => {
       });
     } finally {
       await client.close().catch(() => {});
-      broker.revoke(abandonedToken);
-      broker.revoke(replacementToken);
+      if (abandonedToken) broker.revoke(abandonedToken);
+      if (replacementToken) broker.revoke(replacementToken);
       await broker.close();
     }
   }, 10_000);

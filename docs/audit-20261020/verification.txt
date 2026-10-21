@@ -1,0 +1,76 @@
+Verification excerpts. Tests use production modules with controlled external I/O. Counts from overlapping groups are not additive.
+
+Initial upstream expanded run at 4598849
+2 tests skipped:
+(skip) native file cards survive immediate blob URL revocation without collecting user uploads
+(skip) trusted Codex task environment continuity > resumed Windows tasks accept the same indexed rollout with either path namespace
+
+
+3 tests failed:
+(fail) ChatGPT outer-native harness v4 > an explicitly aborted MCP request revokes its turn binding and leaves the stdio server usable [10023.15ms]
+  ^ this test timed out after 10000ms.
+(fail) ChatGPT outer-native harness v4 > a native tool deadline returns an explicit MCP timeout instead of a transport failure [1966.55ms]
+(fail) ChatGPT outer-native harness v4 > an undelivered MCP call returns its queued state without exposing the command [10074.48ms]
+  ^ this test timed out after 10000ms.
+
+ 356 pass
+ 2 skip
+ 3 fail
+ 3 errors
+ 2593 expect() calls
+Ran 361 tests across 16 files. [119.71s]
+
+Pre-fix isolated three cases
+[chatgpt-web] broker claim received (tokenChars=37, tokenHash=a1fc9121291d, valid=false, retiredTurn=queued-timeout-turn)
+(pass) ChatGPT outer-native harness v4 > an undelivered MCP call returns its queued state without exposing the command [7366.38ms]
+
+ 3 pass
+ 102 filtered out
+ 0 fail
+ 25 expect() calls
+Ran 3 tests across 1 file. [14.19s]
+
+Final same-process harness + contracts at 6101629
+(pass) actual output_audio media fails closed in messages and tool results [2.03ms]
+(pass) actual audio_url media fails closed in messages and tool results [2.17ms]
+(pass) actual input_image media fails closed in messages and tool results [2.05ms]
+
+ 141 pass
+ 0 fail
+ 942 expect() calls
+Ran 141 tests across 3 files. [62.34s]
+
+PR13 composition at efb5bbb
+(pass) a drained runtime refuses shutdown until an interrupted helper physically exits [17.85ms]
+[chatgpt-web] browser_settled {"traceId":"shutdown-physical-trace","outcome":"final","compaction":false,"submission":"unknown"}
+(pass) signal shutdown keeps its listener open until cancelled helper cleanup settles [27.01ms]
+
+ 106 pass
+ 0 fail
+ 543 expect() calls
+Ran 106 tests across 11 files. [17.89s]
+
+Downstream final integrated tests at 013c1b8
+    ✔ tests the catalog and a minimal Auto-reasoning inference separately
+    ✔ tests the model belonging to the selected Direct row
+    ✔ reports catalog success without testing an unavailable saved row
+    ✔ reports successful HTTP responses with no parsed model text as inference failures
+
+
+  224 passing (4s)
+
+
+Final upstream tsc durable exit code: 0
+Downstream npm run typecheck: previously observed exit 0; both tsconfig checks completed.
+Launcher host group: reviewer observed 145 pass / 0 fail / 0 skip; controlled Electron API boundary.
+
+First complete remote CI, source 9696909281a072cd80993ae8073d267b0648fa89:
+Linux: 1393 pass / 101 skip / 1 fail; 1495 tests across 118 files.
+macOS: 1394 pass / 100 skip / 1 fail; 1495 tests across 118 files.
+Windows: 1381 pass / 113 skip / 1 fail; 1495 tests across 118 files.
+Each sole failure: mol185-event-replay-identity.test.ts:168.
+
+Independent reviewer final correction at be09f5f835460e2566ce35c5034313d08e311b6c:
+34 pass / 0 fail / 135 assertions; two files; 5.02s.
+TypeScript durable result: 0 be09f5f835460e2566ce35c5034313d08e311b6c
+Latest full native CI gate: https://github.com/Molaison/codex-chatgpt-web/pull/18/checks
