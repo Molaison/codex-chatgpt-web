@@ -1,0 +1,33 @@
+{
+  "status": "VERIFIED",
+  "scope": "isolated account2 only; production unchanged after freeze",
+  "candidate": 168,
+  "thread": "01a17327-8e47-78e3-b099-e7c702126ceb",
+  "turns": [
+    "01a17327-9eb7-7f10-ae73-faae2d371551",
+    "01a17328-5c08-72e2-acf7-e59bc4f3ba6f"
+  ],
+  "faults": {
+    "real_model_menu_opened_before_send": true,
+    "real_saved_route_delayed_ms": 28000
+  },
+  "results": {
+    "strict_original_model_and_effort_both_turns": true,
+    "side_effect_count": 1,
+    "native_command_count": 1,
+    "first_final_exact": true,
+    "same_saved_context_recalled": true,
+    "native_normal_exit": 0,
+    "new_specific_wait_and_model_notices_observed": true,
+    "notices_absent_from_canonical_response_items": true,
+    "notices_absent_from_all_three_model_inputs": true,
+    "all_native_http_forward_attempts": [
+      1,
+      1,
+      1
+    ]
+  },
+  "old_164_167_failures_preserved": true,
+  "old_production162_and_interrupt145_not_replayed_or_rescored": true,
+  "remaining_p0": "interrupt-echo145 repeated 386-character partial finals and no terminal confirmation; root cause not yet established"
+}

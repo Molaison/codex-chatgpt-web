@@ -245,6 +245,7 @@ function chatGptModelControlUnavailableAdapterError(diagnostic: string, detail?:
       errorType: "server_error",
       code: "upstream_server_error",
       retryable: false,
+      diagnostics: { stage: "model_selection" },
       cause: new Error(diagnostic),
     },
   );
@@ -1413,6 +1414,20 @@ function throwIfPromptAttachmentAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new DOMException("ChatGPT prompt attachment aborted", "AbortError");
 }
 
+export async function waitForSavedChatUrl(page: Page, signal: AbortSignal, onWaiting?: () => void): Promise<string> {
+  // Send already has an acceptance budget. A second, shorter timer used to retire
+  // the original tool broker while the accepted question was still being saved.
+  const notice = setTimeout(() => onWaiting?.(), 5_000);
+  try {
+    await withBrowserTurnAbort(page.waitForURL(url => {
+      try { return canonicalSavedChatUrl(url.toString()).length > 0; } catch { return false; }
+    }, { timeout: 0, waitUntil: "commit" }), signal);
+    return canonicalSavedChatUrl(page.url());
+  } finally {
+    clearTimeout(notice);
+  }
+}
+
 function withBrowserTurnAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) return promise;
   if (signal.aborted) {
@@ -1439,7 +1454,7 @@ export interface BrowserTurn {
   onObservationReady?: (checkpoint: BrowserObservationCheckpoint) => void | Promise<void>;
   onConversationRestored?: () => void;
   onObservationResumed?: () => void;
-  onRecovering?: (phase?: "connector_waiting" | "connector_refreshing" | "network_waiting") => void;
+  onRecovering?: (phase?: "connector_waiting" | "connector_refreshing" | "network_waiting" | "saved_conversation_waiting" | "model_selection_restoring") => void;
   authorizeRecovery?: (reason?: "delivery_loss" | "receipt_only_failure") => Promise<boolean>;
   onConversationRecovered?: () => void;
   /** Helper-local recovery state; never supplied by an HTTP client. */
@@ -3168,6 +3183,27 @@ export class ChatGptBrowserWorker {
         || await control.getAttribute("aria-expanded") !== "false" || !await composer.isEditable()) {
         throw chatGptModelControlUnavailableAdapterError("ChatGPT changed the model while checking its family before submission");
       }
+    }
+  }
+
+  private async reconcileSelectedEffortBeforeSend(
+    page: Page,
+    mode: SelectedChatGptWebModelMode,
+    reselect: () => Promise<SelectedChatGptWebModelMode>,
+    onRestoring?: () => void,
+  ): Promise<SelectedChatGptWebModelMode> {
+    try {
+      await this.assertSelectedEffort(page, mode);
+      return mode;
+    } catch (error) {
+      if (!(error instanceof ChatGptWebAdapterError) || error.status !== 502
+        || error.code !== "upstream_server_error" || error.diagnostics?.stage !== "model_selection") throw error;
+      // This hook precedes both the durable Send activation and the physical click.
+      // Reselect the same requested mode once; never waive the fresh exact proof.
+      onRestoring?.();
+      const restored = await reselect();
+      await this.assertSelectedEffort(page, restored);
+      return restored;
     }
   }
 
@@ -6260,6 +6296,13 @@ export class ChatGptBrowserWorker {
       );
       let mode = await this.runStage(turn.traceId, "effort_selection", browserStageTimeouts.effortSelection, selectStagingMode);
       await diagnostics.capture(page, "effort-selection-complete");
+      const verifyBeforeSend = async () => {
+        const selected = mode;
+        mode = await this.reconcileSelectedEffortBeforeSend(page, selected,
+          () => this.selectModelAndEffort(page, turn.modelId, selected.effort, browserCapabilities,
+            checkpoint => diagnostics.capture(page, checkpoint), trackUsage, selected.modelFamily),
+          () => turn.onRecovering?.("model_selection_restoring"));
+      };
 
       // One receipt per physical Send, not per native tool call or stream attachment.
       // The ID survives observation recovery; a new actual Send receives a new ID.
@@ -6333,7 +6376,7 @@ export class ChatGptBrowserWorker {
               turn.abortSignal ? AbortSignal.any([stageSignal, turn.abortSignal]) : stageSignal,
               undefined,
               { onSubmitted: recordStageUsage, onSendActivated: async () => {
-                await this.assertSelectedEffort(page, mode);
+                await verifyBeforeSend();
                 Object.assign(stageBaseline, await this.captureSubmissionBaseline(
                   page, stage.text, acknowledgedStages, undefined, stageBaseline.initialTurnIdentities,
                 ));
@@ -6552,23 +6595,24 @@ export class ChatGptBrowserWorker {
             recordFinalUsage?.();
             await turn.onSubmitted?.();
             if (persistent && !persistent.saved) {
+              const savedSignal = turn.abortSignal ? AbortSignal.any([stageSignal, turn.abortSignal]) : stageSignal;
+              let savedUrl: string;
               try {
-                await withBrowserTurnAbort(page.waitForURL(url => {
-                  try { return canonicalSavedChatUrl(url.toString()).length > 0; } catch { return false; }
-                }, { timeout: 20_000, waitUntil: "domcontentloaded" }), turn.abortSignal);
+                savedUrl = await waitForSavedChatUrl(page, savedSignal,
+                  () => turn.onRecovering?.("saved_conversation_waiting"));
               } catch (error) {
-                if (turn.abortSignal?.aborted) throw error;
+                if (savedSignal.aborted) throw error;
                 throw conversationPersistenceError("saved_conversation_unresolved",
                   "ChatGPT accepted the question but did not expose a saved conversation URL. The pending mapping was preserved; the question must not be resent automatically.", error);
               }
               if (!persistent.claim) throw conversationPersistenceError("saved_conversation_unresolved", "ChatGPT accepted a message without its durable conversation reservation.");
-              persistent.saved = persistent.store.bind(persistent.key, persistent.claim, page.url());
+              persistent.saved = persistent.store.bind(persistent.key, persistent.claim, savedUrl);
             }
             if (persistent?.saved && turn.canonicalHistory) {
               persistent.saved = persistent.store.recordHistory(persistent.key, persistent.saved, turn.canonicalHistory);
             }
           }, onSendActivated: async () => {
-            await this.assertSelectedEffort(page, mode);
+            await verifyBeforeSend();
             throwIfPromptAttachmentAborted(turn.abortSignal);
             if (persistent && !persistent.saved && turn.project) {
               await assertNewChatPage(page, true, turn.project.id);

@@ -1,0 +1,593 @@
+From 3a6bb66a9e61de5205f69a1a7a141602ef0b4935 Mon Sep 17 00:00:00 2001
+From: molaison_cluster <sub2pro@foxmail.com>
+Date: Sun, 25 Oct 2026 21:14:37 +0800
+Subject: [PATCH] test(recovery): preserve real delayed-save and pre-send model
+ recovery evidence
+
+---
+ .../124_receipt_page_boundary.py              | 177 ++++++++++++++++++
+ .../135_recovery_acceptance.py                |  26 +++
+ .../163_saved_url_observer.ts                 |  51 +++++
+ .../164_saved_url_delay.ts                    | 104 ++++++++++
+ .../165_build.sh                              |  20 ++
+ .../166_read_saved_turn.ts                    |  44 +++++
+ docs/04_remaining_work_and_release.md         |   6 +
+ .../168_saved_session_and_model_recovery.md   |  47 +++++
+ .../README.md                                 |   4 +-
+ 9 files changed, 478 insertions(+), 1 deletion(-)
+ create mode 100644 config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/124_receipt_page_boundary.py
+ create mode 100644 config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/163_saved_url_observer.ts
+ create mode 100644 config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/164_saved_url_delay.ts
+ create mode 100644 config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/165_build.sh
+ create mode 100644 config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/166_read_saved_turn.ts
+ create mode 100644 work/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/168_saved_session_and_model_recovery.md
+
+diff --git a/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/124_receipt_page_boundary.py b/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/124_receipt_page_boundary.py
+new file mode 100644
+index 00000000..5b74ac0a
+--- /dev/null
++++ b/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/124_receipt_page_boundary.py
+@@ -0,0 +1,177 @@
++"""Deploy only the isolated Web/MCP recovery bundle; never restart Launcher or send a turn."""
++import argparse
++import importlib
++import os
++from pathlib import Path
++import shutil
++import time
++import json
++
++q = importlib.import_module('04_full_qualification')
++d = importlib.import_module('09_e2e_deployment')
++w = importlib.import_module('06_e2e_window')
++parser = argparse.ArgumentParser()
++parser.add_argument('--stage', required=True, choices=['prepare', 'worker', 'recover', 'resume-listener', 'status'])
++parser.add_argument('--candidate', type=int, choices=[124, 128, 129, 130, 131, 132, 134, 137, 141, 145, 165, 167, 168], default=124)
++args = parser.parse_args()
++candidate_name = {124: '124_receipt_page_boundary', 128: '128_model_menu_remount', 129: '129_model_menu_remount', 130: '130_user_witness_hydration', 131: '131_user_only_broker_proof', 132: '132_legacy_pro_native_metadata', 134: '134_interrupt_resend', 137: '137_chat_hook_boundary', 141: '141_network_wait_recovery', 145: '145_session_modes', 165: '165_saved_url_recovery', 167: '167_saved_url_notice', 168: '168_pre_send_model_recovery'}[args.candidate]
++directory = q.ROOT / w.WINDOW / candidate_name
++unit = f'web-recovery42-recovery{args.candidate}-deployment.service'
++
++def idle(role, value, phase):
++    d.require(value.get('contract') == role + '-native-v1' and value.get('owner_instance')
++              and type(value.get('pid')) is int and value['pid'] > 0, 'NATIVE_OWNER_UNKNOWN')
++    active = ('active_http', 'active_http_turns', 'active_browser_turns', 'active_model_catalog') if role == 'web' else ('active_http', 'active_requests', 'pending_sessions', 'active_tool_calls', 'native_continuations')
++    if args.candidate == 134 and role == 'mcp' and value.get('native_continuations', 0) > 0:
++        proof = q.read(directory / 'orphan-continuation-evidence.json')
++        d.require(proof.get('source') == 'actual shared AppServer complete paginated history'
++                  and proof.get('all_commands_terminal') is True
++                  and proof.get('all_owned_threads_idle') is True
++                  and proof.get('native_continuations_retained') == value['native_continuations']
++                  and 0 <= time.time() - proof.get('observed_at', 0) < 120,
++                  'ORPHAN_CONTINUATION_NOT_EVIDENCED')
++        # Explicit maintenance exception with actual Native terminal receipts, not
++        # a fake MCP reconciliation. Preserve the old in-memory ledger in evidence.
++        active = tuple(key for key in active if key != 'native_continuations')
++    d.require(all(type(value.get(key)) is int and value[key] == 0 for key in active), 'LIVE_NATIVE_WORK_RETAINED')
++    d.require(value.get('phase') == phase, 'NATIVE_PHASE_MISMATCH')
++    # open_sessions/uncertain are retained as raw evidence, never rewritten to safe_to_stop.
++
++if args.stage == 'prepare':
++    d.no_cases()
++    build = q.command(['systemctl', '--user', 'show', f'web-recovery42-recovery{args.candidate}-build.service',
++                       '-p', 'MainPID,ExecMainStatus,Result,InvocationID'])
++    fields = dict(line.split('=', 1) for line in build.stdout.splitlines() if '=' in line)
++    d.require(build.returncode == 0 and fields.get('MainPID') == '0' and fields.get('ExecMainStatus') == '0'
++              and fields.get('Result') == 'success' and (directory / 'runtime/manifest.json').is_file(), 'BUILD_NOT_COMPLETED')
++    before = {'services': {role: d.identity(role) for role in q.ROLES},
++              'native': {role: d.release(role) for role in d.PORTS}}
++    for role, value in before['native'].items():
++        idle(role, value, 'accepting')
++    (directory / 'backup').mkdir(mode=0o700)
++    for role in d.PORTS:
++        d.private_copy(Path(before['services'][role]['FragmentPath']), directory / 'backup' / (role + '.service'))
++    for name in ('10_full_web.log', '10_full_mcp.log'):
++        d.private_copy(q.ROOT / name, directory / 'backup' / name)
++    record = {'maintenance_exception': True, 'native_gate_passed': False,
++        'authority': 'User: 始终允许. Restricted isolated Web/MCP maintenance only; retain unresolved uncertainty, no replay, Launcher/profile/production untouched',
++        'retired_sessions_unresolved': before['native']['mcp'].get('uncertain_requests'),
++        'retired_native_continuations_unresolved': before['native']['mcp'].get('native_continuations'),
++        'status': 'prepared', 'phase': 'prepared', 'before': before, 'build': fields,
++        'scope': 'isolated account2 Web/MCP only; Launcher/profile/production unchanged',
++        'implemented': ['replacement page completion seeds only verified prior-page Native batch revision; current-page post-tool growth and live-work fences unchanged', 'URL-less ambiguous replacement Send may recover only after owner re-proves receipt-only Native-closed phase; ordinary unknown Send remains blocked', 'correlated broker claim rejection plus settled activity does not invent Native uncertainty; exact authentication unchanged, old unknown immutable', 'nested recoverable browser failure retains same verified receipt-only context', 'structured public socket-loss proof, completed Native receipt context recovery with exact accepted hash proof and receipt-only Native fence', 'read-only native receipt recovery through existing generic MCP tool after public HTTP loss; no native redispatch', 'bounded completed receipt recovery for broker ACK loss', 'MCP session-scoped RPC identity, cross-session terminal handle closure, drain continuation reconnect', 'native textual running handle/failed exit lifecycle, same-handle recovery and late-poll admission', 'durable accepted-history witness and rewind/edit recovery before any stale suffix Send',
++                        'persistent context migration with archived mapping and retained Codex thread',
++                        'temporary context retry on a new browser window',
++                        'atomic zero-dispatch native ingress rotation; old browser capability rejected',
++                        'independent conversation_forked notice, no transcript injection'],
++        'not_yet_implemented': ['recovery with unknown Native execution or already streamed answer; retained, never replayed'],
++        'old_claims_replayed': False, 'old_unknowns_reconciled': False,
++        'recovery_command': ['rtk', 'proxy', 'python3.12', str(Path(__file__).resolve()), '--candidate', str(args.candidate), '--stage', 'recover']}
++    if args.candidate in (128, 129, 130, 131, 132):
++        record['implemented'].insert(0, 'Wait for the exact acknowledged user-only grouped DOM frame while its assistant is temporarily unmounted by tool confirmation; retain foreign-turn, duplicate, and competing-turn fences')
++    if args.candidate in (130, 131, 132):
++        record['implemented'].insert(0, 'A durable observer waits for the original accepted user witness when Thinking renders an early assistant placeholder; keeps the same Send and caller deadline, preserves non-observer defaults')
++    if args.candidate in (131, 132):
++        record['implemented'].insert(0, 'An unacknowledged user-only grouped frame requires the exact original broker token before waiting on the original assistant; no shared-text, mismatched-token, or competing-user fallback')
++    if args.candidate == 132:
++        record['implemented'].insert(0, 'Hidden legacy Pro declares ordinary Max and an explicit Native Ultra target; preserve old Ultra inputs and prevent a persistent request from selecting ultra-temporary')
++    if args.candidate in (165, 167, 168):
++        record['implemented'].insert(0, 'Accepted persistent Send waits for its canonical saved route under the original Send budget, not an independent 20-second/load-state deadline; emit an out-of-context waiting notice, never resend provisional local-chatgpt routes')
++    if args.candidate in (167, 168):
++        record['implemented'].insert(0, 'Preserve the saved_conversation_waiting reason across the actual browser-helper IPC, instead of silently replacing it with a generic recovery notice')
++    if args.candidate == 168:
++        record['implemented'].insert(0, 'A pre-Send model-verification surface change reselects the exact original model/effort once and requires a fresh strict proof; no authentication bypass, downgrade or message resend')
++    q.save(directory / 'state.json', record, exclusive=True)
++    q.save(directory / 'recovery.json', record, exclusive=True)
++    print(json.dumps({'status': 'prepared', 'receipt': str(directory / 'state.json')}))
++
++elif args.stage == 'status':
++    value = q.read(directory / 'state.json')
++    print(json.dumps({k: value.get(k) for k in ('status', 'phase', 'reason', 'after', 'implemented', 'not_yet_implemented')}))
++
++else:
++    d.require(bool(os.environ.get('INVOCATION_ID')), 'INDEPENDENT_OWNER_REQUIRED')
++    d.require(q.inactive(w.status()['units']), 'NATIVE_CASE_STILL_ACTIVE')
++    record = q.read(directory / 'state.json')
++    if args.stage == 'worker':
++        d.require(record['status'] == 'prepared', 'DEPLOYMENT_ALREADY_ATTEMPTED')
++        q.save(directory / 'worker.claim', {'invocation_id': os.environ['INVOCATION_ID']}, exclusive=True)
++    else:
++        owners = [unit]
++        if args.candidate == 132:
++            owners.append('web-recovery42-recovery132-deployment-launchfix.service')
++        d.require(q.inactive(q.units(owners)), 'ORIGINAL_OWNER_STILL_ACTIVE')
++        if args.stage == 'resume-listener':
++            d.require(q.inactive(q.units([f'web-recovery42-recovery{args.candidate}-recovery.service'])), 'PRIOR_RECOVERY_STILL_ACTIVE')
++        claim = 'listener-resume.claim' if args.stage == 'resume-listener' else 'recovery.claim'
++        q.save(directory / claim, {'invocation_id': os.environ['INVOCATION_ID']}, exclusive=True)
++
++    def phase(name):
++        record.update(phase=name, updated_at=time.time())
++        q.save(directory / 'state.json', record)
++
++    try:
++        before = record['before']
++        if args.stage == 'worker':
++            for role in d.PORTS:
++                now = d.identity(role)
++                d.require(now['InvocationID'] == before['services'][role]['InvocationID'], 'OWNER_CHANGED')
++                phase('drain-' + role + '-intent')
++                idle(role, d.release(role, 'drain'), 'draining')
++                phase('authorized-exception-retain-unresolved-' + role)
++            # Preserve the exact post-drain state/logs before the isolated owners end.
++            record['native_before_stop'] = {role: d.release(role) for role in d.PORTS}
++            for role, value in record['native_before_stop'].items():
++                idle(role, value, 'draining')
++            for name in ('10_full_web.log', '10_full_mcp.log'):
++                d.private_copy(q.ROOT / name, directory / 'backup' / ('post-drain-' + name))
++            phase('evidence-preserved-native-gate-not-passed')
++            for role in ['mcp', 'web']:
++                phase('stop-' + role + '-intent')
++                d.require(q.command(['systemctl', '--user', 'stop', before['services'][role]['unit']], timeout=100).returncode == 0,
++                          'STOP_UNCERTAIN')
++                d.require(q.inactive([d.details(role)]), 'ROLE_DID_NOT_STOP')
++                d.assert_original_process_exited(before['services'][role]['MainPID'], before['services'][role]['process_start_ticks'])
++            phase('install-new-runtime-intent')
++            (d.LIVE / 'runtime').rename(directory / 'backup/runtime-live-before')
++            (directory / 'runtime').rename(d.LIVE / 'runtime')
++            (d.SOURCE / 'dist/runtime').rename(directory / 'backup/runtime-source-before')
++            shutil.copytree(d.LIVE / 'runtime', d.SOURCE / 'dist/runtime')
++            d.require(d.same_tree(d.LIVE / 'runtime', d.SOURCE / 'dist/runtime'), 'NEW_BUNDLE_COPY_MISMATCH')
++            phase('installed')
++
++        if not d.same_tree(d.LIVE / 'runtime', d.SOURCE / 'dist/runtime'):
++            raise RuntimeError('bundle transition incomplete; inspect original phase and backups, do not repeat swaps')
++        after = {}
++        for role in ['web', 'mcp']:
++            current = d.details(role)
++            if current.get('MainPID') == '0' and current.get('ActiveState') in ['inactive', 'failed']:
++                fragment = Path(before['services'][role]['FragmentPath'])
++                if not fragment.exists():
++                    d.private_copy(directory / 'backup' / (role + '.service'), fragment)
++                    d.require(q.command(['systemctl', '--user', 'daemon-reload']).returncode == 0, 'RELOAD_FAILED')
++                phase('start-' + role + '-intent')
++                d.require(q.command(['systemctl', '--user', 'start', before['services'][role]['unit']], timeout=100).returncode == 0,
++                          'START_UNCERTAIN')
++            after[role] = d.wait_listener(role, before, expected_phase="draining")
++        for role in d.PORTS:
++            phase('resume-' + role + '-intent')
++            d.assert_native(role, d.release(role, 'resume'), 'accepting')
++        launcher = d.identity('launcher-2')
++        d.require(launcher['InvocationID'] == before['services']['launcher-2']['InvocationID']
++                  and launcher['MainPID'] == before['services']['launcher-2']['MainPID'], 'LAUNCHER_CHANGED')
++        record.pop('reason', None)
++        record.update(status='completed', old_unknowns_reconciled=False, after={role: {key: value.get(key) for key in ('MainPID', 'InvocationID')}
++                                                 for role, value in after.items()})
++        deployment = q.read(q.ROOT / w.WINDOW / 'deployment.json')
++        deployment[f'context_recovery{args.candidate}'] = {'receipt': str(directory / 'state.json'),
++                                           'implemented': record['implemented'], 'runtime': str(d.SOURCE / 'dist/runtime')}
++        q.save(q.ROOT / w.WINDOW / 'deployment.json', deployment)
++        phase('completed')
++        print(json.dumps({'status': 'completed', 'after': record['after'], 'launcher_restarted': False,
++                          'old_unknowns_reconciled': False}))
++    except Exception as error:
++        record.setdefault('failures', []).append({'phase': record.get('phase'), 'reason': str(error), 'at': time.time()})
++        record.update(status='blocked', reason=str(error))
++        phase('blocked')
++        raise
+diff --git a/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/135_recovery_acceptance.py b/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/135_recovery_acceptance.py
+index 312cf55c..d25fbf48 100644
+--- a/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/135_recovery_acceptance.py
++++ b/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/135_recovery_acceptance.py
+@@ -21,6 +21,8 @@ parser.add_argument('--model', default='chatgpt-web/gpt-5.6-sol')
+ parser.add_argument('--effort', default='xhigh')
+ parser.add_argument('--interrupt', action='store_true')
+ parser.add_argument('--tools', action='store_true')
++parser.add_argument('--side-effect', action='store_true', help='One append in the private case workspace; never retry')
++parser.add_argument('--saved-followup', action='store_true', help='One new no-tool recall input after the first turn completes')
+ parser.add_argument('--legacy-switches', action='store_true')
+ parser.add_argument('--wire', action='store_true')
+ parser.add_argument('--legacy-followup-from', type=Path)
+@@ -187,6 +189,10 @@ try:
+         prompt = 'Do not use tools. Reply with exactly ' + nonce + ' and nothing else.'
+         if args.tools:
+             prompt = 'Use exec_command exactly once to execute this command: printf ' + nonce + '. Then report its actual output.'
++            if args.side_effect:
++                command = "echo '" + nonce + "' >> '" + str(marker) + "'; cat '" + str(marker) + "'"
++                prompt = ('Use exec_command exactly once to run this command, without modification or retry: '
++                          + command + '. Then reply exactly with its actual output and nothing else.')
+         turn, offset, began = start(prompt)
+         terminal = finish(turn, offset, began)
+         assert terminal['params']['turn']['status'] == 'completed', 'Real turn failed; no replay'
+@@ -196,6 +202,13 @@ try:
+                          and e['wire'].get('params', {}).get('item', {}).get('type') == 'commandExecution']
+             state['completed_exec_count'] = len(completed)
+             assert len(completed) == 1 and completed[0].get('exitCode') == 0, 'Exact real tool execution missing'
++            if args.side_effect:
++                assert marker.read_text().splitlines() == [nonce], 'Side effect not exactly once'
++                history = json.loads((directory / (turn + '-history.json')).read_text())
++                actual = next(t for t in history if t['id'] == turn)
++                finals = [i['text'] for i in actual['items'] if i.get('type') == 'agentMessage']
++                assert len(finals) == 1 and finals[0].strip() == nonce, 'Expected one exact final'
++                state.update(side_effect_count=1, exact_tool_output_and_final=True)
+     else:
+         command = "echo '" + nonce + "' >> '" + str(marker) + "'; echo SIDE_EFFECT_DONE"
+         prompt = ('Run exactly one exec_command with the following command, exactly once. After its successful '
+@@ -215,6 +228,19 @@ try:
+         state['side_effect_count'] = marker.read_text().splitlines().count(nonce)
+         assert state['side_effect_count'] == 1, 'Completed side effect was repeated'
+         assert terminal['params']['turn']['status'] == 'completed', 'Continuation failed; no replay'
++    if args.saved_followup:
++        prior = json.loads((directory / (state['turns'][-1]['id'] + '-product.json')).read_text())['records'][-1]
++        turn, offset, began = start('Do not use tools. Recall the exact unique r42- value in my previous request. Reply only with that value.')
++        terminal = finish(turn, offset, began)
++        assert terminal['params']['turn']['status'] == 'completed', 'Saved continuation failed; no replay'
++        history = json.loads((directory / (turn + '-history.json')).read_text())
++        actual = next(t for t in history if t['id'] == turn)
++        finals = [i['text'] for i in actual['items'] if i.get('type') == 'agentMessage']
++        assert len(finals) == 1 and finals[0].strip() == nonce, 'Saved context recall mismatch'
++        assert not any(i.get('type') == 'commandExecution' for i in actual['items']), 'Unexpected follow-up tool'
++        current = json.loads((directory / (turn + '-product.json')).read_text())['records'][-1]
++        assert current['savedConversationUrl'] == prior['savedConversationUrl'], 'Saved conversation changed'
++        state['same_saved_context_recalled'] = True
+     state.update(status='completed', final_native_exit=native.close_idle())
+     if wire:
+         wire.stop()
+diff --git a/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/163_saved_url_observer.ts b/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/163_saved_url_observer.ts
+new file mode 100644
+index 00000000..29828cd5
+--- /dev/null
++++ b/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/163_saved_url_observer.ts
+@@ -0,0 +1,51 @@
++/** Read-only account-2 probe: compare the original renderer URL with CDP state.
++ * Never navigate, click, send, refresh, or alter a conversation mapping.
++ */
++import fs from "node:fs";
++import { connectLauncherBrowserHost } from "/home/zzp/.migration/window-20261022/42_diagnostic_recovery_qualification/14_e2e_candidate/source/src/launcher-browser-host";
++
++const root = "/home/zzp/.migration/window-20261022/42_diagnostic_recovery_qualification";
++const path = root + "/canary/launcher-2/launcher-core/runtime/launcher-browser.json";
++const initial = JSON.parse(fs.readFileSync(path, "utf8"));
++const original = new Set(Object.keys(initial.surfaceTargets));
++console.log(JSON.stringify({ event: "armed", model_requests: 0, baseline_surfaces: original.size }));
++let connection: Awaited<ReturnType<typeof connectLauncherBrowserHost>> | undefined;
++const deadline = Date.now() + 240_000;
++try {
++  while (Date.now() < deadline) {
++    const descriptor = JSON.parse(fs.readFileSync(path, "utf8"));
++    if (descriptor.pid !== initial.pid) throw Error("Launcher owner changed");
++    if (!connection) {
++      const fresh = Object.keys(descriptor.surfaceTargets).filter(id => !original.has(id));
++      if (fresh.length > 1) throw Error("Competing new browser surfaces");
++      if (fresh.length === 1) {
++        connection = await connectLauncherBrowserHost(path, 10_000, fresh[0], undefined, true);
++        connection.page.on("framenavigated", frame => {
++          if (frame === connection?.page.mainFrame()) {
++            const url = new URL(frame.url());
++            console.log(JSON.stringify({ event: "frame_url", at: Date.now(), origin: url.origin,
++              path: url.pathname, temporary: url.searchParams.get("temporary-chat") === "true" }));
++          }
++        });
++        console.log(JSON.stringify({ event: "bound", at: Date.now(), surface: fresh[0] }));
++      }
++    }
++    if (connection) {
++      if (connection.page.isClosed()) break;
++      const renderer = await connection.page.evaluate(() => ({
++        origin: location.origin, path: location.pathname,
++        temporary: new URL(location.href).searchParams.get("temporary-chat") === "true",
++        ready: document.readyState,
++        users: document.querySelectorAll('[data-message-author-role="user"]').length,
++        assistants: document.querySelectorAll('[data-message-author-role="assistant"]').length,
++      }));
++      const cdp = new URL(connection.page.url());
++      console.log(JSON.stringify({ event: "snapshot", at: Date.now(), renderer,
++        cdp: { origin: cdp.origin, path: cdp.pathname, temporary: cdp.searchParams.get("temporary-chat") === "true" } }));
++    }
++    await Bun.sleep(500);
++  }
++} finally {
++  await connection?.browser.close();
++  console.log(JSON.stringify({ event: "detached", at: Date.now(), model_requests: 0 }));
++}
+diff --git a/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/164_saved_url_delay.ts b/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/164_saved_url_delay.ts
+new file mode 100644
+index 00000000..8a739921
+--- /dev/null
++++ b/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/164_saved_url_delay.ts
+@@ -0,0 +1,104 @@
++/** Delay only the first real saved route in a new, isolated account-2 turn.
++ * The actual question, model traffic and Native tool calls are never replayed.
++ */
++import fs from "node:fs";
++import { OperationJournal } from "/home/zzp/.migration/window-20261022/42_diagnostic_recovery_qualification/14_e2e_candidate/source/src/adapters/chatgpt-web/operation-journal";
++import { connectLauncherBrowserHost } from "/home/zzp/.migration/window-20261022/42_diagnostic_recovery_qualification/14_e2e_candidate/source/src/launcher-browser-host";
++import { CHATGPT_EFFORT_CONTROL_SELECTOR } from "/home/zzp/.migration/window-20261022/42_diagnostic_recovery_qualification/14_e2e_candidate/source/src/chatgpt-session";
++
++const root = "/home/zzp/.migration/window-20261022/42_diagnostic_recovery_qualification";
++const path = root + "/canary/launcher-2/launcher-core/runtime/launcher-browser.json";
++const initial = JSON.parse(fs.readFileSync(path, "utf8"));
++const original = new Set(Object.keys(initial.surfaceTargets));
++const journal = new OperationJournal(root + "/canary/full-launcher2/runtime");
++const deadline = Date.now() + 180_000;
++let connection: Awaited<ReturnType<typeof connectLauncherBrowserHost>> | undefined;
++console.log(JSON.stringify({ event: "armed", delay_ms: 28_000, model_requests: 0 }));
++try {
++  while (Date.now() < deadline && !connection) {
++    const descriptor = JSON.parse(fs.readFileSync(path, "utf8"));
++    if (descriptor.pid !== initial.pid) throw Error("Launcher owner changed; no fault applied");
++    const fresh = Object.keys(descriptor.surfaceTargets).filter(id => !original.has(id));
++    if (fresh.length > 1) throw Error("Competing new browser surfaces; no fault applied");
++    if (fresh.length === 1) {
++      const response = await fetch(descriptor.control.endpoint + "/v1/browser/standby", {
++        method: "POST", headers: { authorization: "Bearer " + descriptor.control.token, "content-type": "application/json" }, body: "{}",
++      });
++      if (!response.ok) throw Error("Launcher status refused");
++      const status: any = await response.json();
++      const tabs = status.tabs.filter((tab: any) => tab.status === "running");
++      if (tabs.length !== 1) throw Error("Expected one isolated running turn");
++      const records = fs.readdirSync(journal.directory).filter(n => n.endsWith(".json")).map(n =>
++        JSON.parse(JSON.parse(fs.readFileSync(journal.directory + "/" + n, "utf8")).payload));
++      const owned = records.find(r => r.traceId === tabs[0].traceId);
++      if (!owned || owned.submission !== "prepared" || owned.observation) throw Error("No exact pre-Send operation; no fault applied");
++      connection = await connectLauncherBrowserHost(path, 10_000, fresh[0], undefined, true);
++      console.log(JSON.stringify({ event: "bound", thread: owned.threadId, trace: owned.traceId, surface: fresh[0] }));
++    }
++    if (!connection) await Bun.sleep(50);
++  }
++  if (!connection) throw Error("No isolated new page; no question sent by fault injector");
++  await connection.page.evaluate(({ openModelMenu, controlSelector }) => {
++    const probe = { delayedAt: 0, releasedAt: 0, deferred: 0, sends: 0, modelMenuOpenedAt: 0,
++      pending: undefined as undefined | (() => void), cleanup: undefined as undefined | (() => void) };
++    (globalThis as any).__r42SavedUrlDelay164 = probe;
++    let timer: ReturnType<typeof setTimeout> | undefined;
++    const originals = { pushState: history.pushState, replaceState: history.replaceState };
++    const menuTimer = openModelMenu ? setInterval(() => {
++      const composer = [...document.querySelectorAll<HTMLElement>('[contenteditable="true"]')]
++        .find(x => x.getClientRects().length && (x.textContent?.length ?? 0) > 1000);
++      const pill = composer?.querySelector('[data-id^="plugin:"][data-keyword="Codex Recovery42 Canary"], [app-mention-display-name="Codex Recovery42 Canary"]');
++      const controls = [...document.querySelectorAll<HTMLElement>(controlSelector)].filter(x => x.getClientRects().length);
++      if (pill && controls.length === 1 && controls[0].getAttribute("aria-expanded") === "false") {
++        probe.modelMenuOpenedAt = Date.now();
++        clearInterval(menuTimer);
++        controls[0].click();
++      }
++    }, 10) : undefined;
++    probe.cleanup = () => {
++      if (menuTimer) clearInterval(menuTimer);
++      if (timer) clearTimeout(timer);
++      history.pushState = originals.pushState;
++      history.replaceState = originals.replaceState;
++    };
++    for (const key of ["pushState", "replaceState"] as const) {
++      const original = history[key].bind(history);
++      history[key] = (...args) => {
++        const candidate = args[2] === undefined || args[2] === null ? undefined : new URL(String(args[2]), location.href);
++        if (candidate?.origin === "https://chatgpt.com" && /^\/c\/[A-Za-z0-9_-]+\/?$/.test(candidate.pathname)
++          && !probe.releasedAt) {
++          if (!probe.delayedAt) {
++            probe.delayedAt = Date.now();
++            timer = setTimeout(() => {
++              probe.releasedAt = Date.now();
++              history.pushState = originals.pushState;
++              history.replaceState = originals.replaceState;
++              probe.pending?.();
++            }, 28_000);
++          }
++          probe.deferred++;
++          probe.pending = () => original(...args);
++          return;
++        }
++        original(...args);
++      };
++      addEventListener("pagehide", () => { if (timer) clearTimeout(timer); }, { once: true });
++    }
++  }, { openModelMenu: process.argv.includes("--model-menu"), controlSelector: CHATGPT_EFFORT_CONTROL_SELECTOR });
++  console.log(JSON.stringify({ event: "installed", at: Date.now() }));
++  while (Date.now() < deadline && !connection.page.isClosed()) {
++    const snapshot = await connection.page.evaluate(() => {
++      const { pending, cleanup, ...proof } = (globalThis as any).__r42SavedUrlDelay164 ?? {};
++      return { ...proof, path: location.pathname };
++    });
++    console.log(JSON.stringify({ event: "snapshot", at: Date.now(), ...snapshot }));
++    if (snapshot.releasedAt) break;
++    await Bun.sleep(250);
++  }
++} finally {
++  if (connection && !connection.page.isClosed()) {
++    await connection.page.evaluate(() => (globalThis as any).__r42SavedUrlDelay164?.cleanup?.());
++  }
++  await connection?.browser.close();
++  console.log(JSON.stringify({ event: "detached", at: Date.now(), question_resends: 0, tool_calls: 0 }));
++}
+diff --git a/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/165_build.sh b/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/165_build.sh
+new file mode 100644
+index 00000000..508932bb
+--- /dev/null
++++ b/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/165_build.sh
+@@ -0,0 +1,20 @@
++#!/bin/bash
++set -euo pipefail
++umask 077
++ROOT=/home/zzp/.migration/window-20261022/42_diagnostic_recovery_qualification
++CANDIDATE="${1:-165}"
++case "$CANDIDATE" in
++  165) NAME=165_saved_url_recovery ;;
++  167) NAME=167_saved_url_notice ;;
++  168) NAME=168_pre_send_model_recovery ;;
++  *) exit 2 ;;
++esac
++D="$ROOT/recovery42-real-e2e03/$NAME"
++export PATH="$ROOT/launcher/resources/runtime/runtime:/home/zzp/.local/bin:$PATH"
++exec >"$D/build.log" 2>&1
++cd "$ROOT/14_e2e_candidate/source"
++# Source-identical typecheck and 25 targeted tests are recorded by the parent.
++bun run build
++test ! -e "$D/runtime"
++cp -a dist/runtime "$D/runtime"
++printf '{"status":"built","model_requests":0,"candidate":%s}\n' "$CANDIDATE" >"$D/build.json"
+diff --git a/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/166_read_saved_turn.ts b/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/166_read_saved_turn.ts
+new file mode 100644
+index 00000000..8f3c8fb2
+--- /dev/null
++++ b/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/166_read_saved_turn.ts
+@@ -0,0 +1,44 @@
++/** Read the original isolated interrupt failure; no Send, tools or ledger edits. */
++import fs from "node:fs";
++import { notifyLauncherTurn, connectLauncherBrowserHost } from "/home/zzp/.migration/window-20261022/42_diagnostic_recovery_qualification/14_e2e_candidate/source/src/launcher-browser-host";
++import { restoreSavedChatConversation } from "/home/zzp/.migration/window-20261022/42_diagnostic_recovery_qualification/14_e2e_candidate/source/src/adapters/chatgpt-web/browser-worker";
++
++const root = "/home/zzp/.migration/window-20261022/42_diagnostic_recovery_qualification";
++const path = root + "/canary/launcher-2/launcher-core/runtime/launcher-browser.json";
++const operation = root + "/canary/full-launcher2/runtime/operations/00b81fad43e887feb00ad908d4036d8404cd22c1fcece14c28f79c526f87bbef.json";
++const original = fs.readFileSync(operation, "utf8");
++const c = JSON.parse(JSON.parse(original).payload).observation;
++const descriptor = JSON.parse(fs.readFileSync(path, "utf8"));
++const response = await fetch(descriptor.control.endpoint + "/v1/browser/standby", {
++  method: "POST", headers: { authorization: "Bearer " + descriptor.control.token, "content-type": "application/json" }, body: "{}",
++});
++if (!response.ok || (await response.json() as any).activeTurns !== 0) throw Error("Live test retained; no viewer created");
++const trace = "1661aabbccdd";
++const lease = await notifyLauncherTurn(path, { phase: "start", leaseFencing: true,
++  traceId: trace, helperPid: process.pid, conversationKey: c.conversation.key, conversationUrl: c.conversation.url });
++let connection: Awaited<ReturnType<typeof connectLauncherBrowserHost>> | undefined;
++try {
++  connection = await connectLauncherBrowserHost(path, 20_000, lease.surfaceId, undefined, true);
++  await connection.page.setViewportSize({ width: 1280, height: 900 });
++  await restoreSavedChatConversation(connection.page, c.conversation.url, { timeoutMs: 30_000 });
++  const result = await connection.page.evaluate(() => ({
++    path: location.pathname,
++    turns: [...document.querySelectorAll("[data-turn-key]")].slice(-2).map(root => ({
++      key: root.getAttribute("data-turn-key"),
++      markdown: [...root.querySelectorAll('.markdown,[data-markdown-text-style="assistant-message"]')].map(x => {
++        const unit = x.closest("[data-content-search-unit-key]");
++        return { unit: unit?.getAttribute("data-content-search-unit-key"),
++          directAssistant: Boolean(unit && [...unit.children].some(v => v.getAttribute("data-conversation-role") === "assistant")),
++          chars: x.textContent?.length, rendered: getComputedStyle(x).display !== "none",
++          tone: x.getAttribute("data-markdown-text-tone"), status: Boolean(x.closest("[data-streaming-response-status]")) };
++      }),
++    })),
++  }));
++  const proof = { model_requests: 0, question_sends: 0, original_unknown_unchanged: fs.readFileSync(operation, "utf8") === original, result };
++  fs.writeFileSync(root + "/recovery42-real-e2e03/134_interrupt_resend/166_saved_dom.json", JSON.stringify(proof, null, 2), { mode: 0o600 });
++  console.log(JSON.stringify(proof));
++} finally {
++  await connection?.browser.close();
++  await notifyLauncherTurn(path, { phase: "end", surfaceId: lease.surfaceId, traceId: trace,
++    helperPid: process.pid, status: "completed", ...(lease.reused ? { retain: true } : {}) });
++}
+diff --git a/docs/04_remaining_work_and_release.md b/docs/04_remaining_work_and_release.md
+index 364650b4..e246af2d 100644
+--- a/docs/04_remaining_work_and_release.md
++++ b/docs/04_remaining_work_and_release.md
+@@ -26,3 +26,9 @@
+ ## 直接批准后的结果
+ 
+ 生产18个目标服务已由原独立发布owner配套切换并接单，不是新建10个账号/实例。公网Full1真实工具canary162因保存URL未确认失败，执行0次、没有重发；由原-2ph继续只读接回原提交。发布业务验收仍未通过，未关闭各项稳定性任务。详见work/rev42/159_production_release.md与runs/rev42/159_production_release/11_production_result.json（rev42完整前缀沿本项目原入口）。
++
++## 后续修复：生产冻结，账号2 candidate168
++
++原-2ph/-jg1新增真实通过：保存地址延迟28秒、发送前型号菜单意外打开后自动重新严格核对、工具/副作用仅1次、同保存URL续聊准确，具体状态为notice且不进canonical正文及三个模型输入。165、168为独立新case；164发送后失败、167发送前失败保留。证据 `work/rev42/168_saved_session_and_model_recovery.md` 与 `runs/rev42/134_interrupt_resend/168_final_result.json`。
++
++这些修复仅进入账号2测试API，未再改生产、dd、账号/分池或数据库。下一P0仍是原145中断续聊的6个相同386字符片段及缺终态；原UNKNOWN、生产162和旧Pro/Ultra官方拒绝均不改判。完整UX任务继续开放。
+diff --git a/work/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/168_saved_session_and_model_recovery.md b/work/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/168_saved_session_and_model_recovery.md
+new file mode 100644
+index 00000000..29b9470a
+--- /dev/null
++++ b/work/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/168_saved_session_and_model_recovery.md
+@@ -0,0 +1,47 @@
++# 保存会话迟到与发送前型号恢复
++
++## 范围
++
++2026-10-25继续原 `-2ph` / `-jg1`，父codex串行持有账号2隔离窗口，不开子代理、不做Windows。生产已切换不等于业务验收通过；后续生产保持只读，不再停启、改配置、导航刷新页面或发送新测试请求。原生产162和原中断145的失败/UNKNOWN不改判、不重放。
++
++## 已验证的新结果
++
++### 真实保存地址迟到：165通过
++
++ChatGPT先暴露 `local-chatgpt%3A…` 临时地址，正式保存地址可能较晚出现。旧代码在已有180秒Send预算内部另设20秒保存地址截止，过早退役原工具通道。
++
++新实现仍严格拒绝临时、外站和无效保存地址；等待同一原页的正式保存路由，沿用原Send阶段预算及取消信号，不额外等待DOMContentLoaded。没有重发问题或放宽会话身份。
++
++- 原负例 `saved-delay164-before` 失败保留：消息已发送、Native工具0次、没有测试副作用文件。
++- 独立新例 `saved-delay165-after`：真实账号2页面注入正式保存地址延迟 **28000ms**，工具实际执行1次、文件恰好1行、唯一final准确回传真实随机值，Native正常退出。
++- 同一任务的两次Native HTTP分别为初始输入和工具结果续接，各forward1次；不是两次网页问题重发。
++- notice不在canonical response_items或任一后续模型输入内。165中具体等待原因被helper IPC丢弃，实际显示的是通用接回notice；这项显示缺口没有伪装成通过。
++
++证据：runs同槽 `134_interrupt_resend/165_saved_url_result.json`、原164/165 case目录和原故障观察jsonl。
++
++### 真实新负例：167发送前型号复核失败
++
++`saved-notice167` 在Send前的型号复核失败：journal仍为prepared，页面用户消息0、工具0；保存URL延迟故障尚未触发。原失败保留，未发送第二轮。该失败不是165保存恢复的反例，也不能用来宣称167端到端notice已通过。
++
++168对该已见问题作限定修复：仅对本地型号复核产生的502/`upstream_server_error`/`diagnostics.stage=model_selection`，在物理Send及durable激活之前重新选择**原型号、原档位**一次，并再次严格复核。认证/权限错误不进入该路径，第二次不通过仍显式失败，不降级、不跳过身份检查。保存等待和型号恢复原因均通过实际helper IPC传递，走独立notice，不拼入assistant或thinking。
++
++定向检查：原保存映射25项通过；新增保存预算/取消及型号恢复、认证拒绝，加实际helper IPC共6项通过；最终typecheck退出0。较早一次新fixture漏填errorType的类型失败保留，修正fixture后通过，不改产品断言。
++
++168已通过原124独立维护入口部署到账号2测试Web/MCP，Launcher/profile不变，旧uncertain在先前维护原记录保留，未假称原生gate通过。
++
++**168组合故障和保存续聊已真实通过。** 在同一新测试任务发送前打开实际型号菜单，并把实际保存路由延迟28000ms：客户端分别收到“重新核对原型号和档位”和“等待原保存会话就绪”notice；严格型号/档位/账号/原surface均通过。工具仅执行1次、测试文件只有1行，唯一final准确返回真实值。随后同一Codex thread发送全新的无工具回忆请求，沿同一保存URL正确回忆，第二轮工具0次、唯一final，Native正常退出。三次Native HTTP为初始输入、工具结果和新回忆输入，各forward1次，非网页问题重发。全部notice在canonical response_items及三个模型输入中均不存在。
++
++证据：runs同槽 `134_interrupt_resend/168_final_result.json`、`model-save168/`、`168_combined_fault.jsonl`。账号2测试API现为candidate168；生产仍是先前145代码，本轮165/167/168未进入生产。原164/167失败没有被新case替换改分。
++
++## 仍未解决：中断后正文重复、缺终态
++
++`interrupt-echo145`原失败续聊有 **6个完全相同的386字符agentMessage**，最终仍failed。只读打开其原保存URL后，最后一轮未发现可序列化的assistant Markdown；原operation文件逐字不变。不能把部分输出、已见完成按钮或页面HTTP200当作官方生成终态。
++
++此项仍是下一P0：按原请求/已接受工具回执修复输出身份和终态接回，不能用文本相似度去重、重发原业务、追加同一副作用或重开用户Codex窗口规避。原-2ph/父codex继续持有，未关闭总稳定性或UX任务。
++
++## 运行与恢复
++
++- 账号2测试API/provider继续沿既有recovery42入口，不新建CPR后端、不改dd。
++- 168维护状态：远端 `.migration/window-20261022/42_diagnostic_recovery_qualification/recovery42-real-e2e03/168_pre_send_model_recovery/state.json`；独立owner `web-recovery42-recovery168-deployment.service`。
++- 两次独立启动在worker claim/Native状态保存前退出，原journal因权限不可读；核实prepared/无worker.claim或空Native输入后，补齐显式PATH继续并成功。按启动环境问题保留，不把未采集到的原始错误栈说成已证实，不当成模型执行或业务重放，失败unit保留。
++- 不重投已完成部署。确需恢复时按同目录 `recovery.json` 的原124 owner入口处理当前phase，不手工拆做停启，不清未知记录。
+diff --git a/work/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/README.md b/work/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/README.md
+index 6e8d490d..4ae97f7e 100644
+--- a/work/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/README.md
++++ b/work/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/README.md
+@@ -2,7 +2,9 @@
+ 
+ # 外部建议实施：rev42 候选与恢复入口
+ 
+-最新中断重发、原型号分组及提前预热：[本轮实际结果与未解决负例](134_interrupt_selector_standby.md)。账号2测试候选145已落地；日常notice由原独立owner等待全闲升级。预热关闭重建、真实网络中断和刷新后目录延迟已验收；长答部分输出后无终态仍未解决，不能宣称全部恢复完成。 本次用户连接器错误已核到16:57的原失败；补验157确认已保存会话同样能自动刷新并等待6999ms后完成。155六个补充型号回合已完成，158汇总12个选定路由；156工具回合被官方安全检查拒绝、执行0次，不算工具通过。
++最新账号2测试为 **candidate168**：[保存地址迟到与发送前型号恢复](168_saved_session_and_model_recovery.md)。真实组合故障“型号菜单意外打开＋保存路由延迟28秒”已通过：原型号/档位不变，工具/副作用各1次，随后同一保存会话正确续聊，具体等待notice不进入正文或模型上下文。生产冻结，本轮后续修复未进生产；原162失败、145部分输出缺终态和6次重复片段仍未改判。
++
++此前中断重发、原型号分组及提前预热：[145阶段实际结果与未解决负例](134_interrupt_selector_standby.md)。日常notice由原独立owner等待全闲升级。预热关闭重建、真实网络中断和刷新后目录延迟已验收；长答部分输出后无终态仍未解决，不能宣称全部恢复完成。本次用户连接器错误已核到16:57的原失败；补验157确认已保存会话同样能自动刷新并等待6999ms后完成。155六个补充型号回合已完成，158汇总12个选定路由；156工具回合被官方安全检查拒绝、执行0次，不算工具通过。
+ 
+ 下文主体保留**隔离资格的历史证据**。后续145产物已在直接批准的维护窗口生产切换，实际结果与未通过验收见上述159；R43未验实现不随之冒称发布。实现范围沿用
+ [P0–P5 计划](../../../../docs/01_gpt_pro_implementation_plan.md)，任务为
+-- 
+2.43.7
+

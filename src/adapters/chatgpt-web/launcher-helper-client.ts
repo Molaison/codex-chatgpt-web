@@ -38,7 +38,7 @@ type HelperMessage =
   | { type: "event"; id: string; event: "prepared_selected"; reused: boolean }
   | { type: "event"; id: string; event: "browser_lease_acquired"; surfaceId: string }
   | { type: "event"; id: string; event: "luna_checkpoint"; checkpoint: ChatGptLunaCheckpoint; answerHash: string }
-  | { type: "event"; id: string; event: "conversation_restored" | "observation_resumed" | "reconnecting" | "conversation_recovered" | "recovery_fence"; reason?: "delivery_loss" | "receipt_only_failure"; phase?: "connector_waiting" | "connector_refreshing" | "network_waiting" }
+  | { type: "event"; id: string; event: "conversation_restored" | "observation_resumed" | "reconnecting" | "conversation_recovered" | "recovery_fence"; reason?: "delivery_loss" | "receipt_only_failure"; phase?: "connector_waiting" | "connector_refreshing" | "network_waiting" | "saved_conversation_waiting" | "model_selection_restoring" }
   | { type: "event"; id: string; event: "observation_ready"; checkpoint: BrowserObservationCheckpoint }
   | { type: "result"; id: string; text: string }
   | {
@@ -72,7 +72,7 @@ function parseHelperMessage(line: string): HelperMessage {
   }
   if (message.type === "event") {
     const event = message.event;
-    if (event === "conversation_restored" || event === "observation_resumed" || event === "reconnecting" || event === "conversation_recovered" || event === "recovery_fence") return { type: "event", id: message.id, event, ...(event === "reconnecting" && (message.phase === "connector_waiting" || message.phase === "connector_refreshing" || message.phase === "network_waiting") ? { phase: message.phase } : {}), ...(event === "recovery_fence" && (message.reason === "delivery_loss" || message.reason === "receipt_only_failure") ? { reason: message.reason } : {}) };
+    if (event === "conversation_restored" || event === "observation_resumed" || event === "reconnecting" || event === "conversation_recovered" || event === "recovery_fence") return { type: "event", id: message.id, event, ...(event === "reconnecting" && (message.phase === "connector_waiting" || message.phase === "connector_refreshing" || message.phase === "network_waiting" || message.phase === "saved_conversation_waiting" || message.phase === "model_selection_restoring") ? { phase: message.phase } : {}), ...(event === "recovery_fence" && (message.reason === "delivery_loss" || message.reason === "receipt_only_failure") ? { reason: message.reason } : {}) };
     if (event === "observation_ready") return { type: "event", id: message.id, event, checkpoint: parseBrowserObservation(message.checkpoint) };
     if (event === "browser_lease_acquired") {
       if (typeof message.surfaceId !== "string" || !/^[A-Za-z0-9_-]{32}$/.test(message.surfaceId)) {

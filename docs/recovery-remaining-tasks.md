@@ -27,3 +27,11 @@ The approved maintenance exception was executed by the existing coordinated rele
 The first failed cutover and its recovery evidence remain failed. The second original-record resume completed the cutover. Do not repeat deployment or blindly roll back live durable state to an incompatible old package.
 
 Next: repair saved-conversation binding and interrupted-stream completion in the isolated account-2 candidate. Production stays read-only; do not navigate its pages or send new test requests. The eleven UX outcomes remain open. Deployment adapter and reproducible canary are archived under `patches/deployment/02_production_handover_and_canary.patch`.
+
+## Isolated follow-up: candidate168
+
+Production is frozen at the earlier qualified 145 backend. Later changes are only deployed to the existing account-2 recovery42 API, not production or dd.
+
+A real combined fault now passes: opening the actual model menu after prompt preparation and delaying the real saved conversation route by 28 seconds. The server reselects the same model/effort once and requires a fresh strict proof before Send; it waits for the original saved route under the existing Send budget. One Native execution produced exactly one test-file line and one exact final. A fresh no-tool follow-up in the same Codex thread recalled the nonce on the same saved URL. Specific wait/model notices survived real helper IPC and were absent from canonical response items and all three actual model inputs. Evidence: `168_recovery_verification.json`.
+
+Original failures remain failed: delayed-save164, pre-Send model167, production162 and interrupted145. The interrupted145 continuation contains six identical 386-character assistant items and lacks terminal confirmation; its original saved-page read did not prove a complete answer. This remains the next P0, not a completed feature. R43 and main's independent Mol185 work have not been silently merged.

@@ -596,11 +596,15 @@ export function createChatGptWebAdapter(
     // ambiguous browser send. Normal task prompts must never be replayed after Send activation.
     const submissionLifecycle = {
       onConversationRecovered: () => { hooks.operation?.notice("conversation_forked"); },
-      onRecovering: (phase?: "connector_waiting" | "connector_refreshing" | "network_waiting") => {
+      onRecovering: (phase?: "connector_waiting" | "connector_refreshing" | "network_waiting" | "saved_conversation_waiting" | "model_selection_restoring") => {
         hooks.operation?.notice("reconnecting", phase === "connector_refreshing"
           ? "正在刷新ChatGPT连接器目录；本条消息尚未发送，不会重放旧工具。"
           : phase === "connector_waiting"
             ? "正在等待ChatGPT连接器目录加载；仍在原账号，本条消息尚未发送。"
+            : phase === "model_selection_restoring"
+              ? "ChatGPT模型控件发生变化，正在重新核对原型号和档位；本条消息尚未发送。"
+            : phase === "saved_conversation_waiting"
+              ? "ChatGPT已接收本条消息，正在等待原保存会话就绪；不会再次发送或重复执行工具。"
             : phase === "network_waiting"
               ? "已观察到浏览器网络中断，正在服务端等待恢复；保持原账号和上下文，不会重复执行工具。" : undefined);
       },

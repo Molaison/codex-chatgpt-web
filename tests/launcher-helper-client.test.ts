@@ -32,6 +32,8 @@ test("daemon streams browser lifecycle through the real helper process", async (
       }
       await turn.onSendActivated();
       turn.onSubmitted();
+      turn.onRecovering("saved_conversation_waiting");
+      turn.onRecovering("model_selection_restoring");
       turn.onHeartbeat();
       turn.onGenerationProgress();
       turn.onReasoningSummary("Reading project");
@@ -88,6 +90,7 @@ test("daemon streams browser lifecycle through the real helper process", async (
   const deltas: string[] = [];
   const checkpoints: unknown[] = [];
   const acknowledgedStages: number[] = [];
+  const recoveryPhases: Array<string | undefined> = [];
   let sendActivated = false;
   let submitted = false;
   let heartbeats = 0;
@@ -112,6 +115,7 @@ test("daemon streams browser lifecycle through the real helper process", async (
       onMultipartStageAcknowledged: stage => { acknowledgedStages.push(stage); },
       onSendActivated: () => { sendActivated = true; },
       onSubmitted: () => { submitted = true; },
+      onRecovering: phase => { recoveryPhases.push(phase); },
       onHeartbeat: () => { heartbeats++; },
       onGenerationProgress: () => { generationProgress++; },
       onReasoningSummary: (text, continuation) => reasoning.push({ text, continuation: continuation === true }),
@@ -127,6 +131,7 @@ test("daemon streams browser lifecycle through the real helper process", async (
     expect(deltas).toEqual(["done"]);
     expect(sendActivated).toBe(true);
     expect(submitted).toBe(true);
+    expect(recoveryPhases).toEqual(["saved_conversation_waiting", "model_selection_restoring"]);
     expect(heartbeats).toBe(1);
     expect(generationProgress).toBe(1);
     expect(acknowledgedStages).toEqual([1, 2, 3, 4, 5]);
