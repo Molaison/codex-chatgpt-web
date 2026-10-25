@@ -15,6 +15,8 @@ import {
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { VERSION } from "../src/version";
 
+// The bundle is copied root-owned into a non-root runtime image.
+process.umask(0o022);
 const root = resolve(import.meta.dir, "..");
 const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
   version?: string;
@@ -97,7 +99,7 @@ for (const name of ["question-answer-deployment.md", "question-answer-sessions.m
   copyFileSync(join(root, "docs", name), join(output, "docs", name));
 }
 copyFileSync(join(root, "bun.lock"), join(appDir, "bun.lock"));
-const install = Bun.spawnSync([process.execPath, "install", "--production", "--frozen-lockfile", "--ignore-scripts"], {
+const install = Bun.spawnSync([process.execPath, "install", "--production", "--frozen-lockfile", "--ignore-scripts", "--backend=copyfile"], {
   cwd: appDir,
   stdout: "pipe",
   stderr: "pipe",
@@ -171,6 +173,7 @@ function runtimeManifestFiles(): RuntimeManifestFile[] {
   const canonicalRoot = realpathSync(output);
   const files: RuntimeManifestFile[] = [];
   const visit = (directory: string): void => {
+    chmodSync(directory, 0o755);
     for (const entry of readdirSync(directory, { withFileTypes: true }).sort((left, right) => comparePaths(left.name, right.name))) {
       const absolutePath = join(directory, entry.name);
       const relativePath = relative(output, absolutePath).split(sep).join("/");
@@ -187,6 +190,8 @@ function runtimeManifestFiles(): RuntimeManifestFile[] {
           throw new Error(`Runtime bundle symlink escapes the bundle: ${relativePath}`);
         }
       }
+      // copyfile installation keeps mode normalization inside this artifact, not the Bun cache.
+      chmodSync(absolutePath, metadata.mode & 0o111 ? 0o755 : 0o644);
       files.push({
         path: relativePath,
         size: metadata.size,

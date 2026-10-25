@@ -12,13 +12,16 @@ export interface SavedChatConversation {
   state: "pending" | "bound";
   url?: string;
   pendingProject?: { id: string; name: string };
+  /** Accepted canonical message fingerprints, not text or permission authority. */
+  history?: string[];
+  previous?: Array<{ claim: string; state: "pending" | "bound"; url?: string; createdAt: string }>;
 }
 
 function hash(value: string): string { return createHash("sha256").update(value).digest("hex"); }
 
-export function conversationPersistenceError(code: string, message: string, cause?: unknown): ChatGptWebAdapterError {
+export function conversationPersistenceError(code: string, message: string, cause?: unknown, diagnostics?: Record<string, unknown>): ChatGptWebAdapterError {
   return new ChatGptWebAdapterError(message, {
-    status: 409, errorType: "invalid_request_error", code, retryable: false, ...(cause === undefined ? {} : { cause }),
+    status: 409, errorType: "invalid_request_error", code, retryable: false, ...(diagnostics ? { diagnostics } : {}), ...(cause === undefined ? {} : { cause }),
   });
 }
 
@@ -68,7 +71,13 @@ export class ChatGptConversationStore {
         || !["pending", "bound"].includes(value.state) || typeof value.claim !== "string"
         || !/^[a-f0-9-]{36}$/.test(value.claim) || typeof value.createdAt !== "string"
         || !Number.isFinite(Date.parse(value.createdAt))
+        || (value.history !== undefined && (!Array.isArray(value.history) || !value.history.length
+          || value.history.some(item => typeof item !== "string" || !/^[a-f0-9]{64}$/.test(item))))
         || (value.pendingProject !== undefined && (!/^g-p-[a-f0-9]{32}$/.test(value.pendingProject.id) || typeof value.pendingProject.name !== "string" || !value.pendingProject.name.trim()))
+        || (value.previous !== undefined && (!Array.isArray(value.previous) || value.previous.some(old => !old
+          || !/^[a-f0-9-]{36}$/.test(old.claim) || !Number.isFinite(Date.parse(old.createdAt))
+          || !["pending", "bound"].includes(old.state) || (old.state === "pending" && old.url !== undefined)
+          || (old.state === "bound" && (typeof old.url !== "string" || canonicalSavedChatUrl(old.url) !== old.url)))))
         || (value.state === "pending" && value.url !== undefined)
         || (value.state === "bound" && (typeof value.url !== "string" || canonicalSavedChatUrl(value.url) !== value.url))) {
         throw new Error("Conversation record failed validation");
@@ -121,6 +130,39 @@ export class ChatGptConversationStore {
     try { renameSync(temporary, this.path(key)); this.flushDirectory(); } catch (error) {
       try { unlinkSync(temporary); } catch {}
       throw conversationPersistenceError("conversation_store_unavailable", "ChatGPT accepted the question, but its saved conversation mapping could not be committed.", error);
+    }
+    return record;
+  }
+
+  /** Called while the original Launcher writer lease is still held, after the native recovery fence. */
+  recover(key: string, expected: SavedChatConversation): SavedChatConversation {
+    const current = this.read(key);
+    if (!current || current.claim !== expected.claim || current.account !== expected.account) {
+      throw conversationPersistenceError("saved_conversation_conflict", "The recovery source no longer owns this conversation.");
+    }
+    const record: SavedChatConversation = { version: 1, account: current.account, conversation: current.conversation,
+      createdAt: new Date().toISOString(), claim: randomUUID(), state: "pending",
+      previous: [...(current.previous ?? []), { claim: current.claim, state: current.state,
+        ...(current.url ? { url: current.url } : {}), createdAt: current.createdAt }] };
+    const temporary = this.writeTemporary(key, record);
+    try { renameSync(temporary, this.path(key)); this.flushDirectory(); } catch (error) {
+      try { unlinkSync(temporary); } catch {}
+      throw conversationPersistenceError("conversation_store_unavailable", "The recovery mapping could not be committed.", error);
+    }
+    return record;
+  }
+
+  recordHistory(key: string, expected: SavedChatConversation, history: string[]): SavedChatConversation {
+    const current = this.lookup(key);
+    if (!current || current.claim !== expected.claim || current.account !== expected.account
+      || !history.length || history.some(item => !/^[a-f0-9]{64}$/.test(item))) {
+      throw conversationPersistenceError("saved_conversation_conflict", "Only the accepted conversation owner may checkpoint its canonical history.");
+    }
+    const record = { ...current, history: [...history] };
+    const temporary = this.writeTemporary(key, record);
+    try { renameSync(temporary, this.path(key)); this.flushDirectory(); } catch (error) {
+      try { unlinkSync(temporary); } catch {}
+      throw conversationPersistenceError("conversation_store_unavailable", "The accepted conversation history could not be checkpointed.", error);
     }
     return record;
   }

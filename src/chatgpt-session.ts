@@ -287,12 +287,16 @@ async function anyVisible(locator: Locator): Promise<boolean> {
   return false;
 }
 
-export async function assertAuthenticatedChatGptPage(page: Page): Promise<void> {
-  const composer = page.locator(
-    CHATGPT_COMPOSER_SELECTOR,
-  );
-  if (!await anyVisible(composer)) {
-    throw new Error("ChatGPT authentication could not be verified: no visible composer is present");
+export async function assertAuthenticatedChatGptPage(page: Page, timeoutMs = 5_000): Promise<void> {
+  const composer = page.locator(CHATGPT_COMPOSER_SELECTOR);
+  const deadline = Date.now() + timeoutMs;
+  // Hydration can remove a composer that was visible immediately before this check.
+  // Its absence alone cannot prove that the user's credentials have expired.
+  while (!await anyVisible(composer)) {
+    if (Date.now() >= deadline) {
+      throw new Error("ChatGPT composer is temporarily unavailable; the page is still loading or has changed");
+    }
+    await new Promise(resolve => setTimeout(resolve, Math.min(100, Math.max(1, deadline - Date.now()))));
   }
 }
 

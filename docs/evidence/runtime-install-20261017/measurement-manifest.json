@@ -1,0 +1,34 @@
+{
+  "baselineCommit": "2efe57f522f7e5e82af196256d2d360753f6c91c",
+  "candidateCommit": "bfdfb40e10dca24fa685e9ba0288ac6d21671dad",
+  "baselineGitBlob": "f516eace38b9d81bd351f2097b69857d186c2019",
+  "candidateGitBlob": "a180d477b757ff62796a7c69f7bcb9b7eb201451",
+  "files": {
+    "baseline/runtime-install.cjs": {
+      "sha256": "9184f2ef7d18a90b197d148db484076c05f668606f656866d6a24c8df37424e9",
+      "bytes": 11708,
+      "normalizedLfUtf8Sha256": "fc1fd29967d84fb7c3c12e73589a091e4f247b52674441dad3058e1a230ab837"
+    },
+    "candidate/runtime-install.cjs": {
+      "sha256": "ad1ca114f13e7bf94198b7460769f2c6397f09fd572061099916721305cca074",
+      "bytes": 11432,
+      "normalizedLfUtf8Sha256": "ad1ca114f13e7bf94198b7460769f2c6397f09fd572061099916721305cca074"
+    },
+    "benchmark.cjs": {
+      "sha256": "7e20065f0a7aa2cdfc1de0b6f2d921f47c845290278e61440d5b085c555db3b9",
+      "bytes": 3835
+    },
+    "warm-benchmark.cjs": {
+      "sha256": "6ff3d531d2bdd0d33ffa4fbbf84d509d377cef479353d7f6fe6d8c2ef261a7a5",
+      "bytes": 4896
+    },
+    "atomic-file.cjs": {
+      "sha256": "274a849d3004a2c22c8507b13e671d0e81fc2532ba7d90a0493bc375f59e3ef8",
+      "bytes": 1563
+    },
+    "runtime-command.cjs": {
+      "sha256": "b08d4ccd30460471599df5873af5d9a3123bb58e725f42389b691321d73652b2",
+      "bytes": 2295
+    }
+  }
+}

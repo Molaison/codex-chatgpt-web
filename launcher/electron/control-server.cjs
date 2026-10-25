@@ -95,12 +95,15 @@ class BrowserControlServer {
       writeJson(response, 401, { error: "unauthorized" });
       return;
     }
-    const isTurn = request.url === "/v1/turn/start"
+    const isTurn = request.url === "/v1/turn/observe-ready"
+      || request.url === "/v1/turn/observe"
+      || request.url === "/v1/turn/start"
       || request.url === "/v1/turn/heartbeat"
       || request.url === "/v1/turn/usage"
       || request.url === "/v1/turn/approval"
       || request.url === "/v1/turn/end";
     const isTurnRelease = request.url === "/v1/turn/release";
+    const isStandbyStatus = request.url === "/v1/browser/standby";
     const isSessionInspect = request.url === "/v1/session/inspect";
     const isProxyResolution = request.url === "/v1/network/resolve-proxy";
     const manualAction = new Map([
@@ -111,7 +114,7 @@ class BrowserControlServer {
       ["/v1/manual/end", "end"],
       ["/v1/manual/cancel", "cancel"],
     ]).get(request.url);
-    if (request.method !== "POST" || (!isTurn && !isTurnRelease && !isSessionInspect && !isProxyResolution && !manualAction)) {
+    if (request.method !== "POST" || (!isTurn && !isTurnRelease && !isSessionInspect && !isProxyResolution && !isStandbyStatus && !manualAction)) {
       writeJson(response, 404, { error: "not_found" });
       return;
     }
@@ -136,6 +139,15 @@ class BrowserControlServer {
       const preferences = this.getPreferences();
       const host = this.getBrowserHost();
       if (!host) throw new Error("browser host is not ready");
+      if (isStandbyStatus) {
+        writeJson(response, 200, {
+          standbyReady: host.standbyView?.ready === true,
+          standbyPresent: Boolean(host.standbyView),
+          activeTurns: [...host.turnTabs.values()].filter(tab => tab.status === "running").length,
+          tabs: host.snapshot().tabs,
+        });
+        return;
+      }
       if (isSessionInspect) {
         if (host.browserInteractionMode() === "manual") {
           const error = new Error(
@@ -294,9 +306,17 @@ class BrowserControlServer {
         writeJson(response, 200, { ok: true, ...release });
         return;
       }
+      if (request.url === "/v1/turn/observe-ready" || request.url === "/v1/turn/observe") {
+        if (host.browserInteractionMode() === "manual") throw new Error("Automatic browser interaction is disabled");
+        host.observeTurn(body.traceId, body.helperPid, body.surfaceId, body.observation,
+          request.url === "/v1/turn/observe-ready");
+        writeJson(response, 200, { ok: true });
+        return;
+      }
       if (request.url === "/v1/turn/approval") {
         if (host.browserInteractionMode() === "manual") throw new Error("Automatic browser interaction is disabled");
-        host.setTurnApprovalPending(body.traceId, body.helperPid, body.pending);
+        host.setTurnApprovalPending(body.traceId, body.helperPid, body.pending,
+          ...(body.surfaceId === undefined ? [] : [body.surfaceId]));
         this.logger.info("browser.tool_approval", { traceId: body.traceId, pending: body.pending });
         writeJson(response, 200, { ok: true });
         return;
@@ -304,7 +324,7 @@ class BrowserControlServer {
       if (request.url === "/v1/turn/usage") {
         if (host.browserInteractionMode() === "manual") throw new Error("Limits tracking is disabled in Zero Risk mode");
         // The same owner check as a heartbeat prevents another helper from charging this tab.
-        host.heartbeatTurn(body.traceId, body.helperPid);
+        host.heartbeatTurn(body.traceId, body.helperPid, ...(body.surfaceId === undefined ? [] : [false, undefined, body.surfaceId]));
         if (!this.limits) throw new Error("Limits tracking is unavailable");
         const recorded = this.limits.record(body);
         writeJson(response, 200, { ok: true, recorded });
@@ -330,6 +350,7 @@ class BrowserControlServer {
             body.connectorIdentity,
             body.requireRetainedConversation === true,
             acquisition.signal,
+            ...(body.conversationUrl !== undefined || body.leaseFencing !== undefined ? [body.conversationUrl, body.leaseFencing] : []),
           );
         } finally {
           response.off("close", onClose);
@@ -338,7 +359,8 @@ class BrowserControlServer {
         writeJson(response, 200, { ok: true, ...lease, trackUsage: this.limits?.enabled() === true });
         return;
       } else if (request.url === "/v1/turn/heartbeat") {
-        host.heartbeatTurn(body.traceId, body.helperPid, body.refreshViewport === true, body.progress);
+        host.heartbeatTurn(body.traceId, body.helperPid, body.refreshViewport === true, body.progress,
+          ...(body.surfaceId === undefined ? [] : [body.surfaceId]));
         this.logger.debug?.("browser.turn_heartbeat", { traceId: body.traceId });
         writeJson(response, 200, { ok: true });
         return;
@@ -352,6 +374,7 @@ class BrowserControlServer {
           body.message,
           body.retain === true,
           body.connectorBound === true,
+          ...(body.surfaceId === undefined ? [] : [body.surfaceId]),
         );
         this.logger.info("browser.turn_ended", { traceId: body.traceId, status: body.status });
         writeJson(response, 200, { ok: true, ...release });
@@ -360,6 +383,7 @@ class BrowserControlServer {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn("browser.control_rejected", { message });
+      const writerConflict = error?.code === "browser_writer_conflict";
       const cancelled = error?.code === "turn_cancelled";
       const retainedUnavailable = error?.code === "retained_conversation_unavailable";
       const manualInspectionDisabled = error?.code === "manual_browser_inspection_disabled";
@@ -367,11 +391,12 @@ class BrowserControlServer {
       const manualTimedOut = error?.code === "manual_turn_timed_out";
       writeJson(
         response,
-        cancelled || retainedUnavailable || manualInspectionDisabled || manualOwnerLost
+        writerConflict || cancelled || retainedUnavailable || manualInspectionDisabled || manualOwnerLost
           ? 409
           : manualTimedOut ? 408 : 400,
         {
         error: message,
+        ...(writerConflict ? { code: "browser_writer_conflict" } : {}),
         ...(cancelled ? { code: "turn_cancelled" } : {}),
         ...(retainedUnavailable ? { code: "retained_conversation_unavailable" } : {}),
         ...(manualInspectionDisabled ? { code: "manual_browser_inspection_disabled" } : {}),

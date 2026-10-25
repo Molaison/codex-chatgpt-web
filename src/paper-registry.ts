@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { readLauncherPaperRecovery, validatePaperRecovery, type PaperRecoveryOptions } from "./paper-recovery";
 import { createHash, randomUUID } from "node:crypto";
 import { ChatGptConversationStore } from "./adapters/chatgpt-web/conversation-persistence";
 import { chatGptQuestionAnswerKey, chatGptQuestionAnswerNamespace } from "./adapters/chatgpt-web/qa-conversation-key";
@@ -46,7 +47,8 @@ export class PaperRegistry {
   }
   event(id: string, event: string, detail = "") { this.db.query("INSERT INTO paper_events(paper_id,at,event,detail) VALUES(?,?,?,?)").run(id, new Date().toISOString(), event, detail); }
   get(id: string) { return this.db.query<PaperRow, [string]>("SELECT * FROM papers WHERE paper_id=COALESCE((SELECT paper_id FROM paper_aliases WHERE alias_id=?1),?1)").get(id)!; }
-  mapping(row: PaperRow, scope: PaperScope): string {
+  mapping(row: PaperRow, scope: PaperScope): string { return this.savedMapping(row, scope).url!; }
+  private savedMapping(row: PaperRow, scope: PaperScope) {
     if (row.account_id !== scope.accountId || row.project_id !== scope.projectId || row.session_hash !== poolSessionHash(scope.sessionScope, row.thread_id)) throw new PaperError("paper_scope_mismatch", "Restore the paper's original account/project scope");
     const owner = this.db.query<{account_id:string;project_id:string},[string]>("SELECT account_id,project_id FROM sessions WHERE session_hash=?").get(row.session_hash);
     if (owner?.account_id !== scope.accountId || owner.project_id !== scope.projectId) throw new PaperError("paper_session_missing", "Original paper session ownership is missing");
@@ -56,7 +58,7 @@ export class PaperRegistry {
     catch (error) { throw new PaperError("paper_mapping_unavailable", String(error)); }
     if (!saved?.url || saved.pendingProject || !saved.url.startsWith(`https://chatgpt.com/g/${scope.projectId}/c/`)
       || row.conversation_url && row.conversation_url !== saved.url) throw new PaperError("paper_mapping_missing", "Verified saved paper conversation mapping is required; no new chat was opened");
-    return saved.url;
+    return saved;
   }
   resolve(id: string, scope: PaperScope, metadata: Record<string, unknown>) {
     return this.db.transaction(() => {
@@ -99,6 +101,46 @@ export class PaperRegistry {
       }
       return {...this.result(row,metadata.paper_upload_token === row.upload_token),paper_id:id};
     }).immediate();
+  }
+  async reconcile(id: string, scope: PaperScope, options: PaperRecoveryOptions) {
+    const row = this.get(id);
+    if (!row) throw new PaperError("paper_resolve_required", "Resolve this paper before recovery");
+    const saved = this.savedMapping(row, scope);
+    if (row.state !== "uncertain" || row.in_flight) throw new PaperError("paper_recovery_state_changed", "Only an idle uncertain paper can be reconciled");
+    const dispatch = this.latestDispatch(row.paper_id);
+    if (!dispatch || !Number.isFinite(Date.parse(dispatch.at))) throw new PaperError("paper_recovery_dispatch_missing", "The original dispatch event is required for recovery");
+    options.signal.throwIfAborted();
+    // Keep launcher/network work outside the SQLite write transaction.
+    const raw = await (options.reader ?? readLauncherPaperRecovery)({
+      accountId: row.account_id, sessionHash: row.session_hash, conversationUrl: saved.url!,
+      browserHostDescriptorPath: options.browserHostDescriptorPath, signal: options.signal,
+    });
+    options.signal.throwIfAborted();
+    const evidence = validatePaperRecovery(raw, {
+      conversationUrl: saved.url!, projectId: row.project_id, dispatchStartedAt: dispatch.at,
+      firstUpload: row.conversation_url === null, pdfSha256: row.pdf_sha256,
+    });
+    return this.db.transaction(() => {
+      const current = this.get(id), latest = this.latestDispatch(row.paper_id);
+      if (!current || (Object.keys(row) as Array<keyof PaperRow>).some(key => current[key] !== row[key])
+        || latest?.id !== dispatch.id || latest.at !== dispatch.at) {
+        throw new PaperError("paper_recovery_state_changed", "Paper ownership, state or dispatch changed during the saved-conversation read");
+      }
+      const mapping = this.savedMapping(current, scope);
+      if (mapping.url !== saved.url || mapping.claim !== saved.claim || mapping.createdAt !== saved.createdAt) {
+        throw new PaperError("paper_recovery_mapping_changed", "The original native conversation mapping changed during recovery");
+      }
+      this.db.query("UPDATE papers SET state='ready',conversation_url=?,upload_token=NULL,expires_at=NULL WHERE paper_id=?").run(saved.url!, row.paper_id);
+      this.event(row.paper_id, "response_reconciled", JSON.stringify({
+        dispatch_event_id: dispatch.id, dispatch_started_at: dispatch.at, conversation_url: saved.url, ...evidence,
+      }));
+      return { ...this.result(this.get(row.paper_id), false), paper_id: id };
+    }).immediate();
+  }
+  private latestDispatch(id: string) {
+    return this.db.query<{ id: number; at: string }, [string]>(
+      "SELECT id,at FROM paper_events WHERE paper_id=? AND event='dispatch_started' ORDER BY id DESC LIMIT 1",
+    ).get(id);
   }
   result(row: PaperRow, owns: boolean) {
     const upload = row.state === "reserved" && !row.in_flight && owns;

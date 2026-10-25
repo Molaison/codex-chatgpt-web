@@ -1,11 +1,13 @@
+import { parseBrowserObservation, observationUnavailable, type BrowserObservationCheckpoint } from "./observation-recovery";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { notifyLauncherTurn, readLauncherBrowserHostDescriptor } from "../../launcher-browser-host";
-import { ChatGptCompactionHandoffAccepted, ChatGptWebAdapterError } from "./adapter-error";
+import { ChatGptCompactionHandoffAccepted, ChatGptWebAdapterError, parseChatGptSavedConversationDiagnostics, type ChatGptSavedConversationDiagnostics } from "./adapter-error";
 import type { CompiledChatGptWebPrompt } from "./prompt";
 import type { BrowserTurn, ResolvedBrowserConfig } from "./browser-worker";
+import type { ChatGptChartWidget } from "./rich-widget";
 import {
   parseChatGptLunaCheckpoint,
   type ChatGptLunaCheckpoint,
@@ -21,17 +23,23 @@ interface PendingTurn {
   localFailure?: Error;
   progressForwarding?: AbortController;
   acknowledgedMultipartStage?: number;
+  surfaceId?: string;
+  submission?: Promise<void>;
 }
 
 type HelperMessage =
   | { type: "ready"; features?: string[] }
   | { type: "event"; id: string; event: "heartbeat" | "generation_progress" | "send_activated" | "submitted" | "reasoning" | "commentary" | "text"; text?: string; continuation?: boolean }
+  | { type: "event"; id: string; event: "rich_widgets"; widgets: ChatGptChartWidget[] }
   | { type: "event"; id: string; event: "tool_batch_observed"; revision: number }
   | { type: "event"; id: string; event: "multipart_stage_acknowledged"; stageIndex: number }
   | { type: "event"; id: string; event: "completion_fence_begin"; requestId: number }
   | { type: "event"; id: string; event: "completion_fence_commit"; requestId: number; revision: number }
   | { type: "event"; id: string; event: "prepared_selected"; reused: boolean }
+  | { type: "event"; id: string; event: "browser_lease_acquired"; surfaceId: string }
   | { type: "event"; id: string; event: "luna_checkpoint"; checkpoint: ChatGptLunaCheckpoint; answerHash: string }
+  | { type: "event"; id: string; event: "conversation_restored" | "observation_resumed" | "reconnecting" | "conversation_recovered" | "recovery_fence"; reason?: "delivery_loss" | "receipt_only_failure"; phase?: "connector_waiting" | "connector_refreshing" | "network_waiting" }
+  | { type: "event"; id: string; event: "observation_ready"; checkpoint: BrowserObservationCheckpoint }
   | { type: "result"; id: string; text: string }
   | {
       type: "error";
@@ -42,6 +50,7 @@ type HelperMessage =
       errorType?: string;
       code?: string;
       retryable?: boolean;
+      diagnostics?: ChatGptSavedConversationDiagnostics;
     };
 
 function parseHelperMessage(line: string): HelperMessage {
@@ -63,6 +72,14 @@ function parseHelperMessage(line: string): HelperMessage {
   }
   if (message.type === "event") {
     const event = message.event;
+    if (event === "conversation_restored" || event === "observation_resumed" || event === "reconnecting" || event === "conversation_recovered" || event === "recovery_fence") return { type: "event", id: message.id, event, ...(event === "reconnecting" && (message.phase === "connector_waiting" || message.phase === "connector_refreshing" || message.phase === "network_waiting") ? { phase: message.phase } : {}), ...(event === "recovery_fence" && (message.reason === "delivery_loss" || message.reason === "receipt_only_failure") ? { reason: message.reason } : {}) };
+    if (event === "observation_ready") return { type: "event", id: message.id, event, checkpoint: parseBrowserObservation(message.checkpoint) };
+    if (event === "browser_lease_acquired") {
+      if (typeof message.surfaceId !== "string" || !/^[A-Za-z0-9_-]{32}$/.test(message.surfaceId)) {
+        throw new Error("Launcher browser helper lease is invalid");
+      }
+      return { type: "event", id: message.id, event, surfaceId: message.surfaceId };
+    }
     if (event === "multipart_stage_acknowledged") {
       if (!Number.isSafeInteger(message.stageIndex) || (message.stageIndex as number) <= 0) {
         throw new Error("Launcher browser helper multipart stage index is invalid");
@@ -93,6 +110,14 @@ function parseHelperMessage(line: string): HelperMessage {
         requestId: message.requestId as number,
         revision: message.revision as number,
       };
+    }
+    if (event === "rich_widgets") {
+      if (!Array.isArray(message.widgets) || message.widgets.length > 4
+        || message.widgets.some(widget => !widget || widget.kind !== "cartesian_chart" || widget.version !== 1
+          || !Array.isArray(widget.points) || widget.points.length > 300)) {
+        throw new Error("Launcher browser helper rich widgets are invalid");
+      }
+      return { type: "event", id: message.id, event, widgets: message.widgets as ChatGptChartWidget[] };
     }
     if (event === "luna_checkpoint") {
       if (typeof message.answerHash !== "string" || !/^[a-f0-9]{64}$/.test(message.answerHash)) {
@@ -173,6 +198,7 @@ function parseHelperMessage(line: string): HelperMessage {
         errorType: errorType as string,
         code: code as string,
         retryable: retryable as boolean,
+        ...(message.diagnostics !== undefined ? { diagnostics: parseChatGptSavedConversationDiagnostics(message.diagnostics) } : {}),
       } : {}),
     };
   }
@@ -212,6 +238,15 @@ export class LauncherBrowserHelperClient {
     if (turn.abortSignal?.aborted) throw new DOMException("ChatGPT web turn aborted", "AbortError");
     await this.ensureChild();
     if (turn.abortSignal?.aborted) throw new DOMException("ChatGPT web turn aborted", "AbortError");
+    if ((turn.observationIdentity || turn.observation) && !this.helperFeatures.has("durable-observation")) {
+      throw observationUnavailable("the browser helper does not support durable observation");
+    }
+    if (turn.onSendActivated && !this.helperFeatures.has("send-activation-ack")) {
+      throw new ChatGptWebAdapterError(
+        "The browser helper has not proven its Send acknowledgement boundary. No prompt was sent; update the helper with the runtime before resuming.",
+        { status: 409, errorType: "server_error", code: "browser_helper_send_approval_unavailable", retryable: false },
+      );
+    }
     if (turn.onMultipartStageAcknowledged && !this.helperFeatures.has("multipart-stage-ack")) {
       throw new Error(
         "Launcher browser helper does not support multipart acknowledgement forwarding; update or restart the launcher",
@@ -289,19 +324,30 @@ export class LauncherBrowserHelperClient {
           turn: {
             traceId: turn.traceId,
             modelId: turn.modelId,
+            ...(turn.observationIdentity ? { observationIdentity: turn.observationIdentity } : {}),
+            ...(turn.observation ? { observation: turn.observation } : {}),
+            ...(turn.observationToolFence ? { observationToolFence: turn.observationToolFence } : {}),
+            ...(this.helperFeatures.has("durable-observation") && (turn.onConversationRestored || turn.onObservationResumed || turn.onRecovering || turn.onConversationRecovered)
+              ? { observationNotices: true } : {}),
+            ...(this.helperFeatures.has("context-recovery") && turn.authorizeRecovery ? { contextRecovery: true } : {}),
             ...(turn.project ? { project: turn.project } : {}),
             ...(turn.sessionMode ? { sessionMode: turn.sessionMode } : {}),
+            ...(turn.deferTextUntilComplete ? { deferTextUntilComplete: true } : {}),
             reasoning: turn.reasoning,
             ...(turn.modelFamily ? { modelFamily: turn.modelFamily } : {}),
+            ...(turn.proModel ? { proModel: true } : {}),
             capabilities: turn.capabilities,
             ...(turn.nativeConnector ? { nativeConnector: true } : {}),
             ...(turn.prepareResume ? { resumeAvailable: true } : {}),
             ...(turn.retainConversation ? { retainConversation: true } : {}),
             ...(turn.requireRetainedConversation ? { requireRetainedConversation: true } : {}),
             ...(turn.conversationKey ? { conversationKey: turn.conversationKey } : {}),
+            ...(turn.canonicalHistory ? { canonicalHistory: turn.canonicalHistory } : {}),
             ...(turn.compaction ? { compaction: true } : {}),
             ...(turn.captureLunaCheckpoint ? { captureLunaCheckpoint: true } : {}),
             ...(turn.externalProgress ? { externalProgress: true } : {}),
+            ...(this.helperFeatures.has("submission-ack") ? { submissionAck: true } : {}),
+            ...(this.helperFeatures.has("browser-lease-events") ? { browserLeaseEvents: true } : {}),
           },
         })
           // Only mirror once the run frame is on the wire, so the helper never sees progress for a
@@ -424,7 +470,31 @@ export class LauncherBrowserHelperClient {
     const pending = this.pending.get(message.id);
     if (!pending) return;
     if (message.type === "event") {
-      if (message.event === "heartbeat") pending.turn.onHeartbeat?.();
+      if (message.event === "recovery_fence") {
+        void Promise.resolve().then(() => pending.turn.authorizeRecovery?.(message.reason) ?? false).then(allowed => {
+          if (this.pending.get(message.id) !== pending || pending.localFailure || pending.turn.abortSignal?.aborted) return;
+          return this.send({ type: "recovery_fence_ack", id: message.id, allowed });
+        }).catch(error => this.abortWithLocalFailure(message.id, error instanceof Error ? error : new Error(String(error)), pending));
+      }
+      else if (message.event === "conversation_recovered") pending.turn.onConversationRecovered?.();
+      else if (message.event === "conversation_restored") pending.turn.onConversationRestored?.();
+      else if (message.event === "observation_resumed") pending.turn.onObservationResumed?.();
+      else if (message.event === "reconnecting") pending.turn.onRecovering?.(message.phase);
+      else if (message.event === "observation_ready") {
+        if (!pending.turn.onObservationReady || !pending.turn.observationIdentity
+          || JSON.stringify(message.checkpoint.identity) !== JSON.stringify(pending.turn.observationIdentity)
+          || message.checkpoint.traceId !== pending.turn.traceId || message.checkpoint.modelId !== pending.turn.modelId
+          || message.checkpoint.accountId !== this.config.accountId || message.checkpoint.appName !== this.config.appName) {
+          this.abortWithLocalFailure(message.id, observationUnavailable("helper checkpoint identity mismatch"), pending);
+          return;
+        }
+        void Promise.resolve().then(() => pending.turn.onObservationReady!(message.checkpoint)).then(() => {
+          if (this.pending.get(message.id) !== pending || pending.localFailure || pending.turn.abortSignal?.aborted) return;
+          return this.send({ type: "observation_ready_ack", id: message.id });
+        }).catch(error => this.abortWithLocalFailure(message.id, error instanceof Error ? error : new Error(String(error)), pending));
+      }
+      else if (message.event === "browser_lease_acquired") pending.surfaceId = message.surfaceId;
+      else if (message.event === "heartbeat") pending.turn.onHeartbeat?.();
       else if (message.event === "generation_progress") pending.turn.onGenerationProgress?.();
       else if (message.event === "tool_batch_observed") {
         const progress = pending.turn.externalProgress;
@@ -492,7 +562,7 @@ export class LauncherBrowserHelperClient {
       }
       else if (message.event === "send_activated") {
         void Promise.resolve().then(() => pending.turn.onSendActivated?.()).then(() => {
-          if (this.pending.get(message.id) !== pending) return;
+          if (this.pending.get(message.id) !== pending || pending.localFailure || pending.turn.abortSignal?.aborted) return;
           return this.send({ type: "send_activation_ack", id: message.id });
         }).catch(error => this.abortWithLocalFailure(
           message.id,
@@ -500,7 +570,18 @@ export class LauncherBrowserHelperClient {
           pending,
         ));
       }
-      else if (message.event === "submitted") pending.turn.onSubmitted?.();
+      else if (message.event === "submitted") {
+        const submission = (pending.submission ?? Promise.resolve()).then(() => pending.turn.onSubmitted?.());
+        pending.submission = submission;
+        void submission.then(() => {
+          if (this.pending.get(message.id) !== pending || pending.localFailure || pending.turn.abortSignal?.aborted) return;
+          if (this.helperFeatures.has("submission-ack")) return this.send({ type: "submission_ack", id: message.id });
+        }).catch(error => this.abortWithLocalFailure(
+          message.id,
+          error instanceof Error ? error : new Error(String(error)),
+          pending,
+        ));
+      }
       else if (message.event === "multipart_stage_acknowledged") {
         const multipart = pending.prepared?.multipart;
         if (!multipart
@@ -529,6 +610,7 @@ export class LauncherBrowserHelperClient {
             prepared.release();
             return;
           }
+          pending.prepared?.release();
           pending.prepared = prepared;
           if (prepared.skillFiles?.length && !this.helperFeatures.has("skill-attachments")) {
             throw new Error("Launcher browser helper does not support skill attachments; update or restart the launcher");
@@ -569,12 +651,16 @@ export class LauncherBrowserHelperClient {
       }
       else if (message.event === "commentary" && message.text) pending.turn.onCommentary?.(message.text, message.continuation === true);
       else if (message.event === "text" && message.text) pending.turn.onTextDelta(message.text);
+      else if (message.event === "rich_widgets") pending.turn.onRichWidgets?.(message.widgets);
       return;
     }
     if (message.type === "result") {
-      this.finish(message.id);
-      if (pending.localFailure) pending.reject(pending.localFailure);
-      else pending.resolve(message.text);
+      void (pending.submission ?? Promise.resolve()).then(() => {
+        if (this.pending.get(message.id) !== pending) return;
+        this.finish(message.id);
+        if (pending.localFailure) pending.reject(pending.localFailure);
+        else pending.resolve(message.text);
+      }, error => this.finishWithError(message.id, error instanceof Error ? error : new Error(String(error))));
     } else if (message.type === "error") {
       const error = message.status !== undefined
         ? new ChatGptWebAdapterError(message.message, {
@@ -582,6 +668,7 @@ export class LauncherBrowserHelperClient {
           errorType: message.errorType!,
           code: message.code!,
           retryable: message.retryable!,
+          ...(message.diagnostics ? { diagnostics: message.diagnostics } : {}),
         })
         : message.name === "AbortError"
           ? new DOMException(message.message, "AbortError")
@@ -672,21 +759,25 @@ export class LauncherBrowserHelperClient {
     for (const id of [...this.pending.keys()]) {
       const pending = this.pending.get(id);
       if (!pending) continue;
+      if (pending.turn.observation) {
+        this.finishWithError(id, pending.localFailure ?? error); continue;
+      }
       void notifyLauncherTurn(this.config.browserHostDescriptorPath!, {
         phase: "end",
         traceId: id,
         helperPid: child.pid!,
+        ...(pending.surfaceId ? { surfaceId: pending.surfaceId } : {}),
         status: "failed",
         message: "Launcher browser helper exited before completing the turn",
       }).then(
-        () => this.finishWithError(id, pending.localFailure ?? error),
-        controlError => this.finishWithError(
-          id,
-          new AggregateError(
+        () => { if (this.pending.get(id) === pending) this.finishWithError(id, pending.localFailure ?? error); },
+        controlError => {
+          if (this.pending.get(id) !== pending) return;
+          this.finishWithError(id, new AggregateError(
             [pending.localFailure ?? error, controlError instanceof Error ? controlError : new Error(String(controlError))],
             `Launcher browser helper exited and failed to release turn ${id}`,
-          ),
-        ),
+          ));
+        },
       );
     }
   }

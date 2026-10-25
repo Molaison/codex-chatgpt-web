@@ -97,6 +97,7 @@ export interface TunnelConfig {
 }
 
 export interface AppConfig {
+  releaseControl?: import("./release-admission").ReleaseControlConfig;
   version: 3;
   purpose?: "dev-harness";
   releaseVersion: string;
@@ -114,6 +115,8 @@ export interface AppConfig {
   browserInteractionMode: BrowserInteractionMode;
   browserHostDescriptorPath?: string;
   chromeExecutablePath: string;
+  /** Explicit opt-in for sandbox-qualified managed Chrome environments. */
+  chromiumSandbox?: boolean;
   storageStatePath: string;
   /** Stable profile name used to isolate browser state and retained conversations. */
   accountId?: string;
@@ -141,6 +144,8 @@ export interface AppConfig {
   proConcurrencyLimit: number;
   autoApproveToolCalls: boolean;
   controlToken: string;
+  /** Optional, independent local API credential; the configuration contains only its path. */
+  nativeApiTokenFile?: string;
   runtimeCommand: string[];
   acknowledgedUnofficialAt?: string;
   tunnel?: TunnelConfig;
@@ -474,6 +479,7 @@ function parseConfig(value: unknown, path: string): AppConfig {
   if (!Number.isSafeInteger(parsed.contextWindow) || parsed.contextWindow! <= 0) {
     throw new Error(`Invalid contextWindow in ${path}`);
   }
+  if (parsed.chromiumSandbox !== undefined && typeof parsed.chromiumSandbox !== "boolean") throw new Error(`Invalid chromiumSandbox in ${path}`);
   if (typeof parsed.headed !== "boolean") throw new Error(`Invalid headed in ${path}`);
   if (parsed.accountId !== undefined
     && (typeof parsed.accountId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(parsed.accountId))) {
@@ -533,6 +539,11 @@ function parseConfig(value: unknown, path: string): AppConfig {
     throw new Error(`brokerSocketPath must be an absolute Unix socket path in ${path}`);
   }
   if (!/^[A-Za-z0-9_-]{40,}$/.test(parsed.controlToken!)) throw new Error(`Invalid controlToken in ${path}`);
+  if (parsed.nativeApiTokenFile !== undefined
+    && (typeof parsed.nativeApiTokenFile !== "string" || !parsed.nativeApiTokenFile.trim()
+      || !isAbsolute(expandUserPath(parsed.nativeApiTokenFile)))) {
+    throw new Error(`nativeApiTokenFile must be an absolute private file path in ${path}`);
+  }
   const validateTunnel = (tunnel: TunnelConfig | undefined, label: string): void => {
     if (!tunnel || typeof tunnel !== "object") throw new Error(`${label} is missing in ${path}`);
     for (const key of ["binaryPath", "tunnelId", "runtimeKeyFile", "profileDir", "profileName", "alias"] as const) {
@@ -701,6 +712,7 @@ export function providerConfig(config: AppConfig): CodexProviderConfig {
       browserHostDescriptorPath: config.browserHostDescriptorPath,
       storageStatePath: config.storageStatePath,
       chromeExecutablePath: config.chromeExecutablePath,
+      ...(config.chromiumSandbox === undefined ? {} : { chromiumSandbox: config.chromiumSandbox }),
       brokerSocketPath: config.brokerSocketPath,
       threadEnvironmentStatePath: join(getConfigDir(), "runtime", "thread-environments.json"),
       lunaCheckpointStatePath: join(getConfigDir(), "runtime", "luna-checkpoints.json"),

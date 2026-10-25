@@ -1,0 +1,33 @@
+import { Database } from 'bun:sqlite';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { createQaPool as candidate } from '../src/qa-pool';
+import { createQaPool as baseline } from '/workspace/shared/mol184-admission-baseline/src/qa-pool';
+import { createReceiptStore } from '../src/qa-pool-receipts';
+
+const findings: unknown[]=[];
+function evidence(x:unknown){findings.push(x);console.log(JSON.stringify(x));}
+function fixture(factory: typeof candidate) {
+ const root=mkdtempSync(join(tmpdir(),'dot-pob-review-')), key='a'.repeat(32);writeFileSync(join(root,'key'),key);
+ let calls=0,size=10,poolDb!:Database,pool:ReturnType<typeof candidate>;
+ const handler=async(req:Request)=>{await req.json();return Response.json({id:'r'+ ++calls,status:'completed',output:[{type:'message',id:'assistant-'+calls,role:'assistant',content:[{type:'output_text',text:'a'.repeat(size)}]}]})};
+ let backend=Bun.serve({hostname:'127.0.0.1',port:0,fetch:handler});const port=backend.port!;
+ const cfg={host:'127.0.0.1',port:0,databasePath:join(root,'db'),clients:[{id:'test',keyFile:join(root,'key')}],accounts:[{id:'account',origin:backend.url.origin,models:['m'],sessionModes:true}]};
+ const setPool=(create:typeof candidate)=>{pool?.close();const original=Database.prototype.exec;Database.prototype.exec=function(...args:any[]){poolDb=this;return original.apply(this,args as any)};try{pool=create(cfg)}finally{Database.prototype.exec=original}};setPool(factory);
+ const body=(turn:string,previous?:string)=>({model:'m',stream:false,input:[{type:'message',id:'user-'+turn,role:'user',content:[{type:'input_text',text:'question'}]}],reasoning:{effort:'low-temporary'},...(previous?{previous_response_id:previous}:{}),client_metadata:{'x-codex-turn-metadata':JSON.stringify({thread_id:'thread',turn_id:turn})}});
+ const request=(b:unknown)=>pool.fetch(new Request('http://pool/v1/responses',{method:'POST',headers:{authorization:'Bearer '+key,'content-type':'application/json'},body:JSON.stringify(b)}));
+ return {body,request,setPool,setSize:(n:number)=>{size=n},limit:(n:number)=>poolDb.exec('PRAGMA max_page_count='+n),q:(q:string)=>poolDb.query(q).get(),calls:()=>calls,stopBackend:()=>backend.stop(true),startBackend:()=>{backend=Bun.serve({hostname:'127.0.0.1',port,fetch:handler})},close:()=>{pool.close();backend.stop(true);rmSync(root,{recursive:true,force:true})}};
+}
+for(const [name,factory] of [['baseline',baseline],['pob',candidate]] as const){
+ const f=fixture(factory);try{f.stopBackend();const first=await f.request(f.body('first'));await first.text();f.setPool(factory);f.startBackend();const retry=await f.request(f.body('first')),r=await retry.json();const next=await f.request(f.body('next'));await next.text();evidence({case:'actual-connection-refused-then-recovery',name,first:first.status,retry:retry.status,retryCode:r.error?.code,next:next.status,backendForwards:f.calls()})}finally{f.close()}
+}
+for(const [name,factory] of [['baseline',baseline],['pob',candidate]] as const){
+ const f=fixture(factory);try{f.limit(91);const seed=await f.request(f.body('first'));await seed.text();f.setSize(200*1024);const r=await f.request(f.body('second','r1'));const result=await r.json();evidence({case:'real-sqlite-limit-91-pages',name,status:r.status,resultId:result.id,error:result.error?.code,head:f.q('SELECT response_id FROM temporary_history'),backendForwards:f.calls(),pending:name==='pob'?f.q('SELECT pending_history_turn IS NOT NULL AS present FROM sessions'):null})}finally{f.close()}
+}
+for(const kind of ['trigger','native-memento'])for(const [name,factory] of [['baseline',baseline],['pob',candidate]] as const){
+ const f=fixture(factory);try{const original=f.body('same-turn');const seed=await f.request(original);const first=await seed.json();const compact:any={...original,input:[...original.input,...first.output]};if(kind==='trigger')compact.input.push({type:'compaction_trigger'});else compact.client_metadata={'x-codex-turn-metadata':JSON.stringify({thread_id:'thread',turn_id:'same-turn',request_kind:'compaction',compaction:{implementation:'responses',strategy:'memento'}})};const response=await f.request(compact),result=await response.json();evidence({case:'supported-compaction-shape-after-completion',kind,name,status:response.status,error:result.error?.code,backendForwards:f.calls()})}finally{f.close()}
+}
+{const f=fixture(candidate);try{await(await f.request(f.body('first'))).text();f.setPool(baseline);const old=await f.request(f.body('second','r1'));await old.text();evidence({case:'old-binary-after-pob-success',status:old.status,head:f.q('SELECT response_id FROM temporary_history'),backendForwards:f.calls()})}finally{f.close()}}
+{const db=new Database(':memory:');try{const r=createReceiptStore(db);for(let i=0;i<1000;i++){r.begin('session','key-'+i,'digest-'+i,Date.now()+10000);r.complete('session','key-'+i,{id:'r'+i,status:'completed',output:[]},Date.now()+10000)}evidence({case:'receipt-store-1000-latest-writes',row:db.query('SELECT COUNT(*) AS n FROM qa_request_receipts').get(),latest:r.get('session','key-999')?.state})}finally{db.close()}}
+writeFileSync(new URL('../evidence/dot-independent-risk-review.json',import.meta.url),JSON.stringify(findings,null,2)+'\n');

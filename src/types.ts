@@ -7,8 +7,12 @@ export interface CodexParsedRequest {
   _rawBody?: unknown;
   /** Set only by the trusted Web route, never parsed from caller-supplied model metadata. */
   _chatgptModelFamily?: "5.6" | "6";
+  /** True only for a routed Pro model (for example GPT-5.6 Pro or GPT-6 Pro). */
+  _chatgptProModel?: boolean;
   /** Full session mode resolved from the public effort at the request boundary. */
   _chatgptSessionMode?: "temporary" | "persistent";
+  /** Server-owned Chat/Tools selector, never inferred from caller metadata. */
+  _chatgptLocalTools?: boolean;
   /** Number of leading raw input items restored from local previous_response_id state. */
   _replayPrefixLen?: number;
   /** Server-verified durable alias; a fresh browser prompt must not replace the saved chat. */
@@ -202,9 +206,26 @@ export interface CodexProviderContinuationState {
   [provider: string]: Record<string, unknown> | undefined;
 }
 
+import type { ChatGptChartWidget } from "./adapters/chatgpt-web/rich-widget";
+
+export interface ProviderNotice {
+  version: 1;
+  id: string;
+  execution_id: string;
+  seq: number;
+  kind: "account_pinned" | "account_changed" | "conversation_restored" | "conversation_forked"
+    | "observer_detached" | "reconnecting" | "resumed" | "tool_waiting" | "needs_reconcile";
+  observed_at: string;
+  message: string;
+  source: "chatgpt-web";
+  evidence: "observed";
+}
+
 export type AdapterEvent =
+  | { type: "provider_notice"; notice: ProviderNotice }
   | { type: "heartbeat" }
   | { type: "text_delta"; text: string; phase?: CodexMessagePhase }
+  | { type: "rich_widget"; widget: ChatGptChartWidget }
   | { type: "thinking_delta"; thinking: string }
   // Opaque signed-reasoning metadata preserved when it appears in a Codex history.
   | { type: "thinking_signature"; signature: string }
@@ -302,6 +323,8 @@ export interface CodexProviderConfig {
     storageStatePath?: string;
     /** System Chrome executable. The runtime never downloads a browser. */
     chromeExecutablePath?: string;
+    /** Explicit sandbox selection; omission preserves the existing Playwright default. */
+    chromiumSandbox?: boolean;
     /** Unix socket bridging the turn-bound MCP capability into outer Codex tools. */
     brokerSocketPath?: string;
     /** Persisted, trusted Codex task authority used for follow-up turns that omit the envelope. */

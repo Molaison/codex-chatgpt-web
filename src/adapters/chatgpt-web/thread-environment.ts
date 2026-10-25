@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
+import * as z from "zod/v4";
+import { toolSchema } from "../../responses/schema";
 import { existsSync, readFileSync, renameSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { atomicWriteFile } from "../../config";
@@ -6,6 +9,9 @@ import { getCodexHome } from "../../codex-integration-shared";
 import type { CodexParsedRequest } from "../../types";
 import {
   extractChatGptTurnEnvironmentClaim,
+  restrictedReadOnlyCwdContinuation,
+  restrictedReadOnlyFailedFirstContinuation,
+  extractVerifiedNativeEnvironmentClaim,
   extractChatGptCompactionSourceRevision,
   extractChatGptContinuationEnvironmentClaim,
   extractChatGptSteeringEnvironmentClaim,
@@ -17,6 +23,7 @@ import {
   hasRawChatGptEnvironmentContext,
   legacyChatGptEnvironmentClaims,
   hasOnlyPermissionNeutralChatGptCalendarHistory,
+  hasOnlyPermissionNeutralReadOnlyCalendarHistory,
   unattributedChatGptEnvironmentMessages,
   isChatGptCompactionContinuation,
   MissingTrustedCodexEnvironmentError,
@@ -26,6 +33,7 @@ import {
 } from "./environment";
 import { resolveCurrentCodexRolloutEnvironment } from "./codex-rollout-environment";
 import { ChatGptWebAdapterError } from "./adapter-error";
+import { forkedFromThreadId } from "./conversation-key";
 
 interface StoredThreadEnvironment {
   cwd: string;
@@ -33,7 +41,8 @@ interface StoredThreadEnvironment {
   writableRoots: string[];
   sandboxPolicy: ChatGptSandboxPolicy;
   updatedAt: number;
-  acceptedHistory?: { inputLength: number; sha256: string };
+  acceptedHistory?: { inputLength: number; sha256: string; catalogIndependent?: { version: 1; sha256: string };
+    forkIndependent?: { version: 1; sha256: string } };
 }
 
 interface StoredThreadEnvironmentFile {
@@ -114,22 +123,144 @@ function historyDigest(input: unknown[]): string {
   return createHash("sha256").update(JSON.stringify(comparison)).digest("hex");
 }
 
+// Only declaration-only native packets may vary. Unknown fields/shapes stay on
+// the original exact-proof path; never erase a message, ownership or permission.
+const declarationLeaf = z.union([
+  toolSchema.strict(),
+  z.strictObject({
+    type: z.literal("custom"), name: z.string().min(1), description: z.string().optional(),
+    format: z.union([
+      z.strictObject({ type: z.literal("text") }),
+      z.strictObject({ type: z.literal("grammar"), syntax: z.enum(["lark", "regex"]), definition: z.string() }),
+    ]).optional(),
+  }),
+  z.strictObject({
+    type: z.literal("tool_search"), execution: z.enum(["client", "server"]),
+    description: z.string().optional(), parameters: z.record(z.string(), z.unknown()).optional(),
+  }),
+]);
+const catalogPacket = z.strictObject({
+  type: z.literal("additional_tools"), role: z.literal("developer"), id: z.string().min(1),
+  tools: z.array(z.union([declarationLeaf, z.strictObject({
+    type: z.literal("namespace"), name: z.string().min(1), description: z.string().optional(),
+    tools: z.array(declarationLeaf),
+  })])),
+});
+
+function catalogIndependentDigest(input: unknown[], threadId: string): string | undefined {
+  const stable: unknown[] = [];
+  for (const value of input) {
+    const item = record(value);
+    if (item?.type !== "additional_tools") { stable.push(value); continue; }
+    if (!catalogPacket.safeParse(item).success) return undefined;
+    // Preserve packet position, role, type, field presence and key order. Only
+    // declaration ID/tools vary. Schema data within tools is not authority XML.
+    stable.push(Object.fromEntries(Object.entries(item).map(([key, val]) =>
+      [key, key === "id" || key === "tools" ? null : val])));
+  }
+  return createHash("sha256").update(JSON.stringify(["catalog-independent-v1", threadId, historyDigest(stable)])).digest("hex");
+}
+
+/** Native forks rekey only the declaration/static preamble IDs; never normalize permission or history IDs. */
+function forkIndependentDigest(input: unknown[], parentThreadId: string): string | undefined {
+  let preamble = true;
+  const stable: unknown[] = [];
+  for (const value of input) {
+    const item = record(value);
+    if (item?.role === "user") preamble = false;
+    if (!preamble || item?.role !== "developer") { stable.push(value); continue; }
+    if (item.type === "additional_tools") {
+      if (!catalogPacket.safeParse(item).success) return undefined;
+    } else if (item.type !== "message" || typeof item.id !== "string" || !item.id
+      || /<\/?(?:permissions instructions|environment_context)\b/.test(JSON.stringify(item.content))) {
+      stable.push(value); continue;
+    }
+    // All content, declaration schemas, metadata and field presence remain byte-proven.
+    stable.push(Object.fromEntries(Object.entries(item).map(([key, val]) => [key, key === "id" ? null : val])));
+  }
+  return createHash("sha256").update(JSON.stringify(["native-fork-prefix-v1", parentThreadId, historyDigest(stable)])).digest("hex");
+}
+
+// Offline migration only: an old exact proof plus its private witness is the
+// authority. Never mint this proof from the unverified continuation request.
+export function addCatalogIndependentHistoryProof(
+  cache: unknown, threadId: string, witness: CodexParsedRequest, expectedEntry: unknown, now = Date.now(),
+): Record<string, unknown> {
+  const file = record(cache);
+  const threads = record(file?.threads);
+  const target = record(threads?.[threadId]);
+  if (file?.version !== 1 || !threads || !target || !isDeepStrictEqual(target, expectedEntry)) {
+    throw new Error("History migration target changed");
+  }
+  const stored = validateStoredEnvironment(target);
+  const proof = stored.acceptedHistory;
+  const input = record(witness._rawBody)?.input;
+  if (extractChatGptTurnIdentity(witness).threadId !== threadId) throw new Error("History migration thread mismatch");
+  if (!Number.isFinite(now) || !Number.isFinite(stored.updatedAt) || now - stored.updatedAt > THREAD_ENVIRONMENT_TTL_MS) {
+    throw new Error("History migration cache expired");
+  }
+  if (!proof || proof.catalogIndependent || !Array.isArray(input) || input.length < proof.inputLength
+    || historyDigest(input.slice(0, proof.inputLength)) !== proof.sha256) {
+    throw new Error("History migration witness does not match original proof");
+  }
+  const sha256 = catalogIndependentDigest(input.slice(0, proof.inputLength), threadId);
+  if (!sha256) throw new Error("History migration witness contains unsupported catalog packet");
+  return { ...file, threads: { ...threads, [threadId]: {
+    ...target, acceptedHistory: { ...record(target.acceptedHistory), catalogIndependent: { version: 1, sha256 } },
+  } } };
+}
+
 function acceptedHistory(parsed: CodexParsedRequest): StoredThreadEnvironment["acceptedHistory"] {
   const input = record(parsed._rawBody)?.input;
   if (!Array.isArray(input) || input.length === 0 || !hasRawChatGptEnvironmentContext(parsed)) return undefined;
   // Persist a digest of the accepted prefix, never conversation/tool-result text.
-  return { inputLength: input.length, sha256: historyDigest(input) };
+  const threadId = extractChatGptTurnIdentity(parsed).threadId;
+  const digest = threadId ? catalogIndependentDigest(input, threadId) : undefined;
+  const forkDigest = threadId ? forkIndependentDigest(input, threadId) : undefined;
+  return { inputLength: input.length, sha256: historyDigest(input),
+    ...(digest ? { catalogIndependent: { version: 1 as const, sha256: digest } } : {}),
+    ...(forkDigest ? { forkIndependent: { version: 1 as const, sha256: forkDigest } } : {}),
+  };
 }
 
-function matchesAcceptedHistory(parsed: CodexParsedRequest, stored: StoredThreadEnvironment): boolean {
+function verifiedAcceptedPrefix(parsed: CodexParsedRequest, stored: StoredThreadEnvironment, forkParent?: string): unknown[] | undefined {
   const proof = stored.acceptedHistory;
   const body = record(parsed._rawBody);
   const input = body?.input;
-  if (!proof || !Array.isArray(input) || input.length <= proof.inputLength) return false;
-  if (historyDigest(input.slice(0, proof.inputLength)) !== proof.sha256) return false;
+  if (!proof || !Array.isArray(input) || input.length <= proof.inputLength) return undefined;
+  const prefix = input.slice(0, proof.inputLength);
+  if (historyDigest(prefix) !== proof.sha256) {
+    if (forkParent) {
+      if (!proof.forkIndependent || forkIndependentDigest(prefix, forkParent) !== proof.forkIndependent.sha256) return undefined;
+      return prefix;
+    }
+    const threadId = extractChatGptTurnIdentity(parsed).threadId;
+    if (!threadId || !proof.catalogIndependent
+      || catalogIndependentDigest(prefix, threadId) !== proof.catalogIndependent.sha256) return undefined;
+  }
+  return prefix;
+}
+
+function matchesAcceptedHistory(parsed: CodexParsedRequest, stored: StoredThreadEnvironment, forkParent?: string): boolean {
+  const prefix = verifiedAcceptedPrefix(parsed, stored, forkParent);
+  if (!prefix) return false;
+  const proof = stored.acceptedHistory!;
+  const body = record(parsed._rawBody)!;
+  const input = body.input as unknown[];
   const continuation = { ...parsed, _rawBody: { ...body, input: input.slice(proof.inputLength) } };
-  if (hasRawChatGptEnvironmentContext(continuation)
-    && !hasOnlyPermissionNeutralChatGptCalendarHistory(continuation, { ...stored, tools: [] })) return false;
+  if (forkParent && hasOnlyPermissionNeutralReadOnlyCalendarHistory(parsed, { ...stored, tools: [] }, prefix)) return true;
+  if (forkParent && ((input.slice(proof.inputLength) as unknown[]).some(value => {
+    const item = record(value);
+    return item?.role === "developer" || item?.type === "additional_tools";
+  }) || hasRawChatGptEnvironmentContext(continuation))) return false;
+  // Untagged native deltas can follow the proven prefix without assistant output.
+  // The narrow validator rejects explicit current ownership and any new authority.
+  if (hasRawChatGptEnvironmentContext(continuation)) {
+    if (!hasOnlyPermissionNeutralChatGptCalendarHistory(continuation, { ...stored, tools: [] }, input.slice(0, proof.inputLength))) return false;
+    // Managed history has already compared the last proven profile (including
+    // read exclusions) and native network packet against the unchanged cache.
+    if (stored.sandboxPolicy.type !== "dangerFullAccess") return true;
+  }
   // Current sandbox/workspace metadata must still validate the proven envelope.
   // Reuse its exact accepted prefix; never search arbitrary earlier XML for a match.
   try {
@@ -152,6 +283,18 @@ function validateStoredEnvironment(value: unknown): StoredThreadEnvironment {
     || typeof proof.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(proof.sha256))) {
     throw new Error("Invalid persisted ChatGPT accepted history proof");
   }
+  const catalogProof = record(proof?.catalogIndependent);
+  if (proof?.catalogIndependent !== undefined && (!catalogProof || catalogProof.version !== 1
+    || Object.keys(catalogProof).some(key => key !== "version" && key !== "sha256")
+    || typeof catalogProof.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(catalogProof.sha256))) {
+    throw new Error("Invalid persisted ChatGPT catalog-independent history proof");
+  }
+  const forkProof = record(proof?.forkIndependent);
+  if (proof?.forkIndependent !== undefined && (!forkProof || forkProof.version !== 1
+    || Object.keys(forkProof).some(key => key !== "version" && key !== "sha256")
+    || typeof forkProof.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(forkProof.sha256))) {
+    throw new Error("Invalid persisted ChatGPT native-fork history proof");
+  }
   const cwd = resolve(parsed.cwd);
   const roots = absolutePaths(parsed.roots, "roots");
   const writableRoots = Array.isArray(parsed.writableRoots) && parsed.writableRoots.length === 0
@@ -164,7 +307,10 @@ function validateStoredEnvironment(value: unknown): StoredThreadEnvironment {
     writableRoots,
     sandboxPolicy: sandboxPolicy(parsed.sandboxPolicy, roots, writableRoots),
     updatedAt: parsed.updatedAt,
-    ...(proof ? { acceptedHistory: { inputLength: proof.inputLength as number, sha256: proof.sha256 as string } } : {}),
+    ...(proof ? { acceptedHistory: { inputLength: proof.inputLength as number, sha256: proof.sha256 as string,
+      ...(catalogProof ? { catalogIndependent: { version: 1 as const, sha256: catalogProof.sha256 as string } } : {}),
+      ...(forkProof ? { forkIndependent: { version: 1 as const, sha256: forkProof.sha256 as string } } : {}),
+    } } : {}),
   };
 }
 
@@ -266,7 +412,7 @@ export class ChatGptThreadEnvironmentStore {
       const compactionSourceTurnId = parsed._compactionRequest
         ? extractChatGptCompactionSourceRevision(parsed).turnId : undefined;
       if (rolloutIdentity && identity.turnId) {
-        const rolloutEnvironment = resolveCurrentCodexRolloutEnvironment({
+        const rollout = resolveCurrentCodexRolloutEnvironment({
           codexHome: this.codexHome,
           ...(this.sqliteHome ? { sqliteHome: this.sqliteHome } : {}),
           lineage: rolloutIdentity,
@@ -275,7 +421,9 @@ export class ChatGptThreadEnvironmentStore {
           ...(historicalMessages ? { historicalEnvironmentMessages: historicalMessages } : {}),
           tools: parsed.context.tools,
         });
-        if (rolloutEnvironment) {
+        if (rollout) {
+          const rolloutEnvironment = rollout.environment;
+          const nativeClaims = rollout.currentEnvironmentMessages.map(message => extractVerifiedNativeEnvironmentClaim(parsed, message));
           if (calendarDelta) {
             const nativeRoots = new Set(rolloutEnvironment.roots.map(pathIdentity));
             if (rolloutEnvironment.sandboxPolicy.type !== "dangerFullAccess"
@@ -284,9 +432,10 @@ export class ChatGptThreadEnvironmentStore {
               throw new Error("Calendar environment delta conflicts with its current Codex rollout");
             }
           }
-          const conflicts = currentClaim ? conflictingAuthorityFields(currentClaim, rolloutEnvironment) : [];
+          const conflicts = [...new Set([...nativeClaims, ...(currentClaim ? [currentClaim] : [])]
+            .flatMap(claim => conflictingAuthorityFields(claim, rolloutEnvironment)))];
           if (conflicts.length > 0) {
-            const source = currentCompaction ? "Compaction continuation" : initialClaim ? "Current" : "Steering";
+            const source = currentCompaction ? "Compaction continuation" : initialClaim || nativeClaims.length ? "Current" : "Steering";
             // Field names are safe to export; paths, request text and permission
             // contents are deliberately excluded from both the log and UI error.
             console.warn(`[chatgpt-web] trusted environment conflict (source=${source}, fields=${conflicts.join(",")})`);
@@ -297,23 +446,83 @@ export class ChatGptThreadEnvironmentStore {
         }
       }
       const sameThread = this.get(identity.threadId);
-      // Proof-bearing caches require that exact prefix. Legacy caches only permit
+      if (!sameThread && initialClaim && !currentCompaction) {
+        const restricted = restrictedReadOnlyFailedFirstContinuation(parsed, initialClaim);
+        // The current native filesystem plus a strictly decoded network DENIAL establish
+        // only this narrower read-only environment, so later turns can keep using it.
+        if (restricted) {
+          this.set(identity.threadId, restricted, parsed);
+          return restricted;
+        }
+      }
+      if (sameThread && initialClaim && !initialClaim.statesNetworkAccess && !currentCompaction) {
+        const prefix = verifiedAcceptedPrefix(parsed, sameThread);
+        const restricted = prefix && restrictedReadOnlyCwdContinuation(parsed, { ...sameThread, tools: [] }, prefix, initialClaim);
+        // This combines a current decoded filesystem restriction with an exact accepted prefix.
+        // It adds no grants, writes no cache proof, and never refreshes the original authority TTL.
+        if (restricted) return restricted;
+      }
+      const calendarPrefix = sameThread && verifiedAcceptedPrefix(parsed, sameThread);
+      const readOnlyCalendar = calendarPrefix && hasOnlyPermissionNeutralReadOnlyCalendarHistory(parsed, { ...sameThread!, tools: [] }, calendarPrefix);
+      const forkParentId = forkedFromThreadId(parsed);
+      if (!readOnlyCalendar && !initialClaim && !currentCompaction && forkParentId?.trim()
+        && forkParentId !== identity.threadId && !lineage && rolloutIdentity?.threadId === identity.threadId) {
+        const source = this.get(forkParentId);
+        const rawMetadata = record(record(parsed._rawBody)?.client_metadata)?.["x-codex-turn-metadata"];
+        const metadata = record(typeof rawMetadata === "string" ? JSON.parse(rawMetadata) : rawMetadata);
+        const existingProofNeedsRepair = sameThread && verifiedAcceptedPrefix(parsed, sameThread)
+          && !matchesAcceptedHistory(parsed, sameThread);
+        if (source && (!sameThread || existingProofNeedsRepair
+          && conflictingAuthorityFields({ environment: { ...sameThread, tools: [] }, statesNetworkAccess: true }, { ...source, tools: [] }, false).length === 0)
+          && rolloutIdentity.sandboxType === source.sandboxPolicy.type && metadata?.network_access === undefined
+          && (metadata?.cwd === undefined || typeof metadata.cwd === "string" && pathIdentity(metadata.cwd) === pathIdentity(source.cwd))
+          && matchesAcceptedHistory(parsed, source, forkParentId)) {
+          const environment = { cwd: source.cwd, roots: source.roots, writableRoots: source.writableRoots,
+            sandboxPolicy: source.sandboxPolicy, tools: parsed.context.tools ?? [] };
+          // This is an explicit native fork, not subagent ancestry or recovery migration.
+          // Preserve the parent's authority expiry while recording this child's own prefix.
+          const body = record(parsed._rawBody)!;
+          const input = body.input as unknown[];
+          // Retain the exact authority witness, not a longer prefix ending in this
+          // child's instruction (which has no adjacent current environment packet).
+          this.set(identity.threadId, environment, { ...parsed,
+            _rawBody: { ...body, input: input.slice(0, source.acceptedHistory!.inputLength) },
+          }, Math.min(source.updatedAt, sameThread?.updatedAt ?? source.updatedAt));
+          return environment;
+        }
+      }
+      // Proof-bearing caches require their authenticated immutable prefix. Legacy caches only permit
       // nonconflicting, fully decoded history; neither path accepts current updates.
       // Returning cached authority here never creates a proof or refreshes its age.
-      if (hasRawChatGptEnvironmentContext(parsed)
-        && (hasCurrentContext || !sameThread || !(sameThread.acceptedHistory
-          ? matchesAcceptedHistory(parsed, sameThread)
-          : legacyChatGptEnvironmentClaims(parsed)?.every(claim => conflictingAuthorityFields({ environment: claim, statesNetworkAccess: true }, { ...sameThread, tools: [] }, false).length === 0)))) {
+      // A browser preflight failure can leave no assistant separator. Only the
+      // exact verified prefix can prove that its untagged environment is historical.
+      if (!readOnlyCalendar && hasRawChatGptEnvironmentContext(parsed)
+        && (!sameThread || (sameThread.acceptedHistory
+          ? (hasCurrentContext && !historicalMessages) || !matchesAcceptedHistory(parsed, sameThread)
+          : hasCurrentContext || !legacyChatGptEnvironmentClaims(parsed)?.every(claim => conflictingAuthorityFields({ environment: claim, statesNetworkAccess: true }, { ...sameThread, tools: [] }, false).length === 0)))) {
         error.resolutionBranch = "history_not_authenticated";
         throw error;
       }
-      if (sameThread) return {
+      if (sameThread) {
+        // Upgrade an old optional proof only from its exact already-verified witness.
+        // Permissions, original digest/length and authority expiry remain unchanged.
+        const proof = sameThread.acceptedHistory;
+        if (proof && !proof.forkIndependent) {
+          const prefix = verifiedAcceptedPrefix(parsed, sameThread);
+          const digest = prefix && forkIndependentDigest(prefix, identity.threadId);
+          if (digest) {
+            sameThread.acceptedHistory = { ...proof, forkIndependent: { version: 1, sha256: digest } };
+            this.persist();
+          }
+        }
+        return {
         cwd: sameThread.cwd,
         roots: sameThread.roots,
         writableRoots: sameThread.writableRoots,
         sandboxPolicy: sameThread.sandboxPolicy,
         tools: parsed.context.tools ?? [],
       };
+      }
 
       if (!lineage) { error.resolutionBranch = "no_cache_or_lineage"; throw error; }
       const parent = this.get(lineage.parentThreadId);
@@ -353,12 +562,12 @@ export class ChatGptThreadEnvironmentStore {
     return stored;
   }
 
-  private set(threadId: string, environment: ChatGptTurnEnvironment, parsed?: CodexParsedRequest): void {
+  private set(threadId: string, environment: ChatGptTurnEnvironment, parsed?: CodexParsedRequest, authorizedAt = this.now()): void {
     // Only this path has already verified authority from the current request, native
     // rollout, or a successfully loaded parent. A cache read alone may never recover it.
     this.load(true);
     this.threads.delete(threadId);
-    this.threads.set(threadId, authority(environment, this.now(), parsed));
+    this.threads.set(threadId, authority(environment, authorizedAt, parsed));
     while (this.threads.size > MAX_THREAD_ENVIRONMENTS) {
       const oldest = this.threads.keys().next().value as string | undefined;
       if (!oldest) break;

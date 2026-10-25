@@ -1,4 +1,6 @@
+import type { DurableOperation } from "./operation-journal";
 import { createHash } from "node:crypto";
+import type { ChatGptChartWidget } from "./rich-widget";
 import type { AdapterEvent, CodexParsedRequest } from "../../types";
 import type { BrokerToolRequest } from "./turn-broker";
 import { ChatGptWebAdapterError, chatGptBrowserTabClosedError, chatGptTurnSupersededError } from "./adapter-error";
@@ -151,11 +153,13 @@ export class ChatGptTextFeed {
 }
 
 interface ChatGptTurnRuntimeBase {
+  operation?: DurableOperation;
   browser: Promise<string>;
   /** Physical helper/Playwright settlement, including the launcher end/release acknowledgement. */
   physicalSettlement: Promise<void>;
   trace: ChatGptTraceFeed;
   text: ChatGptTextFeed;
+  richWidgets?: ChatGptChartWidget[];
   usageInput?: CodexParsedRequest;
   conversationKey?: string;
   releaseRetainedConversation?: () => Promise<void>;
@@ -222,6 +226,27 @@ export function chatGptInstructionLineage(parsed: CodexParsedRequest): ChatGptIn
   return { current, predecessors: new Set(revisions) };
 }
 
+/** Native retries append clear reasoning receipts, not a new response round. */
+function responseRoundInput(input: unknown[]): unknown[] {
+  let end = input.length;
+  while (end > 0) {
+    const item = input[end - 1];
+    if (!item || typeof item !== "object") break;
+    const receipt = item as { type?: unknown; content?: unknown; encrypted_content?: unknown };
+    if (receipt.type !== "reasoning" || receipt.content != null || receipt.encrypted_content != null) break;
+    end -= 1;
+  }
+  return input.slice(0, end);
+}
+
+/** JSON object order is not semantic; array positions and string contents remain exact. */
+function canonicalRoundInput(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalRoundInput);
+  if (!value || typeof value !== "object") return value;
+  const record = value as Record<string, unknown>;
+  return Object.fromEntries(Object.keys(record).sort().map(key => [key, canonicalRoundInput(record[key])]));
+}
+
 /** Exact canonical Responses request identity inside one long-lived browser execution. */
 export function chatGptTurnRoundKey(parsed: CodexParsedRequest): string {
   const identity = extractChatGptTurnIdentity(parsed);
@@ -235,7 +260,11 @@ export function chatGptTurnRoundKey(parsed: CodexParsedRequest): string {
     threadId: identity.threadId,
     turnId: identity.turnId,
     purpose: parsed._compactionRequest ? "compaction" : "response",
-    input: (body as { input: unknown[] }).input,
+    // Canonicalize only the observer-round journal identity. Physical execution and instruction
+    // lineage have separate ownership contracts and must not change with this replay repair.
+    input: canonicalRoundInput(parsed._compactionRequest
+      ? (body as { input: unknown[] }).input
+      : responseRoundInput((body as { input: unknown[] }).input)),
   });
 }
 
@@ -312,8 +341,20 @@ export class ChatGptTurnSession {
     readonly instruction?: string,
   ) {
     this.attachedConversationKey = runtime.conversationKey;
+    const saved = runtime.operation?.record;
+    if (saved) {
+      for (const [key, round] of Object.entries(saved.rounds)) this.rounds.set(key, {
+        ...round, events: [...round.events], reasoning: [...round.reasoning],
+        failure: round.failure ? new Error(round.failure) : undefined,
+      });
+      this.finalPrelude = saved.final?.events ?? [];
+      this.finalReasoning = saved.final?.reasoning ?? [];
+    }
     this.physicalSettlement = runtime.physicalSettlement.then(
-      () => { this.settledPhysical = true; },
+      () => {
+        this.settledPhysical = true;
+        if (runtime.operation) { runtime.operation.record.physicalSettled = true; this.checkpoint(); }
+      },
       error => {
         this.settledPhysical = true;
         throw error;
@@ -324,10 +365,27 @@ export class ChatGptTurnSession {
       .catch(error => ({ type: "error", error: error instanceof Error ? error : new Error(String(error)) }) as ChatGptBrowserOutcome)
       .then(outcome => {
       this.settledBrowserOutcome = outcome;
+      const operation = runtime.operation;
+      if (operation) {
+        const record = operation.record;
+        record.conversationKey = runtime.conversationKey;
+        record.generation = outcome.type === "final" ? "final" : "unknown";
+        record.delivery = "unknown"; // HTTP writes are not a client ACK.
+        if (outcome.type === "final") record.final = { answer: outcome.answer,
+          events: this.finalPrelude, reasoning: this.finalReasoning };
+        else {
+          record.recovery = "retained";
+          const typed = outcome.error instanceof ChatGptWebAdapterError ? outcome.error : undefined;
+          record.error = { code: typed?.code, retryable: typed?.retryable ?? runtime.submission?.phase === "prepared",
+            ...(typed && "diagnostics" in typed ? { diagnostics: typed.diagnostics as Record<string, unknown> } : {}) };
+        }
+        this.checkpoint();
+      }
       const error = outcome.type === "error" && outcome.error instanceof ChatGptWebAdapterError
         ? outcome.error : undefined;
       console.info(`[chatgpt-web] browser_settled ${JSON.stringify({
         traceId: this.traceId,
+        ...(runtime.operation ? { receipt: runtime.operation.receipt() } : {}),
         outcome: outcome.type,
         compaction: runtime.usageInput?._compactionRequest === true,
         ...(!runtime.usageInput?._compactionRequest ? { submission: runtime.submission?.phase ?? "unknown" } : {}),
@@ -335,6 +393,20 @@ export class ChatGptTurnSession {
       })}`);
       return outcome;
     });
+  }
+
+  checkpoint(): void {
+    const operation = this.runtime.operation;
+    if (!operation) return;
+    operation.record.rounds = Object.fromEntries([...this.rounds].map(([key, round]) => [key, {
+      events: round.events, reasoning: round.reasoning, completed: round.completed,
+      ...(round.failure ? { failure: round.failure.message } : {}),
+    }]));
+    if (operation.record.final) {
+      operation.record.final.events = this.finalPrelude;
+      operation.record.final.reasoning = this.finalReasoning;
+    }
+    operation.checkpoint();
   }
 
   /** An exact reconnect replaces its stale HTTP observer, never the browser execution. */
@@ -466,12 +538,14 @@ export class ChatGptTurnSession {
 
   completeRound(key: string): void {
     this.round(key).completed = true;
+    this.checkpoint();
   }
 
   failRound(key: string, error: Error): void {
     const round = this.round(key);
     round.failure = error;
     round.completed = true;
+    this.checkpoint();
   }
 
   roundCompleted(key: string): boolean {

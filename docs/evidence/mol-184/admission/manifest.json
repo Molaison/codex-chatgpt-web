@@ -1,0 +1,193 @@
+{
+  "scope": "Offline exact PR6 source snapshot, not coordinator PR7 composite; browser worker mocked; no real acceptance or new-head CI",
+  "recordedDate": "2026-10-16",
+  "baselineCommit": "c841db47716d87ad6776bf2afcd074e267f50e7c",
+  "baselineTree": "145129c987bb983965cc8313eb3f8bd22603faa6",
+  "priorPublishedHead": "4e4b2c439b7b210d6a778c70fbbf538acbf38a6f",
+  "snapshotConstruction": "Both snapshots git archive baselineCommit. After snapshot overlays only src/qa-pool.ts and src/server.ts. Test fixtures copied separately. Dependencies reused read-only; none installed.",
+  "runtime": {
+    "bun": "1.4.0 (34cbb9a40)",
+    "mcpSdk": "1.32.1",
+    "typescript": "5.9.3",
+    "bunTypes": "1.4.0"
+  },
+  "sourceSha256": {
+    "src/qa-pool.ts": "5262b13e4db02c7a8875ca963fa8e7af70c874c47e7ca572855e3c20defd6f14",
+    "src/server.ts": "8f86b2036034a0d858a02270f4e23567a7bc29d6592642d469c4fa7a6fb72bc0",
+    "src/qa-pool-receipts.ts": "652dc732d2959b003a647b4ede90a676b04c9061979d662135cd4d25a544690c",
+    "deploy/cpr-session.mjs": "d6405c43e0a65ae1e4b4f2b0275df1deab7469aeebc6b33cf221a1a290484fb9",
+    "tests/qa-pool-admission-observer.test.ts": "272375b23d7c2f455c66f373425934a1f410f1f4acfa80426c958299c3a2b59b",
+    "tests/qa-pool-observer-cleanup.test.ts": "d1c0f867919399b2416cf17a9d03815549e13ec889978fb0cda7b03cdc26ec22",
+    "tests/qa-pool-request-receipts.test.ts": "481e115749746f44abd016c1f3d41b9ca13b77201f54c27b5e7eb1bf250177d9",
+    "tests/qa-pool-history-expiry.test.ts": "1f6ea90dbd8b28692ebf54107f329e4fc5da70c169f41606dc039f019f7438ac",
+    "tests/server-lifecycle.test.ts": "b3a50c245aa1268dbed5ffa29371458588b7bbdf1193007ce50bb65ee624ce4e"
+  },
+  "runs": [
+    {
+      "log": "baseline-eight.log",
+      "cwd": "baseline",
+      "command": "bun test tests/dot-cpr-admission.test.ts --test-name-pattern '^CPR (before|after)-headers accepted disconnect reconnect, caller ID$|^real runtime draining|^draining compact|^accepted 503'",
+      "exitCode": 1,
+      "result": "4 pass / 4 fail / 44 assertions"
+    },
+    {
+      "log": "after-eight.log",
+      "cwd": "after",
+      "command": "bun test tests/dot-cpr-admission.test.ts --test-name-pattern '^CPR (before|after)-headers accepted disconnect reconnect, caller ID$|^real runtime draining|^draining compact|^accepted 503'",
+      "exitCode": 0,
+      "result": "8 pass / 73 assertions"
+    },
+    {
+      "log": "after-eleven.log",
+      "cwd": "after",
+      "command": "bun test tests/dot-cpr-admission.test.ts",
+      "exitCode": 1,
+      "result": "8 pass / 3 unresolved missing-ID failures / 77 assertions"
+    },
+    {
+      "log": "after-proof.log",
+      "cwd": "after",
+      "command": "bun test tests/dot-independent-cpr-boundaries.test.ts --test-name-pattern 'single-field mismatch'",
+      "exitCode": 0,
+      "result": "6 pass / 36 assertions"
+    },
+    {
+      "log": "after-steer.log",
+      "cwd": "after",
+      "command": "bun test tests/dot-independent-delta-steer.test.ts",
+      "exitCode": 0,
+      "result": "2 pass / 6 assertions"
+    },
+    {
+      "log": "after-targets.log",
+      "cwd": "after",
+      "command": "bun test tests/dot-cross-layer-recovery.test.ts --test-name-pattern 'terminal saved|history commit|intentional identical'",
+      "exitCode": 0,
+      "result": "3 pass / 14 assertions"
+    },
+    {
+      "log": "risk-review.log",
+      "cwd": "after",
+      "command": "bun tests/dot-independent-risk-review.ts",
+      "exitCode": 0,
+      "result": "actual refusal recovery, optional-cache capacity, compaction, pre-delta binary continuation and latest-row controls"
+    },
+    {
+      "log": "capacity-boundary.log",
+      "cwd": "after",
+      "command": "bun tests/dot-independent-capacity-boundary.ts",
+      "exitCode": 0,
+      "result": "91-page optional-cache fallback preserves context; 40-page required-history failure stays blocked"
+    },
+    {
+      "log": "repo-pool-focused.log",
+      "cwd": "repository",
+      "command": "bun test tests/qa-pool-admission-observer.test.ts tests/qa-pool-observer-cleanup.test.ts tests/qa-pool-request-receipts.test.ts tests/qa-pool-history-expiry.test.ts",
+      "exitCode": 0,
+      "result": "65 pass / 735 assertions"
+    },
+    {
+      "log": "repo-drain.log",
+      "cwd": "repository",
+      "command": "bun test tests/server-lifecycle.test.ts --test-name-pattern 'drained runtime rejects'",
+      "exitCode": 0,
+      "result": "1 pass / 4 assertions"
+    },
+    {
+      "log": "typecheck-final.log",
+      "cwd": "repository",
+      "command": "bun node_modules/typescript/bin/tsc --noEmit",
+      "exitCode": 0,
+      "result": "pass"
+    }
+  ],
+  "otherRuns": {
+    "repo-focused.log": "103 pass / 2 fail / 1 error / 1009 assertions; broker Unix socket listen failures; not green, not bypassed or retried. Includes existing qa-pool, expiry, receipt and server-lifecycle files.",
+    "baseline-ephemeral-path-failure.log": "Initial /tmp snapshot rejected by assertDurableRuntimeCommand before behavior assertions. Relocated to durable /workspace/shared snapshot; no configuration bypass.",
+    "typecheck.log": "Earlier typecheck passed; final typecheck separately retained."
+  },
+  "riskScriptAdaptation": "Only baseline import path mapped to /workspace/shared/mol184-admission-baseline/src/qa-pool; label old-binary now means pre-delta PR6 baseline, not pre-receipt storage.",
+  "diagnosticSourceSha256": {
+    "dot-cpr-admission.test.ts.txt": "e5d3070a8a367e93a00d06a6157af64933ce132e61ed35a72f17b1951f0b61f9",
+    "dot-cross-layer-recovery.test.ts.txt": "521287cf259150d318d676c6f50a8854aba420b9cb59c442977894c629d338d6",
+    "dot-independent-capacity-boundary.ts.txt": "f290b2f195c3cdd18e35ccc87edab727206a3f35c931c872494a10502f3503ef",
+    "dot-independent-cpr-boundaries.test.ts.txt": "2f74532b999757ff81ffdfb28225cc3059d59436335b0d672637ff9dbb985f3f",
+    "dot-independent-delta-steer.test.ts.txt": "e49ab2c152b96a6aab0897cd48b7e8ada157f77a972474f0492bb637311ac81a",
+    "dot-independent-risk-review.ts.txt": "d4b1e5a7fa28fb59c557408fe34632560458a281782c1993443a6b474d379425"
+  },
+  "artifactSha256": {
+    "after-eight.log": "769df2cb86aa4f1c90a537d5cea196ddab498f8f88c8d36457542937d23fcd7c",
+    "after-eleven.log": "21ba2b8adc958b935e355617a48014f60da01d8c1626752c0fa0a0b3858b4cef",
+    "after-proof.log": "247abad337ce37a5992444079e7af6fd46754b63f9dd15f44f62b49161789274",
+    "after-steer.log": "6861b1f622ac7a16d966a79b3e22669736fe5bc8880fb58ff678db0448f20aaf",
+    "after-targets.log": "17300a386aa80a514dea13dbdbcfe618032973362c19509b7418d074e8eb6e0f",
+    "baseline-eight.log": "34e6760be99d781c4cb458a6a179af0d118258188aaccaa3939a5104d5f7542b",
+    "baseline-ephemeral-path-failure.log": "a750da758e622a7980792d1911ce5c5de0ed772a665d0246fe3fc6a7b217950c",
+    "capacity-boundary.log": "944741443fef3ae38ee49df6d4bd0b4eb20c94381e78148a683647dc7cf76e23",
+    "independent-after-eight.log": "81b3f96e588f341bf19a5b0600d6c5d4a2294e56e9aa7cf4e9db28e38ca44418",
+    "independent-baseline-eight.log": "f376577b3877bb2337534cf838f97ea70299a007747a919809aa359d092cea06",
+    "independent-delta-steer.log": "0a261785298ede695399be3935bf905a178ef1974a18c2cd240feffdb4372039",
+    "independent-focused.log": "aeccf33f142a94784c532d40b5ee89d7cc509371c4a6a7a3bd79775bf541bb74",
+    "independent-original-eleven.log": "c1567246f42e1e616482edef1f566cf90f4b79bac25ccc09b813a64d70444a6e",
+    "independent-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "repo-drain.log": "684bfb251326781c8b233cda170cb72e4c18e794c76c9bd6ca85841319a956e8",
+    "repo-focused.log": "f2629f8699e9df1e389448ff7b48b831be9249fad985d44b8d419e917b60335a",
+    "repo-pool-focused.log": "3cc016137e2b52249d6de2b24cc8465e27bf5303f4b352af97d5f40e4ec4692a",
+    "risk-review.log": "1e5317f4e3d6f9be0e059050c960933cb03b475db90945c36cbb63455d9d4a04",
+    "typecheck-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "README.md": "c3be0acee2bcc821a51887a14191e1c82e9df10dc249271d012097dd13de8ef6"
+  },
+  "newHeadCI": "not established",
+  "newHeadIndependentReview": "record separately after frozen review",
+  "realBrowser": "not run",
+  "independentReview": {
+    "decision": "Independent nonauthor pass only for narrowed offline scope; not real acceptance, full suite or new-head CI. No production/test edits by reviewer.",
+    "sourceVerification": "All tracked src/deploy in baseline snapshot byte-equal baseline HEAD; after snapshot byte-equal current source. Four frozen source/new-test hashes rechecked after execution.",
+    "runs": [
+      {
+        "log": "independent-focused.log",
+        "command": "bun test tests/qa-pool-admission-observer.test.ts tests/qa-pool-observer-cleanup.test.ts tests/qa-pool-request-receipts.test.ts tests/qa-pool-history-expiry.test.ts",
+        "cwd": "repository",
+        "exitCode": 0,
+        "result": "65 pass / 735 assertions"
+      },
+      {
+        "log": "independent-typecheck.log",
+        "command": "bun node_modules/typescript/bin/tsc --noEmit",
+        "cwd": "repository",
+        "exitCode": 0,
+        "result": "pass"
+      },
+      {
+        "log": "independent-original-eleven.log",
+        "command": "bun test tests/dot-cpr-admission.test.ts",
+        "cwd": "after",
+        "exitCode": 1,
+        "result": "8 pass / 3 known missing-ID failures / 77 assertions"
+      },
+      {
+        "log": "independent-after-eight.log",
+        "command": "bun test tests/dot-cpr-admission.test.ts -t 'caller ID$|^real runtime draining|^draining compact|^accepted 503'",
+        "cwd": "after",
+        "exitCode": 0,
+        "result": "8 pass / 73 assertions"
+      },
+      {
+        "log": "independent-baseline-eight.log",
+        "command": "bun test tests/dot-cpr-admission.test.ts -t 'caller ID$|^real runtime draining|^draining compact|^accepted 503'",
+        "cwd": "baseline",
+        "exitCode": 1,
+        "result": "4 pass / 4 fail / 44 assertions"
+      },
+      {
+        "log": "independent-delta-steer.log",
+        "command": "bun test tests/dot-independent-delta-steer.test.ts",
+        "cwd": "after",
+        "exitCode": 0,
+        "result": "2 pass / 6 assertions"
+      }
+    ],
+    "limits": "Timer callback injection checks cleanup, not actual elapsed ten-minute runtime; proof trusts configured runtime and is not forgery-resistant."
+  }
+}

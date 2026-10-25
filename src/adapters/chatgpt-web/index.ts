@@ -1,3 +1,5 @@
+import { observationSuffix, observationUnavailable, parseBrowserObservation } from "./observation-recovery";
+import { DurableOperation, OperationJournal, operationRuntimeDirectory, operationDigest, retainedOperationError, type OperationRecord } from "./operation-journal";
 import { createHash, randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import { isChatGptWebZeroRiskBackendModel } from "../../chatgpt-web-models";
@@ -10,6 +12,7 @@ import {
   LauncherManualTurnTimedOutError,
   markLauncherManualTurnStarted,
   releaseLauncherRetainedConversation,
+  readLauncherBrowserHostDescriptor,
   startLauncherManualTurn,
   waitForLauncherManualSent,
   waitForLauncherManualTerminal,
@@ -20,6 +23,7 @@ import {
 import { namespacedToolName, type AdapterEvent, type CodexContentPart, type CodexParsedRequest, type CodexProviderConfig, type CodexToolResultMessage, type CodexUsage } from "../../types";
 import type { ProviderAdapter } from "../base";
 import { parseDataUrl } from "../image";
+import { decodeCompactionSummary, isReadableCompactionSummaryText, SUMMARY_PREFIX } from "../../responses/compaction";
 import { ChatGptWebAdapterError, chatGptToolTimeoutError } from "./adapter-error";
 import { ChatGptBrowserWorker } from "./browser-worker";
 import { chatGptEnvironmentDiagnostic, extractChatGptTurnEnvironment, extractChatGptTurnIdentity, MissingTrustedCodexEnvironmentError, priorChatGptAbortedTurnIds } from "./environment";
@@ -28,6 +32,7 @@ import { chatGptReadOnlyContextWarning, compileChatGptWebPrompt } from "./prompt
 import { createChatGptStructuredOutputValidator } from "./output-validation";
 import { chatGptWebTurnRetryPolicy } from "./retry-policy";
 import { TurnBroker, type BrokerToolRequest, type BrokerToolResult, type TurnBrokerOwner } from "./turn-broker";
+import type { ChatGptChartWidget } from "./rich-widget";
 import { ChatGptTextFeed, ChatGptTraceFeed, chatGptCompactionSourceExecutionKey, chatGptInstructionLineage, chatGptThreadOwnershipKey, chatGptTurnExecutionKey, chatGptTurnRetryKey, chatGptTurnRoundKey, chatGptTurnSessions, type ChatGptBrowserOutcome, type ChatGptTraceEvent, type ChatGptTurnRuntime, type ChatGptTurnSession } from "./turn-execution";
 import { estimateChatGptWebUsage, resolveBiggerContextMultipartParts } from "./usage";
 import { ChatGptThreadEnvironmentStore } from "./thread-environment";
@@ -49,6 +54,7 @@ import {
   chatGptConversationKey,
   chatGptQuestionAnswerNamespace,
   forkedFromThreadId,
+  canonicalConversationHistory,
   retainedConversationResumeRequest,
 } from "./conversation-key";
 
@@ -316,9 +322,31 @@ function replayEvents(events: AdapterEvent[], emit: (event: AdapterEvent) => voi
   for (const event of events) emit(event);
 }
 
+function resumesCommittedCompaction(parsed: CodexParsedRequest, summaryHash: string): boolean {
+  const input = (parsed._rawBody as { input?: unknown[] } | undefined)?.input;
+  if (!Array.isArray(input)) return false;
+  for (let index = input.length - 1; index >= 0; index--) {
+    const item = input[index];
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    if (record.type === "compaction" && typeof record.encrypted_content === "string") {
+      const summary = decodeCompactionSummary(record.encrypted_content);
+      return summary !== null && operationDigest(summary) === summaryHash;
+    }
+    if (record.role !== "user") continue;
+    const content = typeof record.content === "string" ? record.content : Array.isArray(record.content)
+      ? record.content.map(block => block && typeof block === "object" && typeof block.text === "string" ? block.text : "").join("\n") : "";
+    if (isReadableCompactionSummaryText(content)) return operationDigest(content.slice(SUMMARY_PREFIX.length + 1)) === summaryHash;
+  }
+  return false;
+}
+
 function submittedTurnFailure(session: ChatGptTurnSession, error: unknown): Error {
   const normalized = error instanceof Error ? error : new Error(String(error));
-  if (normalized instanceof ChatGptWebAdapterError) return normalized;
+  // A typed transient failure is not proof that Send failed to reach ChatGPT.
+  // Preserve specific terminal errors, but fence retryable failures with the
+  // same submission evidence as unclassified transport failures.
+  if (normalized instanceof ChatGptWebAdapterError && !normalized.retryable) return normalized;
   const phase = session.runtime.submission?.phase;
   if (!phase || phase === "prepared") return normalized;
   const ambiguous = phase === "send_activated";
@@ -420,6 +448,11 @@ export function createChatGptWebAdapter(
       ? resolve(expandUserPath(provider.chatgptWeb.lunaCheckpointStatePath))
       : undefined,
   );
+  const operationJournal = new OperationJournal(operationRuntimeDirectory(
+    provider.chatgptWeb?.threadEnvironmentStatePath
+      ? resolve(expandUserPath(provider.chatgptWeb.threadEnvironmentStatePath)) : undefined,
+    brokerSocketPath(provider),
+  ));
   const currentUsageInput = (parsed: CodexParsedRequest): CodexParsedRequest => (
     parsed.modelId === CHATGPT_WEB_LUNA_MODEL_ID && !experimentalBiggerContext && !parsed._compactionRequest
       ? lunaCheckpointStore.apply(parsed).parsed
@@ -431,7 +464,7 @@ export function createChatGptWebAdapter(
     environment: ReturnType<typeof extractChatGptTurnEnvironment> | undefined,
     traceId: string,
     turnCapabilities: ChatGptWebCapabilities,
-    hooks: { onCompactionProgress?: () => void } = {},
+    hooks: { onCompactionProgress?: () => void; operation?: DurableOperation } = {},
   ): ChatGptTurnRuntime => {
     const manualRequest = isChatGptWebZeroRiskBackendModel(parsed.modelId);
     if (manualRequest !== manualInteraction) {
@@ -453,6 +486,7 @@ export function createChatGptWebAdapter(
       ? lunaCheckpointStore.apply(parsed)
       : { parsed, applied: false };
     const conversationKey = !parsed._compactionRequest
+      && parsed._chatgptSessionMode !== "temporary"
       && !freshConversationPerTurn
       && (parsed.modelId !== CHATGPT_WEB_LUNA_MODEL_ID || experimentalBiggerContext)
       && retainedLauncherDescriptor
@@ -515,9 +549,15 @@ export function createChatGptWebAdapter(
     });
     const trace = new ChatGptTraceFeed();
     const text = new ChatGptTextFeed();
+    const richWidgets: ChatGptChartWidget[] = [];
+    let lastGenerationNotice = 0;
     const onGenerationProgress = (): void => {
       trace.recordProgress();
       hooks.onCompactionProgress?.();
+      if (hooks.operation && Date.now() - lastGenerationNotice >= 30_000) {
+        lastGenerationNotice = Date.now();
+        hooks.operation.notice("resumed", "已观察到ChatGPT网页仍有生成进展，继续等待当前回合；没有重新发送请求。");
+      }
     };
     const observedCapabilityTokens = new Set<string>();
     const observeCapabilityRetirement = (
@@ -544,14 +584,51 @@ export function createChatGptWebAdapter(
       );
     };
     const submission: NonNullable<ChatGptTurnRuntime["submission"]> = { phase: "prepared" };
+    let recoveringContext = false;
+    let contextRecoveries = 0;
+    let conversationPreparation: "unobserved" | "fresh" | "restored" = "unobserved";
+    async function observedPreparation<T>(kind: "fresh" | "restored", prepare: () => Promise<T>): Promise<T> {
+      const prepared = await prepare();
+      conversationPreparation = kind;
+      return prepared;
+    }
     // A canonical compaction request is side-effect free and remains safe to rebuild after an
     // ambiguous browser send. Normal task prompts must never be replayed after Send activation.
     const submissionLifecycle = {
-      ...(!parsed._compactionRequest ? {
-        onSendActivated: () => { submission.phase = "send_activated" as const; },
-      } : {}),
+      onConversationRecovered: () => { hooks.operation?.notice("conversation_forked"); },
+      onRecovering: (phase?: "connector_waiting" | "connector_refreshing" | "network_waiting") => {
+        hooks.operation?.notice("reconnecting", phase === "connector_refreshing"
+          ? "正在刷新ChatGPT连接器目录；本条消息尚未发送，不会重放旧工具。"
+          : phase === "connector_waiting"
+            ? "正在等待ChatGPT连接器目录加载；仍在原账号，本条消息尚未发送。"
+            : phase === "network_waiting"
+              ? "已观察到浏览器网络中断，正在服务端等待恢复；保持原账号和上下文，不会重复执行工具。" : undefined);
+      },
+      onConversationRestored: () => {
+        conversationPreparation = "restored";
+        hooks.operation?.notice("conversation_restored");
+      },
+      onSendActivated: () => {
+        hooks.operation?.beforeSend();
+        if (!parsed._compactionRequest) submission.phase = "send_activated";
+      },
       onSubmitted: () => {
+        hooks.operation?.accepted();
         if (!parsed._compactionRequest) submission.phase = "accepted";
+        const operation = hooks.operation;
+        const observation = operation?.record.observation;
+        const parent = forkedFromThreadId(parsed);
+        if (operation && !parsed._compactionRequest && !recoveringContext && conversationPreparation === "fresh"
+          && parent?.trim() && parent !== identity.threadId && observation
+          && observation.identity.operationId === operation.record.operationId
+          && observation.identity.executionKey === operation.record.executionKey
+          && observation.identity.roundKey === chatGptTurnRoundKey(parsed)
+          && observation.identity.threadId === identity.threadId && observation.identity.turnId === identity.turnId
+          && observation.conversation.key === conversationKey
+          && !operation.record.forkNoticeEmitted) {
+          operation.record.forkNoticeEmitted = true;
+          operation.notice("conversation_forked");
+        }
         hooks.onCompactionProgress?.();
       },
     };
@@ -615,6 +692,7 @@ export function createChatGptWebAdapter(
               text: "> **Action required in Zero Risk**\n>\n> Open the launcher, copy and paste the prompt into ChatGPT, add any images yourself because Zero Risk cannot transfer them, select the plugin shown in the launcher and the model you want, send the prompt, then confirm it was sent in the launcher.",
             });
           }
+          hooks.operation?.beforeSend();
           await zeroRiskManualControl.start(retainedLauncherDescriptor, {
             ...owner,
             prompt: compiled.text,
@@ -627,6 +705,7 @@ export function createChatGptWebAdapter(
             abortSignal: browserAbort.signal,
           });
           await broker.confirmSafeTurnSent(activeToken, surfaceNonce);
+          hooks.operation?.accepted();
           submission.phase = "accepted";
           if (!parsed._compactionRequest) trace.push({
             kind: "commentary",
@@ -680,7 +759,7 @@ export function createChatGptWebAdapter(
           // retirement observer also aborts browserAbort, but that self-induced abort must not turn
           // an ordinary launcher/runtime failure into a user cancellation.
           const externallyAborted = browserAbort.signal.aborted;
-          if (activeToken) await Promise.resolve(broker.revoke(activeToken, normalized)).catch(() => {});
+          if (activeToken) await Promise.resolve(broker.revoke(activeToken, normalized, { source: "runtime.failure", reason: externallyAborted ? "cancelled" : "failure" })).catch(() => {});
           try {
             await finishLauncher(externallyAborted ? "aborted" : "failed");
           } catch (controlError) {
@@ -705,27 +784,44 @@ export function createChatGptWebAdapter(
         physicalSettlement: browserTurn.physicalSettlement,
         trace,
         text,
+        richWidgets,
         usageInput: checkpointInput.parsed,
         manualControl: { surfaceNonce },
         ...(conversationKey ? { conversationKey } : {}),
         ...(releaseRetainedConversation ? { releaseRetainedConversation } : {}),
         retireCapability: async () => {
-          if (activeToken) await broker.revoke(activeToken);
+          if (activeToken) await broker.revoke(activeToken, undefined, { source: "runtime.retire", reason: "cleanup" });
         },
         submission,
         cancel: (reason?: Error) => {
           browserTurn.cancel(reason);
           if (activeToken) {
-            void Promise.resolve(broker.revoke(activeToken, reason)).catch(error => {
+            void Promise.resolve(broker.revoke(activeToken, reason, { source: "runtime.cancel", reason: "cancelled" })).catch(error => {
               console.error(`[chatgpt-web] failed to revoke cancelled Zero Risk request: ${error instanceof Error ? error.message : String(error)}`);
             });
           }
         },
       };
     }
+    const checkpointRecovery = (): void => {
+      recoveringContext = true;
+      contextRecoveries++;
+      submission.phase = "prepared";
+      const operation = hooks.operation;
+      if (!operation) return;
+      operation.record.recoveryAttempts = [...(operation.record.recoveryAttempts ?? []), {
+        at: Date.now(), submission: operation.record.submission, ...(operation.record.observation ? { observation: operation.record.observation } : {}),
+      }];
+      delete operation.record.observation;
+      delete operation.record.observationRound;
+      operation.record.attempt++;
+      operation.record.submission = "prepared";
+      operation.record.generation = "not_started";
+      operation.checkpoint();
+    };
     if (!mode.localTools) {
       const prepareQuestion = async (input: CodexParsedRequest, fresh = false) => {
-        if (fresh && input._chatgptSavedConversationContinuation) {
+        if (fresh && input._chatgptSavedConversationContinuation && !recoveringContext) {
           throw new ChatGptWebAdapterError("The verified previous response requires its saved ChatGPT conversation; a fresh chat was not created", {
             status: 409, errorType: "invalid_request_error", code: "saved_conversation_not_restored", retryable: false,
           });
@@ -759,17 +855,39 @@ export function createChatGptWebAdapter(
         return { ...compiled, release: () => {} };
       };
       const project = (parsed._rawBody as { client_metadata?: { _chatgpt_project?: { id: string; name: string } } } | undefined)?.client_metadata?._chatgpt_project;
-      const sessionMode = (parsed._rawBody as { client_metadata?: { _chatgpt_session_mode?: "temporary" | "persistent" } } | undefined)?.client_metadata?._chatgpt_session_mode;
+      const sessionMode = parsed._chatgptSessionMode ?? (parsed._rawBody as { client_metadata?: { _chatgpt_session_mode?: "temporary" | "persistent" } } | undefined)?.client_metadata?._chatgpt_session_mode;
+      const deferTextUntilComplete = (parsed._rawBody as { client_metadata?: { _chatgpt_defer_text_until_complete?: boolean } } | undefined)?.client_metadata?._chatgpt_defer_text_until_complete === true;
       const browserTurn = cancellableBrowserTurn(finalizeCheckpoint(worker.run({
         traceId,
         modelId: parsed.modelId,
+        ...(hooks.operation && identity.threadId && identity.turnId && conversationKey
+          && !parsed._compactionRequest && !captureLunaCheckpoint && sessionMode !== "temporary"
+          && retainedLauncherDescriptor && readLauncherBrowserHostDescriptor(retainedLauncherDescriptor).observationInstanceId ? {
+          observationIdentity: { operationId: hooks.operation.record.operationId, executionKey: hooks.operation.record.executionKey,
+            roundKey: chatGptTurnRoundKey(parsed), threadId: identity.threadId, turnId: identity.turnId },
+          onObservationReady: (checkpoint: import("./observation-recovery").BrowserObservationCheckpoint) => {
+            hooks.operation!.record.observation = checkpoint;
+            hooks.operation!.record.conversationKey = conversationKey;
+            hooks.operation!.record.observationRound ??= { roundKey: chatGptTurnRoundKey(parsed), deliveredToolResults: {} };
+            hooks.operation!.checkpoint();
+            hooks.operation!.notice("account_pinned");
+          },
+        } : {}),
+        authorizeRecovery: async reason => {
+          if (reason) return false;
+          if (text.value() || contextRecoveries >= 3 || !hooks.operation) return false;
+          checkpointRecovery(); return true;
+        },
         ...(project && !parsed._compactionRequest ? { project } : {}),
         ...(sessionMode && !parsed._compactionRequest ? { sessionMode } : {}),
+        ...(deferTextUntilComplete && !parsed._compactionRequest ? { deferTextUntilComplete: true } : {}),
         reasoning: parsed.options.reasoning,
         ...(parsed._chatgptModelFamily ? { modelFamily: parsed._chatgptModelFamily } : {}),
+        ...(parsed._chatgptProModel ? { proModel: true } : {}),
         capabilities: turnCapabilities,
-        prepare: () => prepareQuestion(checkpointInput.parsed, true),
-        ...(resumeInput ? { prepareResume: () => prepareQuestion(resumeInput) } : {}),
+        canonicalHistory: canonicalConversationHistory(checkpointInput.parsed),
+        prepare: () => observedPreparation("fresh", () => prepareQuestion(checkpointInput.parsed, true)),
+        ...(resumeInput ? { prepareResume: () => observedPreparation("restored", () => prepareQuestion(resumeInput)) } : {}),
         ...(retainConversation ? { retainConversation: true, conversationKey } : {}),
         abortSignal: browserAbort.signal,
         ...(parsed._compactionRequest ? { compaction: true } : {}),
@@ -778,6 +896,7 @@ export function createChatGptWebAdapter(
         onReasoningSummary: (text, continuation) => trace.push({ kind: "reasoning", text, ...(continuation ? { continuation: true } : {}) }),
         onCommentary: (text, continuation) => trace.push({ kind: "commentary", text, ...(continuation ? { continuation: true } : {}) }),
         onTextDelta: delta => { text.push(delta); onGenerationProgress(); },
+        ...(deferTextUntilComplete ? { onRichWidgets: (widgets: ChatGptChartWidget[]) => { richWidgets.push(...widgets); } } : {}),
         onGenerationProgress,
         ...(captureLunaCheckpoint ? {
           captureLunaCheckpoint: true,
@@ -790,6 +909,7 @@ export function createChatGptWebAdapter(
         physicalSettlement: browserTurn.physicalSettlement,
         trace,
         text,
+        richWidgets,
         usageInput: checkpointInput.parsed,
         ...(conversationKey ? { conversationKey } : {}),
         ...(releaseRetainedConversation ? { releaseRetainedConversation } : {}),
@@ -802,6 +922,8 @@ export function createChatGptWebAdapter(
     const externalProgress = new ChatGptExternalTurnProgress();
     let tokenSettled = false;
     let activeToken: string | undefined;
+    let browserToken: string | undefined;
+    let receiptRecoveryInput: CodexParsedRequest | undefined;
     const prepareWith = async (input: CodexParsedRequest) => {
       const turnToken = activeToken ?? await broker.register(
         environment,
@@ -809,12 +931,13 @@ export function createChatGptWebAdapter(
         traceId,
       );
       activeToken = turnToken;
+      browserToken ??= turnToken;
       try {
         const compiled = compileChatGptWebPrompt(
           input,
           turnCapabilities,
-          turnToken,
-          compileOptionsFor(input),
+          browserToken,
+          { ...compileOptionsFor(input), ...(receiptRecoveryInput ? { completedNativeReceiptRecovery: true } : {}) },
         );
         // Publish only after preparation succeeds: otherwise its failure revokes the token
         // before the response observer uses it and masks the cause as an expired capability.
@@ -825,7 +948,7 @@ export function createChatGptWebAdapter(
         }
         return { ...compiled, release: () => {} };
       } catch (error) {
-        await broker.revoke(turnToken);
+        await broker.revoke(turnToken, undefined, { source: "runtime.prepare", reason: "failure" });
         activeToken = undefined;
         throw error;
       }
@@ -833,12 +956,79 @@ export function createChatGptWebAdapter(
     const browserTurn = cancellableBrowserTurn(trackBrowserOwner(finalizeCheckpoint(worker.run({
       traceId,
       modelId: parsed.modelId,
+      ...(hooks.operation && identity.threadId && identity.turnId && conversationKey
+        && !parsed._compactionRequest && !captureLunaCheckpoint && parsed._chatgptSessionMode !== "temporary"
+        && retainedLauncherDescriptor && readLauncherBrowserHostDescriptor(retainedLauncherDescriptor).observationInstanceId ? {
+        observationIdentity: { operationId: hooks.operation.record.operationId, executionKey: hooks.operation.record.executionKey,
+          roundKey: chatGptTurnRoundKey(parsed), threadId: identity.threadId, turnId: identity.turnId },
+        onObservationReady: (checkpoint: import("./observation-recovery").BrowserObservationCheckpoint) => {
+          if (!activeToken || checkpoint.toolChannel?.tokenHash !== operationDigest(browserToken ?? activeToken)) {
+            throw observationUnavailable("the original native channel does not match its browser checkpoint");
+          }
+          hooks.operation!.record.observation = checkpoint;
+          hooks.operation!.record.conversationKey = conversationKey;
+          hooks.operation!.record.observationRound ??= { roundKey: chatGptTurnRoundKey(parsed), deliveredToolResults: {} };
+          hooks.operation!.checkpoint();
+          hooks.operation!.notice("account_pinned");
+        },
+      } : {}),
+      authorizeRecovery: async reason => {
+        if (text.value() || contextRecoveries >= 3 || !hooks.operation) return false;
+        if (reason === "receipt_only_failure" && !receiptRecoveryInput) return false;
+        if (reason === "delivery_loss") {
+          const accepted = hooks.operation.record.observationRound?.deliveredToolResults;
+          if (!activeToken || !accepted || !broker.recoverCompletedReceipts) return false;
+          const recovery = await broker.recoverCompletedReceipts(activeToken, accepted);
+          if (!recovery) return false;
+          const messages = [...checkpointInput.parsed.context.messages];
+          for (const receipt of recovery.receipts) {
+            if (receipt.resultHash !== operationDigest(JSON.stringify(receipt.result))
+              || accepted[receipt.request.callId] !== receipt.resultHash || receipt.request.freeform) {
+              throw new Error("Completed Native context receipt failed validation");
+            }
+            messages.push({ role: "assistant", timestamp: Date.now(), content: [{ type: "toolCall",
+              id: receipt.request.callId, name: receipt.request.wireName, arguments: receipt.request.arguments! }] });
+            messages.push({ role: "toolResult", timestamp: Date.now(), toolCallId: receipt.request.callId,
+              toolName: receipt.request.wireName, content: JSON.stringify(receipt.result), isError: receipt.result.isError === true });
+          }
+          receiptRecoveryInput = { ...checkpointInput.parsed, context: { ...checkpointInput.parsed.context, messages } };
+          browserToken = recovery.token;
+          checkpointRecovery();
+          hooks.operation.record.observationRound = { roundKey: chatGptTurnRoundKey(parsed), deliveredToolResults: { ...accepted } };
+          hooks.operation.checkpoint();
+          return true;
+        }
+        if (receiptRecoveryInput && activeToken && broker.recoverCompletedReceipts) {
+          const accepted = hooks.operation.record.observationRound?.deliveredToolResults;
+          if (!accepted) return false;
+          const retry = await broker.recoverCompletedReceipts(activeToken, accepted, true);
+          if (!retry) return false;
+          browserToken = retry.token;
+          checkpointRecovery();
+          hooks.operation.record.observationRound = { roundKey: chatGptTurnRoundKey(parsed), deliveredToolResults: { ...accepted } };
+          hooks.operation.checkpoint();
+          return true;
+        }
+        // History rollback is detected before prepare/register, so no current
+        // browser capability exists yet. Durable admission still fences older owners.
+        if (!activeToken && hooks.operation.record.submission === "prepared" && !hooks.operation.record.observation) {
+          checkpointRecovery(); return true;
+        }
+        if (!activeToken || !broker.rotateForRecovery) return false;
+        const replacement = await broker.rotateForRecovery(activeToken);
+        if (!replacement) return false;
+        browserToken = replacement;
+        checkpointRecovery();
+        return true;
+      },
       ...(!parsed._compactionRequest ? { sessionMode: parsed._chatgptSessionMode ?? "persistent" } : {}),
       reasoning: parsed.options.reasoning,
       ...(parsed._chatgptModelFamily ? { modelFamily: parsed._chatgptModelFamily } : {}),
+      ...(parsed._chatgptProModel ? { proModel: true } : {}),
       capabilities: turnCapabilities,
-      prepare: () => prepareWith(checkpointInput.parsed),
-      ...(resumeInput ? { prepareResume: () => prepareWith(resumeInput) } : {}),
+      canonicalHistory: canonicalConversationHistory(checkpointInput.parsed),
+      prepare: () => observedPreparation("fresh", () => prepareWith(receiptRecoveryInput ?? checkpointInput.parsed)),
+      ...(resumeInput ? { prepareResume: () => observedPreparation("restored", () => prepareWith(resumeInput)) } : {}),
       ...(retainConversation ? { retainConversation: true, conversationKey } : {}),
       abortSignal: browserAbort.signal,
       ...(parsed._compactionRequest ? { compaction: true } : {}),
@@ -876,13 +1066,13 @@ export function createChatGptWebAdapter(
       ...(conversationKey ? { conversationKey } : {}),
       ...(releaseRetainedConversation ? { releaseRetainedConversation } : {}),
       retireCapability: async () => {
-        if (activeToken) await broker.revoke(activeToken);
+        if (activeToken) await broker.revoke(activeToken, undefined, { source: "runtime.retire", reason: "cleanup" });
       },
       submission,
       cancel: (reason?: Error) => {
         browserTurn.cancel(reason);
         if (activeToken) {
-          void Promise.resolve(broker.revoke(activeToken, reason)).catch(error => {
+          void Promise.resolve(broker.revoke(activeToken, reason, { source: "runtime.cancel", reason: "cancelled" })).catch(error => {
             console.error(`[chatgpt-web] failed to revoke cancelled turn token: ${error instanceof Error ? error.message : String(error)}`);
           });
         }
@@ -929,7 +1119,7 @@ export function createChatGptWebAdapter(
           });
           return;
         }
-        const turnCapabilities = parsed._compactionRequest && !manualRequest
+        const turnCapabilities = (parsed._compactionRequest || parsed._chatgptLocalTools === false) && !manualRequest
           ? { ...configuredCapabilities, localToolsEnabled: false }
           : configuredCapabilities;
         const mode = manualRequest
@@ -998,8 +1188,40 @@ export function createChatGptWebAdapter(
               .slice(0, 12);
             const freshCompactionTraceId = `${handoffTraceId}_${freshConversationPerTurn ? "fresh" : "fallback"}`;
             const compactionNativeIdentity = extractChatGptTurnIdentity(parsed);
+            const compactionRoundKey = chatGptTurnRoundKey(parsed);
             let sharedSummary = existingStructuredCompactionRun(compactionExecutionKey);
+            let compactionOperation: DurableOperation | undefined;
+            let previousCompaction: OperationRecord | undefined;
+            const compactionSettlements: Promise<void>[] = [];
+            let continuationSource: DurableOperation | undefined;
+            const markCompactionSource = (operation?: DurableOperation): void => {
+              if (!operation || continuationSource === operation) return;
+              operation.record.compactionContinuation = { compactionExecutionKey,
+                compactionOperationId: compactionOperation!.record.operationId };
+              operation.checkpoint(); // Fence summary-vs-ordinary-final before giving the source a handoff instruction.
+              continuationSource = operation;
+            };
             if (!sharedSummary) {
+              const saved = operationJournal.read<OperationRecord>(compactionExecutionKey);
+              if (saved) {
+                if (saved.generation === "final" && saved.final) sharedSummary = Promise.resolve(saved.final.answer);
+                else if (saved.physicalSettled && saved.error) previousCompaction = saved;
+                else throw retainedOperationError();
+              }
+            }
+            if (!sharedSummary) {
+              compactionOperation = new DurableOperation(operationJournal, {
+                version: 1, operationId: `op_${operationDigest(compactionExecutionKey)}`,
+                executionKey: compactionExecutionKey, traceId: compactionTraceId,
+                ownerKey: `${executionNamespace}:${chatGptThreadOwnershipKey(parsed)}`,
+                threadId: compactionNativeIdentity.threadId, turnId: compactionNativeIdentity.turnId,
+                requestIds: (incoming.headers.get("x-request-id") ?? incoming.headers.get("x-cpr-request-id"))
+                  ? [operationDigest((incoming.headers.get("x-request-id") ?? incoming.headers.get("x-cpr-request-id"))!)] : [],
+                submission: "prepared", generation: "not_started", delivery: "attached", recovery: "none",
+                seq: previousCompaction?.seq ?? 0, attempt: (previousCompaction?.attempt ?? 0) + 1, updatedAt: Date.now(),
+                rounds: { [compactionRoundKey]: { events: [], reasoning: [], completed: false } },
+              });
+              compactionOperation.checkpoint();
               sharedSummary = runStructuredCompactionOnce(
                 compactionExecutionKey,
                 {
@@ -1017,6 +1239,10 @@ export function createChatGptWebAdapter(
                     : {}),
                 },
                 async (operatorSignal, retainOwnershipUntil) => {
+                  const retainCompactionOwnerUntil = (settlement: Promise<void>): void => {
+                    compactionSettlements.push(settlement);
+                    retainOwnershipUntil(settlement);
+                  };
                   const handoffTimeoutMs = Math.min(
                     timeoutMs ?? MAX_COMPACTION_HANDOFF_TIMEOUT_MS,
                     MAX_COMPACTION_HANDOFF_TIMEOUT_MS,
@@ -1063,9 +1289,9 @@ export function createChatGptWebAdapter(
                       manualRequest ? environment : undefined,
                       freshCompactionTraceId,
                       turnCapabilities,
-                      { onCompactionProgress: armHandoffDeadline },
+                      { onCompactionProgress: armHandoffDeadline, operation: compactionOperation },
                     );
-                    retainOwnershipUntil(fallbackRuntime.physicalSettlement);
+                    retainCompactionOwnerUntil(fallbackRuntime.physicalSettlement);
                     try {
                       const rawSummary = await withAbort(fallbackRuntime.browser, operationSignal);
                       await withAbort(fallbackRuntime.physicalSettlement, operationSignal);
@@ -1089,8 +1315,9 @@ export function createChatGptWebAdapter(
                       const settlement = previous?.settledOutcome()?.type === "final"
                         ? previous.physicalSettlement
                         : chatGptTurnSessions.retireAndWait(compactedSourceExecutionKey).then(() => {});
-                      retainOwnershipUntil(settlement);
+                      retainCompactionOwnerUntil(settlement);
                       await withAbort(settlement, operationSignal);
+                      if (previous && previous.settledOutcome()?.type !== "final") markCompactionSource(previous.runtime.operation);
                       return await runFreshCompaction("configured_fresh_conversation");
                     }
                     // The previous compaction may already have detached the retained head while
@@ -1113,8 +1340,10 @@ export function createChatGptWebAdapter(
                     }
                     // Renew only for observed source activity, never an idle helper heartbeat.
                     stopSourceProgress = source.runtime.trace.observeProgress(armHandoffDeadline);
+                    compactionOperation!.beforeSend();
                     let rawSummary: string;
                     if (manualRequest && source.isActive() && source.runtime.mode === "tools") {
+                      markCompactionSource(source.runtime.operation);
                       const zeroRiskSummary = await settleActiveZeroRiskCompactionSource(
                         parsed,
                         source,
@@ -1136,6 +1365,7 @@ export function createChatGptWebAdapter(
                       }
                       rawSummary = await runFreshCompaction("zero_risk_source_already_completed");
                     } else if (source.isActive() && source.runtime.mode === "tools") {
+                      markCompactionSource(source.runtime.operation);
                       const settlement = await settleActiveCompactionSource(
                         parsed,
                         source,
@@ -1148,6 +1378,7 @@ export function createChatGptWebAdapter(
                       stopSourceProgress?.();
                       handoffPhase = "retained_checkpoint";
                       armHandoffDeadline();
+                      compactionOperation!.beforeSend();
                       rawSummary = await requestRetainedCompactionHandoff(
                         worker,
                         parsed,
@@ -1190,6 +1421,11 @@ export function createChatGptWebAdapter(
                         : chatGptTurnSessions.retireConversationAndWait(retainedKey),
                       operationSignal,
                     );
+                    if (preserveFinalResponse && continuationSource) {
+                      delete continuationSource.record.compactionContinuation;
+                      continuationSource.checkpoint();
+                      continuationSource = undefined;
+                    } else if (!preserveFinalResponse) markCompactionSource(source.runtime.operation);
                     return summary;
                   } catch (error) {
                     const retainedKey = source?.conversationKey();
@@ -1211,6 +1447,11 @@ export function createChatGptWebAdapter(
                         "Structured compaction failed and its retained conversation could not be retired",
                       );
                     }
+                    if (preserveFinalResponse && continuationSource) {
+                      delete continuationSource.record.compactionContinuation;
+                      continuationSource.checkpoint();
+                      continuationSource = undefined;
+                    }
                     if (handoffError instanceof ChatGptWebAdapterError
                       && handoffError.code === "compaction_source_unavailable") {
                       return await runFreshCompaction("source_disappeared_before_handoff");
@@ -1221,7 +1462,37 @@ export function createChatGptWebAdapter(
                     if (handoffTimer) clearTimeout(handoffTimer);
                   }
                 },
-              );
+              ).then(summary => {
+                const events: AdapterEvent[] = [{ type: "text_delta", text: summary, phase: "final_answer" }];
+                emitBrowserCompletion({ type: "final", answer: summary },
+                  estimateChatGptWebUsage(parsed, { answer: summary, reasoning: [] }, turnCapabilities,
+                    experimentalBiggerContext, experimentalSkillAttachments), event => events.push(event));
+                const record = compactionOperation!.record;
+                if (continuationSource) {
+                  continuationSource.record.compactionContinuation!.summaryHash = operationDigest(summary);
+                  continuationSource.checkpoint();
+                }
+                record.generation = "final"; record.delivery = "unknown"; record.physicalSettled = true;
+                record.final = { answer: summary, events, reasoning: [] };
+                record.rounds[compactionRoundKey] = { events, reasoning: [], completed: true };
+                compactionOperation!.checkpoint();
+                return summary;
+              }, error => {
+                const record = compactionOperation!.record;
+                record.generation = "unknown"; record.recovery = "retained";
+                record.error = { code: error instanceof ChatGptWebAdapterError ? error.code : undefined, retryable: false };
+                compactionOperation!.checkpoint();
+                // Canonical compaction is side-effect free. Preserve its existing explicit
+                // rebuild only after the original physical owner has proven retirement. A
+                // crash before this checkpoint leaves unknown retained, never a new Send.
+                if (compactionSettlements.length || record.submission === "prepared") {
+                  void Promise.all(compactionSettlements).then(() => {
+                    record.physicalSettled = true;
+                    compactionOperation!.checkpoint();
+                  }).catch(() => console.error(`[chatgpt-web] compaction retirement checkpoint unavailable; trace=${compactionTraceId}, recovery=retained`));
+                }
+                throw error;
+              });
             }
             emit({ type: "heartbeat" });
             let summary: string;
@@ -1250,12 +1521,10 @@ export function createChatGptWebAdapter(
               });
               return;
             }
-            emit({ type: "text_delta", text: summary, phase: "final_answer" });
-            emitBrowserCompletion(
-              { type: "final", answer: summary },
-              estimateChatGptWebUsage(parsed, { answer: summary, reasoning: [] }, turnCapabilities, experimentalBiggerContext, experimentalSkillAttachments),
-              emit,
-            );
+            const checkpoint = operationJournal.read<OperationRecord>(compactionExecutionKey);
+            const events = checkpoint?.rounds[compactionRoundKey]?.events;
+            if (!events) throw retainedOperationError();
+            replayEvents(events, emit);
             chatGptWebTurnRetryPolicy.clear(retryKey);
             return;
           }
@@ -1281,7 +1550,108 @@ export function createChatGptWebAdapter(
         const session = await chatGptTurnSessions.getOrCreateAfterOwnerRetirement(
           executionKey,
           ownerKey,
-          () => startRuntime(parsed, environment, traceId, turnCapabilities),
+          () => {
+            const saved = operationJournal.read<OperationRecord>(executionKey);
+            const continuation = saved?.compactionContinuation;
+            const committed = continuation?.summaryHash
+              ? operationJournal.read<OperationRecord>(continuation.compactionExecutionKey) : undefined;
+            const resumeCompaction = Boolean(saved?.physicalSettled && continuation?.summaryHash
+              && committed?.generation === "final" && committed.final
+              && committed.operationId === continuation.compactionOperationId
+              && operationDigest(committed.final.answer) === continuation.summaryHash
+              && resumesCommittedCompaction(parsed, continuation.summaryHash));
+            if (continuation && !resumeCompaction) throw retainedOperationError();
+            // Only an observed, retryable pre-Send failure permits another attempt.
+            const safeRetry = saved?.submission === "prepared" && saved.error?.retryable === true;
+            if (saved && !safeRetry && !resumeCompaction) {
+              if (saved.version !== 1 || saved.executionKey !== executionKey) throw new Error("Invalid operation identity; dispatch blocked");
+              const operation = new DurableOperation(operationJournal, saved);
+              if (saved.generation !== "final" || !saved.final) {
+                const c = saved.observation && parseBrowserObservation(saved.observation);
+                const roundKey = chatGptTurnRoundKey(parsed);
+                const round = saved.rounds[roundKey];
+                if (c && !manualRequest && !parsed._compactionRequest
+                  && saved.submission === "accepted" && !saved.physicalSettled && round && !round.completed
+                  && saved.rounds[c.identity.roundKey]
+                  && !round.events.some(event => event.type === "tool_call_start" || event.type === "error")
+                  && c.identity.operationId === saved.operationId && c.identity.executionKey === executionKey
+                  && (mode.localTools ? saved.observationRound?.roundKey === roundKey : c.identity.roundKey === roundKey)
+                  && c.identity.threadId === nativeIdentity.threadId
+                  && c.identity.turnId === nativeTurnId && c.traceId === traceId && c.modelId === parsed.modelId
+                  && saved.threadId === nativeIdentity.threadId && saved.turnId === nativeTurnId
+                  && saved.ownerKey === ownerKey && c.conversation.key === saved.conversationKey) {
+                  const inspectTools = () => {
+                    if (!mode.localTools) return undefined;
+                    if (!structuredBroker || !c.toolChannel || !saved.observationRound) throw observationUnavailable("the original native owner proof is unavailable");
+                    const delivered = saved.observationRound.deliveredToolResults;
+                    for (const [id, hash] of Object.entries(delivered)) {
+                      const matches = parsed.context.messages.filter(message => message.role === "toolResult" && message.toolCallId === id);
+                      if (matches.length !== 1 || operationDigest(JSON.stringify(brokerResult(matches[0] as CodexToolResultMessage))) !== hash) {
+                        throw observationUnavailable("the reconnect round does not contain the original terminal tool result");
+                      }
+                    }
+                    try { return structuredBroker.inspectRetainedObservation(c.toolChannel.tokenHash, c.traceId, delivered); }
+                    catch (error) { throw observationUnavailable(error instanceof Error ? error.message : "native proof unavailable"); }
+                  };
+                  let toolFence: ReturnType<typeof inspectTools>;
+                  try { toolFence = inspectTools(); } catch (error) {
+                    emit({ type: "provider_notice", notice: operation.notice("needs_reconcile") }); throw error;
+                  }
+                  const prefix = Object.values(saved.rounds).flatMap(value => value.events).filter(event => event.type === "text_delta" && event.phase === "final_answer")
+                    .map(event => (event as { text: string }).text).join("");
+                  const text = new ChatGptTextFeed();
+                  text.push(prefix); text.drain();
+                  const suffix = observationSuffix(prefix, delta => text.push(delta));
+                  const abort = new AbortController();
+                  operation.notice("reconnecting");
+                  const browser = worker.run({ traceId, modelId: parsed.modelId, capabilities: turnCapabilities,
+                    observation: c, ...(toolFence ? { observationToolFence: toolFence } : {}), abortSignal: abort.signal,
+                    prepare: async () => { throw observationUnavailable("an observer cannot prepare a prompt"); },
+                    onTextDelta: delta => suffix.push(delta),
+                    onConversationRestored: () => { operation.notice("conversation_restored"); },
+                    onObservationResumed: () => { operation.notice("resumed"); },
+                  }).then(answer => {
+                    if (toolFence && inspectTools()?.digest !== toolFence.digest) throw observationUnavailable("original native receipt state changed during observation");
+                    suffix.finish(answer); return answer;
+                  });
+                  return { mode: "read-only" as const, operation, browser,
+                    physicalSettlement: browser.then(() => undefined, () => undefined), trace: new ChatGptTraceFeed(), text,
+                    submission: { phase: "accepted" as const }, usageInput: parsed, conversationKey: saved.conversationKey,
+                    cancel(reason?: Error) { abort.abort(reason); } };
+                }
+                saved.recovery = "retained";
+                operation.checkpoint();
+                console.info(`[chatgpt-web] execution_retained ${JSON.stringify(operation.receipt())}`);
+                throw retainedOperationError();
+              }
+              // Replay the persisted prefix; only a final not yet journaled needs a suffix.
+              const round = saved.rounds[chatGptTurnRoundKey(parsed)];
+              if (round?.events.some(event => event.type === "tool_call_start")) throw retainedOperationError();
+              const prefix = round?.events.filter(event => event.type === "text_delta" && event.phase === "final_answer")
+                .map(event => (event as { text: string }).text).join("") ?? "";
+              const suffix = saved.final.answer.slice(prefix.length);
+              const restoredText = new ChatGptTextFeed();
+              restoredText.push(prefix); restoredText.drain(); restoredText.push(suffix);
+              return { mode: "read-only" as const, operation, browser: Promise.resolve(saved.final.answer),
+                physicalSettlement: Promise.resolve(), trace: new ChatGptTraceFeed(), text: restoredText,
+                submission: { phase: saved.submission }, usageInput: parsed,
+                conversationKey: saved.conversationKey, cancel() {} };
+            }
+            const unresolved = operationJournal.unresolvedOwner(ownerKey, executionKey);
+            if (unresolved && !chatGptTurnSessions.find(unresolved.executionKey)) throw retainedOperationError();
+            const operation = new DurableOperation(operationJournal, {
+              version: 1, operationId: `op_${operationDigest(executionKey)}`, executionKey, traceId, ownerKey,
+              threadId: nativeIdentity.threadId, turnId: nativeTurnId,
+              requestIds: (incoming.headers.get("x-request-id") ?? incoming.headers.get("x-cpr-request-id"))
+                ? [operationDigest((incoming.headers.get("x-request-id") ?? incoming.headers.get("x-cpr-request-id"))!)] : [],
+              submission: "prepared", generation: "not_started", delivery: "attached", recovery: "none",
+              seq: saved?.seq ?? 0, attempt: (saved?.attempt ?? 0) + 1, updatedAt: Date.now(),
+              rounds: { ...(resumeCompaction ? saved!.rounds : {}),
+                [chatGptTurnRoundKey(parsed)]: { events: [], reasoning: [], completed: false } },
+            });
+            operation.checkpoint(); // Intent must survive before starting any browser work.
+            return { ...startRuntime(parsed, environment, traceId, turnCapabilities, { operation }), operation };
+          },
           traceId,
           incoming.abortSignal,
           nativeTurnId,
@@ -1293,12 +1663,58 @@ export function createChatGptWebAdapter(
         // A reconnect may disconnect while awaiting the registry; it must not evict a live observer.
         if (incoming.abortSignal?.aborted) throw new DOMException("ChatGPT web turn aborted", "AbortError");
         const roundKey = chatGptTurnRoundKey(parsed);
+        const operation = session.runtime.operation;
+        if (operation) {
+          const requestId = incoming.headers.get("x-request-id") ?? incoming.headers.get("x-cpr-request-id");
+          if (requestId) {
+            const ref = operationDigest(requestId);
+            if (!operation.record.requestIds.includes(ref)) operation.record.requestIds.push(ref);
+            operation.record.requestIds = operation.record.requestIds.slice(-32);
+          }
+          operation.record.delivery = "attached";
+          session.checkpoint();
+        }
+        const stopNotices = operation?.observeNotices(notice => {
+          if (!incoming.abortSignal?.aborted) {
+            try { emit({ type: "provider_notice", notice }); }
+            catch { /* emit already detached this HTTP observer; notice publication cannot cancel browser execution. */ }
+          }
+        });
+        let pendingEvents: AdapterEvent[] = [];
+        let firstDeltaPublished = session.roundEvents(roundKey).some(event => event.type === "text_delta"
+          || event.type === "thinking_delta" || event.type === "reasoning_raw_delta");
+        let checkpointTimer: ReturnType<typeof setTimeout> | undefined;
+        let checkpointFailure: unknown;
+        const flushEvents = (): void => {
+          if (checkpointTimer) clearTimeout(checkpointTimer);
+          checkpointTimer = undefined;
+          if (!pendingEvents.length) return;
+          session.checkpoint(); // No observer sees data beyond the durable checkpoint.
+          const batch = pendingEvents;
+          pendingEvents = [];
+          for (const event of batch) emit(event);
+        };
         const emitRoundEvents = (events: readonly AdapterEvent[]): void => {
           // Journal the complete synchronous event batch before touching the HTTP observer. If the
           // observer disconnects midway through emission, an exact reconnect can replay the entire
           // canonical batch instead of losing the already-drained tail.
+          if (checkpointFailure) throw checkpointFailure;
           session.appendRoundEvents(roundKey, events);
-          for (const event of events) emit(event);
+          pendingEvents.push(...events);
+          const firstDelta = !firstDeltaPublished && events.some(event => event.type === "text_delta"
+            || event.type === "thinking_delta" || event.type === "reasoning_raw_delta");
+          if (firstDelta || events.some(event => event.type !== "text_delta" && event.type !== "thinking_delta" && event.type !== "reasoning_raw_delta")) {
+            flushEvents();
+            if (firstDelta) firstDeltaPublished = true;
+          } else if (pendingEvents.length && !checkpointTimer) {
+            checkpointTimer = setTimeout(() => {
+              try { flushEvents(); }
+              catch (error) {
+                checkpointFailure = error;
+                observerAbort.abort(error);
+              }
+            }, 50);
+          }
         };
         const emitRoundBatch = (
           produce: (buffer: (event: AdapterEvent) => void) => void,
@@ -1400,7 +1816,16 @@ export function createChatGptWebAdapter(
                   session.runtime.externalProgress.recordToolResult();
                   session.runtime.trace.recordProgress();
                   session.markResultDelivered(message.toolCallId);
+                  if (operation) {
+                    operation.record.observationRound ??= { roundKey, deliveredToolResults: {} };
+                    operation.record.observationRound.deliveredToolResults[message.toolCallId] = operationDigest(JSON.stringify(brokerResult(message)));
+                  }
                 }
+              }
+              if (operation) {
+                operation.record.observationRound ??= { roundKey, deliveredToolResults: {} };
+                operation.record.observationRound.roundKey = roundKey;
+                session.checkpoint(); // Native result receipt + canonical HTTP round survive before its response/ACK.
               }
             } else if (session.outstanding().length > 0) {
               throw new Error("Read-only ChatGPT Web runtime cannot own local tool calls");
@@ -1461,7 +1886,7 @@ export function createChatGptWebAdapter(
                 emitNewText(session.runtime.text.drain());
                 session.setFinalReasoning(roundReasoning);
                 session.setFinalEvents(session.roundEvents(roundKey));
-                if (turnToken) await broker.revoke(turnToken);
+                if (turnToken) await broker.revoke(turnToken, undefined, { source: "runtime.browser_outcome", reason: completedOutcome.type === "error" ? "failure" : "completed" });
                 if (completedOutcome.type === "error") throw completedOutcome.error;
                 if (session.runtime.text.value() !== completedOutcome.answer) {
                   throw new Error("ChatGPT browser Markdown stream did not reproduce the completed answer");
@@ -1469,6 +1894,11 @@ export function createChatGptWebAdapter(
                 structuredOutputValidator?.(completedOutcome.answer);
                 if (bufferStructuredOutput) {
                   emitRoundBatch(buffer => emitTextDeltas([completedOutcome.answer], buffer));
+                }
+                if (session.runtime.richWidgets?.length) {
+                  emitRoundBatch(buffer => {
+                    for (const widget of session.runtime.richWidgets!) buffer({ type: "rich_widget", widget });
+                  });
                 }
                 emitRoundBatch(buffer => emitBrowserCompletion(
                   completedOutcome,
@@ -1530,6 +1960,7 @@ export function createChatGptWebAdapter(
                 }
                 validateBatchTools(parsed, next.requests);
                 session.setOutstanding(next.requests, roundReasoning, session.roundEvents(roundKey));
+                operation?.notice("tool_waiting");
                 emitRoundBatch(buffer => emitToolBatch(
                   next.requests,
                   estimateChatGptWebUsage(currentUsageInput(parsed), { reasoning: roundReasoning, toolRequests: next.requests }, turnCapabilities, experimentalBiggerContext, experimentalSkillAttachments),
@@ -1577,7 +2008,7 @@ export function createChatGptWebAdapter(
             chatGptTurnSessions.retire(executionKey, session);
           }
           if (session.runtime.mode === "tools") {
-            void session.runtime.token.then(turnToken => broker.revoke(turnToken)).catch(() => {});
+            void session.runtime.token.then(turnToken => broker.revoke(turnToken, undefined, { source: "runtime.failure", reason: "failure" })).catch(() => {});
           }
           if (handledError instanceof ChatGptWebAdapterError) {
             emitRoundEvent({
@@ -1595,6 +2026,18 @@ export function createChatGptWebAdapter(
           chatGptWebTurnRetryPolicy.clear(retryKey);
           throw turnError;
         } finally {
+          stopNotices?.();
+          if (checkpointTimer) clearTimeout(checkpointTimer);
+          // Persist drained data even when the observer went away; never cancel the browser.
+          if (pendingEvents.length) {
+            session.checkpoint();
+            if (!incoming.abortSignal?.aborted) flushEvents();
+          }
+          if (operation) {
+            if (incoming.abortSignal?.aborted) operation.notice("observer_detached");
+            operation.record.delivery = incoming.abortSignal?.aborted ? "detached" : "unknown";
+            session.checkpoint();
+          }
           releaseObserver?.();
         }
       };

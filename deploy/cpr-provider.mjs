@@ -1,12 +1,14 @@
 import {readFileSync, existsSync, unlinkSync, chmodSync} from 'node:fs';
-import {timingSafeEqual,randomUUID} from 'node:crypto';
+import {timingSafeEqual} from 'node:crypto';
 import {zstdDecompressSync, gunzipSync} from 'node:zlib';
 import http from 'node:http';
-import {Transform} from 'node:stream';
+import {Transform,pipeline} from 'node:stream';
 import {StringDecoder} from 'node:string_decoder';
-import {normalizeCprRequest} from './cpr-session.mjs';
+import {normalizeCprRequest,cprRequestId,cprProviderEvidence,cprEvidenceHeaders,cprRuntimeEvidence,cprReadinessEvidence,cprFailureEvidence,cprRequestEvidence,observeCprUpstreamError} from './cpr-session.mjs';
 const home=process.argv[2];
 const config=JSON.parse(readFileSync(home+'/config.json','utf8'));
+const evidence=cprProviderEvidence(config);
+const evidenceHeaders=cprEvidenceHeaders(evidence);
 const key=readFileSync(home+'/provider.key','utf8').trim();
 const socketPath=home+'/cpr/provider.sock';
 const reply=(res,status,message)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify({error:{message,type:'local_provider_error'}}));};
@@ -66,9 +68,22 @@ const serve=async(req,res)=>{
   const supplied=Buffer.from(req.headers.authorization||'');
   const expected=Buffer.from('Bearer '+key);
   if(supplied.length!==expected.length||!timingSafeEqual(supplied,expected)){reply(res,401,'Unauthorized');return;}
+  const requestId=cprRequestId(req.headers);
+  res.setHeader('x-request-id',requestId);
+  for(const [name,value] of Object.entries(evidenceHeaders))res.setHeader(name,value);
+  let forwarded=false,recorded=false,incomplete=false,runtime=null,upstreamError;
+  const record=()=>{
+    if(recorded)return;recorded=true;
+    console.error(`[cpr-provider] ${JSON.stringify({...cprRequestEvidence(requestId,evidence),
+      status:res.statusCode,runtime,
+      ...(res.statusCode>=400||incomplete?{failure:cprFailureEvidence(res.statusCode,{forwarded,incomplete,upstreamError})}:{}),
+    })}`);
+  };
+  res.once('finish',record);
+  res.once('close',()=>{if(!res.writableFinished)incomplete=true;record();});
   const path=new URL(req.url,'http://localhost').pathname;
   const ready=existsSync(config.storageStatePath+'.verified.json');
-  if(path==='/healthz'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({status:ready?'authenticated':'login_required',port:config.port}));return;}
+  if(path==='/healthz'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({status:ready?'authenticated':'login_required',port:config.port,evidence:cprReadinessEvidence(evidence,ready)}));return;}
   if(!ready){reply(res,503,'Complete this account sign-in first');return;}
   const {models}=JSON.parse(readFileSync(home+'/models.json','utf8'));
   const catalog=publicCatalog(models);
@@ -92,24 +107,36 @@ const serve=async(req,res)=>{
   if(!catalog.some(m=>m.slug===requestedModel)){reply(res,400,'Model unavailable for this account');return;}
   const upstreamModel=aliases.get(requestedModel);
   if(upstreamModel!==undefined)payload.model=upstreamModel;
-  const headers={...req.headers,host:'127.0.0.1:'+config.port,'content-length':body.length};
+  const headers={...req.headers,...evidenceHeaders,'x-request-id':requestId,host:'127.0.0.1:'+config.port,'content-length':body.length};
   delete headers.authorization;delete headers['transfer-encoding'];
   if(path==='/v1/responses'){
     // 显式 session/thread/cache identity 跨回合保持稳定；无会话标识的探测仍独立。
-    const requestId=typeof req.headers['x-request-id']==='string'?req.headers['x-request-id']:randomUUID();
-    payload=normalizeCprRequest(payload,req.headers,requestId);
+    payload=normalizeCprRequest(payload,req.headers,requestId,config.mode);
     body=Buffer.from(JSON.stringify(payload));delete headers['content-encoding'];headers['content-length']=body.length;
   } else if(upstreamModel!==undefined){
     body=Buffer.from(JSON.stringify(payload));delete headers['content-encoding'];headers['content-length']=body.length;
   }
   if(upstreamModel!==undefined)delete headers['accept-encoding'];
+  forwarded=true;
   const upstream=http.request({hostname:'127.0.0.1',port:config.port,path:req.url,method:req.method,headers},response=>{
-    if(upstreamModel===undefined){res.writeHead(response.statusCode,response.headers);response.pipe(res);return;}
-    const responseHeaders={...response.headers};delete responseHeaders['content-length'];
+    runtime=cprRuntimeEvidence(response.headers);
+    if(res.destroyed){response.destroy();return;}
+    observeCprUpstreamError(response,evidence=>{upstreamError=evidence;});
+    const responseHeaders={...response.headers,...evidenceHeaders,'x-request-id':requestId};
+    const rewriteAlias=upstreamModel!==undefined&&response.statusCode<400;
+    if(rewriteAlias)delete responseHeaders['content-length'];
     res.writeHead(response.statusCode,responseHeaders);
-    response.pipe(rewriteModelIdentity(upstreamModel,requestedModel)).pipe(res);
+    // A plain pipe does not propagate upstream response failures to the client.
+    // Own teardown of this response and its optional alias transform together;
+    // a partial response must close, never report completion or submit a retry.
+    const streams=rewriteAlias?[response,rewriteModelIdentity(upstreamModel,requestedModel),res]:[response,res];
+    pipeline(streams,error=>{if(error){incomplete=true;upstream.destroy();}});
   });
-  upstream.on('error',()=>{if(res.headersSent)res.destroy();else reply(res,502,'Local browser runtime unavailable');});
+  upstream.on('error',()=>{
+    if(res.destroyed||res.writableEnded)return;
+    if(res.headersSent){incomplete=true;res.destroy();}else reply(res,502,'Local browser runtime unavailable');
+  });
+  res.on('error',()=>upstream.destroy());
   res.on('close',()=>upstream.destroy());upstream.end(body);
 };
 if(existsSync(socketPath))unlinkSync(socketPath);

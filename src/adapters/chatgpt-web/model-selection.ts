@@ -1,4 +1,5 @@
-import { activateChatGptEffortMenu, parseChatGptEffortSliderState, parseChatGptModelAnnouncement, readChatGptModelAnnouncements } from "../../chatgpt-session";
+import { readNativeComposerModelIdentity41, nativeComposerModelMatches41 } from "./41_native_model_identity";
+import { CHATGPT_COMPOSER_SELECTOR, activateChatGptEffortMenu, parseChatGptEffortSliderState, parseChatGptModelAnnouncement, readChatGptModelAnnouncements } from "../../chatgpt-session";
 import type { ChatGptWebAdapterEffort, ChatGptWebModelFamily } from "../../chatgpt-web-models";
 import { ChatGptWebAdapterError } from "./adapter-error";
 
@@ -99,7 +100,12 @@ export async function assertChatGptModelFamily(
       await menu.slider.getAttribute("aria-valuenow"),
     );
     const descriptions = await readChatGptModelAnnouncements(menu.slider);
-    if (checked && state && state.value === state.min + effortIndex && chatGptModelFamilyMatches(descriptions, family, effort)) return;
+    const nativeIdentity = family === "6" && checked && state && state.value === state.min + effortIndex
+      && !descriptions.some(parseChatGptModelAnnouncement)
+      ? await readNativeComposerModelIdentity41(menu.slider, CHATGPT_COMPOSER_SELECTOR) : null;
+    if (checked && state && state.value === state.min + effortIndex
+      && (chatGptModelFamilyMatches(descriptions, family, effort)
+        || nativeComposerModelMatches41(nativeIdentity, family, effort))) return;
     if (Date.now() >= deadline) break;
     await new Promise(resolve => setTimeout(resolve, 50));
   } while (true);

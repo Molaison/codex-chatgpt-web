@@ -1,5 +1,6 @@
 import type { AppConfig } from "./config";
 import type { CodexModelContextOverride } from "./codex-integration";
+import { CHATGPT_WEB_MODEL_INSTRUCTIONS } from "./chatgpt-web-model-instructions";
 import {
   availableChatGptWebModelRoutes,
   chatGptWebRouteEfforts,
@@ -103,20 +104,31 @@ export function buildChatGptWebModel(
   if (!templateSlug || templateSlug.startsWith(CHATGPT_WEB_MODEL_PREFIX)) {
     throw new Error("ChatGPT Web model template must be a native Codex model");
   }
+  return routedChatGptWebModel(template, route, config);
+}
+
+function routedChatGptWebModel(template: JsonObject, route: ChatGptWebModelRoute, config: AppConfig): JsonObject {
   const modelFamily = route.interactionMode === "automatic" ? route.modelFamily : undefined;
-  const limits = resolveChatGptWebContextLimits(route.backendModel, route.adapterEffort, config, modelFamily);
+  let limits = resolveChatGptWebContextLimits(route.backendModel, route.adapterEffort, config, modelFamily);
   const efforts = chatGptWebRouteEfforts(route, config);
   for (const effort of efforts) {
     const adapterEffort = route.supportedCodexEfforts ? effort : route.adapterEffort;
     if (adapterEffort === "ultra") throw new Error("Ultra is not a browser effort");
     const candidate = resolveChatGptWebContextLimits(route.backendModel, adapterEffort, config, modelFamily);
     if (JSON.stringify(candidate) !== JSON.stringify(limits)) {
-      throw new Error(`Cannot group different context budgets under ${route.slug}`);
+      if (!route.toolAccess) throw new Error(`Cannot group different context budgets under ${route.slug}`);
+      const contextWindow = Math.min(limits.contextWindow, candidate.contextWindow);
+      const autoCompactTokenLimit = Math.min(limits.autoCompactTokenLimit, candidate.autoCompactTokenLimit);
+      limits = { contextWindow, autoCompactTokenLimit,
+        effectiveContextWindowPercent: Math.round(autoCompactTokenLimit / contextWindow * 100) };
     }
   }
   const sessionEfforts = config.mode === "full" && route.interactionMode === "automatic"
-    && route.backendModel !== "gpt-5.6-luna"
+    && !route.sessionMode && route.backendModel !== "gpt-5.6-luna"
     ? [...efforts, ...efforts.map(effort => `${effort}-temporary`)] : efforts;
+  // Native resolves Ultra via its supported override; never let the last Temporary preset win.
+  const legacyPro = route.legacy && route.codexEffort === "ultra" && route.adapterEffort === "max";
+  const catalogueEfforts = legacyPro ? ["max", ...sessionEfforts] : sessionEfforts;
   const multiAgentVersion = routedSubagentVersion(template, config);
   const priority = routedModelPriority(template, route, config);
   const model: JsonObject = {
@@ -142,10 +154,16 @@ export function buildChatGptWebModel(
     // Code mode collapses the outer registry into an exec gateway; routed models need the regular
     // Responses tool surface so MCP namespaces, deferred tool_search, and custom tools reach us.
     tool_mode: null,
+    ...(route.toolAccess === "chat" ? {
+      shell_type: "disabled", apply_patch_tool_type: null,
+      supports_parallel_tool_calls: false, experimental_supported_tools: [],
+    } : {}),
     upgrade: null,
-    default_reasoning_level: route.codexEffort,
-    supported_reasoning_levels: sessionEfforts.map(effort => reasoningLevel(template, effort,
-      effort.endsWith("-temporary") ? `${route.displayName} — ${effort.slice(0, -10)} (Temporary chat)`
+    default_reasoning_level: efforts.includes(route.codexEffort) ? route.codexEffort : efforts[0],
+    ...(route.toolAccess ? { multi_agent_reasoning_effort: efforts.includes(route.codexEffort) ? route.codexEffort : efforts[0] } : {}),
+    ...(legacyPro ? { multi_agent_reasoning_effort: "max" } : {}),
+    supported_reasoning_levels: catalogueEfforts.map(effort => reasoningLevel(template, effort,
+      route.toolAccess && effort === "max" ? "Pro" : effort.endsWith("-temporary") ? `${route.displayName} — ${effort.slice(0, -10)} (Temporary chat)`
         : efforts.length === 1 ? route.displayName
         : route.backendModel === "gpt-5.6-luna" ? effort === "low" ? "Ordinary Luna" : "Think"
           : `${route.displayName} — ${effort === "xhigh" ? "Extra High" : effort}`)),
@@ -164,6 +182,20 @@ export function buildChatGptWebModel(
   delete model.comp_hash;
   delete model.availability_nux;
   return model;
+}
+
+/** Local-key usages cannot borrow a Codex OAuth catalog or advertise native passthrough. */
+export function localChatGptWebModelCatalog(config: AppConfig): JsonObject {
+  const template = {
+    priority: 1, multi_agent_version: "v1", shell_type: "shell_command",
+    support_verbosity: false,
+    truncation_policy: { mode: "tokens", limit: 10_000 },
+    experimental_supported_tools: [],
+    include_apps_usage_instructions: false,
+    base_instructions: CHATGPT_WEB_MODEL_INSTRUCTIONS,
+  };
+  return { models: availableChatGptWebModelRoutes(config, true)
+    .map(route => routedChatGptWebModel(template, route, config)) };
 }
 
 export function augmentNativeModelCatalog(

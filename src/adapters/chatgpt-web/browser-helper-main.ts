@@ -1,9 +1,10 @@
+import { BrowserObservationDetached, parseBrowserObservation, type BrowserObservationCheckpoint, type BrowserObservationIdentity } from "./observation-recovery";
 import { validateSkillFiles } from "./skill-attachments";
 import { createInterface } from "node:readline";
 import { stdin, stderr, stdout } from "node:process";
 import type { CodexProviderConfig } from "../../types";
 import { ChatGptBrowserWorker, closeChatGptBrowserWorkers, type BrowserTurn } from "./browser-worker";
-import { ChatGptCompactionHandoffAccepted, ChatGptWebAdapterError } from "./adapter-error";
+import { ChatGptCompactionHandoffAccepted, ChatGptWebAdapterError, parseChatGptSavedConversationDiagnostics } from "./adapter-error";
 import type { ChatGptWebCapabilities } from "./model";
 import { createProcessLineWriter } from "./process-line-writer";
 import { createBrowserHelperPromptSelection } from "./browser-helper-prompt-selection";
@@ -32,19 +33,29 @@ interface RunMessage {
   turn: {
     traceId: string;
     modelId: string;
+    observationIdentity?: BrowserObservationIdentity;
+    observation?: BrowserObservationCheckpoint;
+    observationToolFence?: BrowserTurn["observationToolFence"];
+    observationNotices?: boolean;
+    contextRecovery?: boolean;
     project?: BrowserTurn["project"];
     sessionMode?: BrowserTurn["sessionMode"];
+    deferTextUntilComplete?: BrowserTurn["deferTextUntilComplete"];
     reasoning?: string;
     modelFamily?: "5.6" | "6";
+    proModel?: boolean;
     capabilities: ChatGptWebCapabilities;
     nativeConnector?: boolean;
     resumeAvailable?: boolean;
     retainConversation?: boolean;
     requireRetainedConversation?: boolean;
     conversationKey?: string;
+    canonicalHistory?: string[];
     compaction?: boolean;
     captureLunaCheckpoint?: boolean;
     externalProgress?: boolean;
+    submissionAck?: boolean;
+    browserLeaseEvents?: boolean;
   };
 }
 
@@ -81,6 +92,9 @@ type InputMessage = RunMessage
   | MaintenanceMessage
   | { type: "prepared_selected_ack"; id: string; prepared: CompiledChatGptWebPrompt }
   | { type: "send_activation_ack"; id: string }
+  | { type: "submission_ack"; id: string }
+  | { type: "observation_ready_ack"; id: string }
+  | { type: "recovery_fence_ack"; id: string; allowed: boolean }
   | { type: "completion_fence_begin_ack"; id: string; requestId: number; revision: number | null }
   | { type: "completion_fence_commit_ack"; id: string; requestId: number; committed: boolean }
   | { type: "progress"; id: string; snapshot: ChatGptExternalTurnProgressSnapshot }
@@ -91,7 +105,7 @@ let outputFailure: Error | undefined;
 const handleOutputFailure = (error: Error): void => {
   if (outputFailure) return;
   outputFailure = error;
-  void requestShutdown();
+  void requestShutdown(true);
 };
 const protocolOutput = createProcessLineWriter(stdout, handleOutputFailure);
 const diagnosticOutput = createProcessLineWriter(stderr, handleOutputFailure);
@@ -112,6 +126,7 @@ const sendActivationWaiters = new Map<string, {
   resolve: () => void;
   reject: (error: Error) => void;
 }>();
+const submissionWaiters = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
 const completionFenceBeginWaiters = new Map<string, {
   requestId: number;
   resolve: (revision: number | undefined) => void;
@@ -122,11 +137,15 @@ const completionFenceCommitWaiters = new Map<string, {
   resolve: (committed: boolean) => void;
   reject: (error: Error) => void;
 }>();
+const recoveryWaiters = new Map<string, { resolve(allowed: boolean): void; reject(error: Error): void }>();
 let completionFenceRequestId = 0;
+const observationWaiters = new Map<string, { resolve(): void; reject(error: Error): void }>();
+const durableObservations = new Set<string>();
+const recoverableAccepted = new Set<string>();
 let shuttingDown = false;
 let shutdownPromise: Promise<void> | undefined;
 
-function requestShutdown(): Promise<void> {
+function requestShutdown(observerLost = false): Promise<void> {
   if (shutdownPromise) return shutdownPromise;
   let completeShutdown!: () => void;
   shutdownPromise = new Promise<void>(resolveShutdown => {
@@ -135,13 +154,20 @@ function requestShutdown(): Promise<void> {
   shuttingDown = true;
   protocolOutput.close();
   diagnosticOutput.close();
-  for (const controller of abortControllers.values()) controller.abort();
+  for (const [id, controller] of abortControllers) controller.abort(
+    observerLost && recoverableAccepted.has(id) ? new BrowserObservationDetached("Runtime observation pipe closed") : undefined);
+  for (const waiter of observationWaiters.values()) waiter.reject(new DOMException("Browser helper is shutting down", "AbortError"));
+  observationWaiters.clear();
   for (const selection of preparedSelections.values()) selection.cancel();
   preparedSelections.clear();
   for (const waiter of sendActivationWaiters.values()) {
     waiter.reject(new DOMException("Browser helper is shutting down", "AbortError"));
   }
   sendActivationWaiters.clear();
+  for (const waiter of submissionWaiters.values()) {
+    waiter.reject(new DOMException("Browser helper is shutting down", "AbortError"));
+  }
+  submissionWaiters.clear();
   for (const waiter of completionFenceBeginWaiters.values()) {
     waiter.reject(new DOMException("Browser helper is shutting down", "AbortError"));
   }
@@ -150,6 +176,8 @@ function requestShutdown(): Promise<void> {
     waiter.reject(new DOMException("Browser helper is shutting down", "AbortError"));
   }
   completionFenceCommitWaiters.clear();
+  for (const waiter of recoveryWaiters.values()) waiter.reject(new Error("Browser helper shut down during recovery"));
+  recoveryWaiters.clear();
   input.close();
   void closeChatGptBrowserWorkers().then(
     () => {
@@ -173,6 +201,10 @@ async function run(message: RunMessage): Promise<void> {
   if (message.turn.resumeAvailable !== undefined && typeof message.turn.resumeAvailable !== "boolean") {
     throw new Error("Browser helper resume availability is invalid");
   }
+  if (message.turn.canonicalHistory !== undefined && (!Array.isArray(message.turn.canonicalHistory)
+    || !message.turn.canonicalHistory.length || message.turn.canonicalHistory.some(item => typeof item !== "string" || !/^[a-f0-9]{64}$/.test(item)))) {
+    throw new Error("Browser helper canonical history witness is invalid");
+  }
   if (message.turn.nativeConnector !== undefined && typeof message.turn.nativeConnector !== "boolean") {
     throw new Error("Browser helper native connector flag is invalid");
   }
@@ -194,6 +226,9 @@ async function run(message: RunMessage): Promise<void> {
   }
   if (message.turn.externalProgress !== undefined && typeof message.turn.externalProgress !== "boolean") {
     throw new Error("Browser helper external progress flag is invalid");
+  }
+  if ([message.turn.submissionAck, message.turn.browserLeaseEvents].some(flag => flag !== undefined && typeof flag !== "boolean")) {
+    throw new Error("Browser helper lifecycle acknowledgement flags are invalid");
   }
   const provider: CodexProviderConfig = {
     adapter: "chatgpt-web",
@@ -229,16 +264,29 @@ async function run(message: RunMessage): Promise<void> {
     })
     : undefined;
   if (progress) turnProgress.set(message.id, progress);
-  const promptSelection = createBrowserHelperPromptSelection();
+  let promptSelection = createBrowserHelperPromptSelection();
   preparedSelections.set(message.id, promptSelection);
   const prepareSelected = async () => ({ ...await promptSelection.wait(), release: () => {} });
   const turn: BrowserTurn = {
     traceId: message.turn.traceId,
     modelId: message.turn.modelId,
+    ...(message.turn.observation ? { observation: parseBrowserObservation(message.turn.observation),
+      observationToolFence: message.turn.observationToolFence } : {}),
+    ...(message.turn.observationIdentity ? { observationIdentity: message.turn.observationIdentity,
+      onObservationReady: (checkpoint: BrowserObservationCheckpoint) => new Promise<void>((resolve, reject) => {
+        observationWaiters.set(message.id, { resolve, reject });
+        if (!writeProtocol({ type: "event", id: message.id, event: "observation_ready", checkpoint })) {
+          observationWaiters.delete(message.id);
+          reject(new Error("Browser helper could not persist its observation checkpoint"));
+        }
+      }),
+    } : {}),
     ...(message.turn.project ? { project: message.turn.project } : {}),
     ...(message.turn.sessionMode ? { sessionMode: message.turn.sessionMode } : {}),
+    ...(message.turn.deferTextUntilComplete ? { deferTextUntilComplete: true } : {}),
     reasoning: message.turn.reasoning,
     ...(message.turn.modelFamily ? { modelFamily: message.turn.modelFamily } : {}),
+    ...(message.turn.proModel ? { proModel: true } : {}),
     capabilities: message.turn.capabilities,
     ...(message.turn.nativeConnector ? { nativeConnector: true } : {}),
     prepare: prepareSelected,
@@ -246,6 +294,7 @@ async function run(message: RunMessage): Promise<void> {
     ...(message.turn.retainConversation ? { retainConversation: true } : {}),
     ...(message.turn.requireRetainedConversation ? { requireRetainedConversation: true } : {}),
     ...(message.turn.conversationKey ? { conversationKey: message.turn.conversationKey } : {}),
+    ...(message.turn.canonicalHistory ? { canonicalHistory: message.turn.canonicalHistory } : {}),
     abortSignal: abortController.signal,
     ...(message.turn.compaction ? { compaction: true } : {}),
     ...(progress ? {
@@ -279,6 +328,30 @@ async function run(message: RunMessage): Promise<void> {
         }),
       },
     } : {}),
+    ...(message.turn.contextRecovery ? {
+      authorizeRecovery: async reason => {
+        const allowed = await new Promise<boolean>((resolve, reject) => {
+          if (recoveryWaiters.has(message.id)) { reject(new Error("Recovery already pending")); return; }
+          recoveryWaiters.set(message.id, { resolve, reject });
+          if (!writeProtocol({ type: "event", id: message.id, event: "recovery_fence", ...(reason ? { reason } : {}) })) {
+            recoveryWaiters.delete(message.id); reject(new Error("Recovery fence transport failed"));
+          }
+        });
+        if (allowed) {
+          promptSelection = createBrowserHelperPromptSelection();
+          preparedSelections.set(message.id, promptSelection);
+          durableObservations.delete(message.id);
+          recoverableAccepted.delete(message.id);
+        }
+        return allowed;
+      },
+    } : {}),
+    ...(message.turn.observationNotices ? {
+      onConversationRecovered: () => { writeProtocol({ type: "event", id: message.id, event: "conversation_recovered" }); },
+      onRecovering: phase => { writeProtocol({ type: "event", id: message.id, event: "reconnecting", ...(phase ? { phase } : {}) }); },
+      onConversationRestored: () => { writeProtocol({ type: "event", id: message.id, event: "conversation_restored" }); },
+      onObservationResumed: () => { writeProtocol({ type: "event", id: message.id, event: "observation_resumed" }); },
+    } : {}),
     onHeartbeat: () => writeProtocol({ type: "event", id: message.id, event: "heartbeat" }),
     onGenerationProgress: () => writeProtocol({ type: "event", id: message.id, event: "generation_progress" }),
     onPreparedSelected: reused => {
@@ -287,6 +360,11 @@ async function run(message: RunMessage): Promise<void> {
       }
       return promptSelection.wait().then(() => undefined);
     },
+    ...(message.turn.browserLeaseEvents ? { onBrowserLeaseAcquired: (surfaceId: string) => {
+      if (!writeProtocol({ type: "event", id: message.id, event: "browser_lease_acquired", surfaceId })) {
+        throw new Error("Browser helper could not retain its browser lease");
+      }
+    } } : {}),
     onSendActivated: () => new Promise<void>((resolve, reject) => {
       if (sendActivationWaiters.has(message.id)) {
         reject(new Error("Browser helper Send activation already awaits acknowledgement"));
@@ -299,6 +377,26 @@ async function run(message: RunMessage): Promise<void> {
       }
     }),
     onSubmitted: () => {
+      // The host registered this exact lease after the durable checkpoint ACK. An EOF can
+      // race the final submission_ack, so preservation cannot depend on receiving that ACK.
+      if (durableObservations.has(message.id)) recoverableAccepted.add(message.id);
+      if (message.turn.submissionAck) {
+        const acknowledgement = new Promise<void>((resolve, reject) => {
+          if (submissionWaiters.has(message.id)) {
+            reject(new Error("Browser helper submission already awaits acknowledgement"));
+            return;
+          }
+          submissionWaiters.set(message.id, { resolve, reject });
+          if (!writeProtocol({ type: "event", id: message.id, event: "submitted" })) {
+            submissionWaiters.delete(message.id);
+            reject(new Error("Browser helper could not persist ChatGPT submission evidence"));
+          }
+        });
+        // Older callers can treat this hook as an observer. Abort still reaches the turn;
+        // awaited callers keep the rejection without a second unhandled promise on shutdown.
+        void acknowledgement.catch(() => {});
+        return acknowledgement;
+      }
       if (!writeProtocol({ type: "event", id: message.id, event: "submitted" })) {
         throw new Error("Browser helper could not persist ChatGPT submission evidence");
       }
@@ -317,6 +415,7 @@ async function run(message: RunMessage): Promise<void> {
     }),
     onCommentary: (text, continuation) => writeProtocol({ type: "event", id: message.id, event: "commentary", text, ...(continuation ? { continuation: true } : {}) }),
     onTextDelta: text => writeProtocol({ type: "event", id: message.id, event: "text", text }),
+    onRichWidgets: widgets => { if (widgets.length) writeProtocol({ type: "event", id: message.id, event: "rich_widgets", widgets }); },
     ...(message.turn.captureLunaCheckpoint ? {
       captureLunaCheckpoint: true,
       onLunaCheckpoint: captured => writeProtocol({
@@ -341,14 +440,24 @@ async function run(message: RunMessage): Promise<void> {
         errorType: error.errorType,
         code: error.code,
         retryable: error.retryable,
+        ...(error.diagnostics ? { diagnostics: parseChatGptSavedConversationDiagnostics(error.diagnostics) } : {}),
       } : {}),
     });
   } finally {
     preparedSelections.get(message.id)?.cancel();
+    recoveryWaiters.get(message.id)?.reject(new Error("Browser turn ended during recovery"));
+    recoveryWaiters.delete(message.id);
     preparedSelections.delete(message.id);
+    durableObservations.delete(message.id);
+    recoverableAccepted.delete(message.id);
+    observationWaiters.get(message.id)?.reject(new DOMException("Observation ended", "AbortError"));
+    observationWaiters.delete(message.id);
     const sendWaiter = sendActivationWaiters.get(message.id);
     sendActivationWaiters.delete(message.id);
     sendWaiter?.reject(new DOMException("Browser helper turn ended before Send acknowledgement", "AbortError"));
+    const submissionWaiter = submissionWaiters.get(message.id);
+    submissionWaiters.delete(message.id);
+    submissionWaiter?.reject(new DOMException("Browser helper turn ended before submission acknowledgement", "AbortError"));
     const beginWaiter = completionFenceBeginWaiters.get(message.id);
     completionFenceBeginWaiters.delete(message.id);
     beginWaiter?.reject(new DOMException("Browser helper turn ended before completion-fence begin", "AbortError"));
@@ -453,6 +562,12 @@ input.on("line", line => {
       return;
     }
     selection.select(prepared);
+  } else if (message.type === "observation_ready_ack") {
+    const waiter = observationWaiters.get(message.id);
+    if (!waiter) { writeProtocol({ type: "error", id: message.id, message: "No pending observation checkpoint" }); return; }
+    observationWaiters.delete(message.id);
+    durableObservations.add(message.id);
+    waiter.resolve();
   } else if (message.type === "send_activation_ack") {
     const waiter = sendActivationWaiters.get(message.id);
     if (!waiter) {
@@ -460,6 +575,12 @@ input.on("line", line => {
       return;
     }
     sendActivationWaiters.delete(message.id);
+    waiter.resolve();
+  } else if (message.type === "submission_ack") {
+    const waiter = submissionWaiters.get(message.id);
+    if (!waiter) return;
+    submissionWaiters.delete(message.id);
+    if (durableObservations.has(message.id)) recoverableAccepted.add(message.id);
     waiter.resolve();
   } else if (message.type === "completion_fence_begin_ack") {
     if (!Number.isSafeInteger(message.requestId) || message.requestId <= 0
@@ -483,6 +604,12 @@ input.on("line", line => {
     if (!waiter || waiter.requestId !== message.requestId) return;
     completionFenceCommitWaiters.delete(message.id);
     waiter.resolve(message.committed);
+  } else if (message.type === "recovery_fence_ack") {
+    const waiter = recoveryWaiters.get(message.id);
+    if (!waiter) return;
+    recoveryWaiters.delete(message.id);
+    if (typeof message.allowed !== "boolean") waiter.reject(new Error("Invalid recovery fence acknowledgement"));
+    else waiter.resolve(message.allowed);
   } else if (message.type === "progress") {
     // Progress is meaningful only for a turn this helper is currently running. Ignore every other
     // id so the mirror map remains owned by active turn lifecycles.
@@ -507,6 +634,9 @@ input.on("line", line => {
     const waiter = sendActivationWaiters.get(message.id);
     sendActivationWaiters.delete(message.id);
     waiter?.reject(new DOMException("Browser helper turn aborted before Send acknowledgement", "AbortError"));
+    const submissionWaiter = submissionWaiters.get(message.id);
+    submissionWaiters.delete(message.id);
+    submissionWaiter?.reject(new DOMException("Browser helper turn aborted before submission acknowledgement", "AbortError"));
     const beginWaiter = completionFenceBeginWaiters.get(message.id);
     completionFenceBeginWaiters.delete(message.id);
     beginWaiter?.reject(new DOMException("Browser helper turn aborted before completion-fence begin", "AbortError"));
@@ -544,7 +674,7 @@ input.on("line", line => {
   }
 });
 input.on("close", () => {
-  void requestShutdown();
+  void requestShutdown(true);
 });
 process.once("SIGINT", () => {
   void requestShutdown();
@@ -554,4 +684,4 @@ process.once("SIGTERM", () => {
 });
 
 // Advertise the optional frames this helper understands so the daemon can negotiate them explicitly.
-writeProtocol({ type: "ready", features: ["progress", "tool-boundary-ack", "completion-fence", "multipart-stage-ack", "skill-attachments"] });
+writeProtocol({ type: "ready", features: ["progress", "tool-boundary-ack", "completion-fence", "multipart-stage-ack", "skill-attachments", "send-activation-ack", "submission-ack", "browser-lease-events", "durable-observation", "context-recovery"] });

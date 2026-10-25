@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
-import { realpathSync } from "node:fs";
-import { basename, dirname, join, posix, resolve, win32 } from "node:path";
+import { posix, resolve, win32 } from "node:path";
 import { getStaticTOMLValue, parseTOML, type AST } from "toml-eslint-parser";
 import type { AppConfig } from "./config";
 import { getConfigDir } from "./config";
@@ -68,16 +67,9 @@ function managedMarkerCount(text: string): number {
 }
 
 function canonicalConfigPath(configPath: string): string {
-  const absolute = resolve(configPath);
-  try {
-    return realpathSync.native(absolute);
-  } catch {
-    try {
-      return join(realpathSync.native(dirname(absolute)), basename(absolute));
-    } catch {
-      return absolute;
-    }
-  }
+  // Native hooks/list keys use the loaded layer's logical config path, not its
+  // symlink target (for example a yadm ##class source). Keep that trust identity.
+  return resolve(configPath);
 }
 
 export function installCodexInterruptHook(

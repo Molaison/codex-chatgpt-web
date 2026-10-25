@@ -1,0 +1,58 @@
+{
+  "runUrl": "https://github.com/Molaison/codex-chatgpt-web/actions/runs/38942373166",
+  "conclusion": "failure",
+  "head": "5d80f8aaab4a2b1a12b660cfccaa0cca3d32c875",
+  "merge": "863855b452e0c514509d6012c80e5efed5807d3e",
+  "tree": "cb81a5475ecd3453d65b27c211df8dfb473c3dce",
+  "base": "26bd5a9d94ddf82da8c5a3993b5b07aeda4bc4b1",
+  "platforms": {
+    "macos": {
+      "pass": 1213,
+      "skip": 96,
+      "fail": 10
+    },
+    "ubuntu": {
+      "pass": 1212,
+      "skip": 97,
+      "fail": 10
+    },
+    "windows": {
+      "pass": 1202,
+      "skip": 104,
+      "fail": 13
+    }
+  },
+  "passed": [
+    "actionlint",
+    "all platforms: version checks, dependency audits, root typecheck"
+  ],
+  "laterStages": "launcher/runtime/package/smoke not run or skipped",
+  "windowsAdditionalTimeouts": [
+    {
+      "test": "270-turn latest receipt",
+      "defaultTimeoutMs": 5000,
+      "observedMs": 17199.83,
+      "change": "this test only: 30000ms"
+    },
+    {
+      "test": "unchanged paper-recovery stale-read",
+      "defaultTimeoutMs": 5000,
+      "observedMs": 7288.35,
+      "change": "none"
+    }
+  ],
+  "nextHeadCI": "pending; corrected Windows outcome not verified",
+  "paperTimeoutDiagnosis": {
+    "paperTimeoutAtUTC": "2026-10-16T17:51:21.436Z",
+    "receiptFileStartedAtUTC": "2026-10-16T17:51:42.735Z",
+    "receipt270TurnStartedAtUTC": "2026-10-16T17:51:44.888Z",
+    "receipt270TurnEndedAtUTC": "2026-10-16T17:52:02.087Z",
+    "inference": "The later receipt timeout cannot have leaked into the earlier paper failure. This does not establish the paper timeout root cause.",
+    "exactBaseSameTest": "passed in 2903.56ms",
+    "pr7SameTest": {
+      "runUrl": "https://github.com/Molaison/codex-chatgpt-web/actions/runs/38933810878/job/117084136145",
+      "result": "passed in 1915.42ms"
+    },
+    "rootCause": "unknown; not a reproduced baseline failure; no paper test change"
+  }
+}

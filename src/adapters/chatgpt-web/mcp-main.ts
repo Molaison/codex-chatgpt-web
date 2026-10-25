@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { defaultBrokerEndpoint, resolveBrokerEndpoint } from "../../config";
 import { runChatGptMcpServer, type ChatGptMcpContract } from "./mcp-server";
 import { startChatGptMcpHttpServer } from "./mcp-http";
@@ -20,6 +21,8 @@ export async function runChatGptMcpMain(args: string[]): Promise<void> {
   }
   const transport = option(remaining, "--transport", "stdio");
   if (transport !== "stdio" && transport !== "http") throw new Error("--transport must be stdio or http");
+  const releaseControlPath = option(remaining, "--release-control", "");
+  if (releaseControlPath && transport !== "http") throw Error("Release admission is qualified only for native HTTP MCP, not stdio/tunnel owners");
   const httpOptionsRequested = remaining.includes("--port") || remaining.includes("--public-origin");
   const portText = option(remaining, "--port", "8788");
   const publicOrigin = option(remaining, "--public-origin", "");
@@ -33,7 +36,7 @@ export async function runChatGptMcpMain(args: string[]): Promise<void> {
     await runChatGptMcpServer(options);
     return;
   }
-  const http = startChatGptMcpHttpServer({ ...options, port: Number(portText), ...(publicOrigin ? { publicOrigin } : {}) });
+  const http = startChatGptMcpHttpServer({ ...options, ...(releaseControlPath ? { releaseControl: JSON.parse(readFileSync(releaseControlPath, "utf8")) } : {}), port: Number(portText), ...(publicOrigin ? { publicOrigin } : {}) });
   console.error(`[chatgpt-web-mcp-http] Listening on ${http.url.href}; no public tunnel or OAuth configured`);
   const stop = () => {
     process.removeListener("SIGINT", stop);

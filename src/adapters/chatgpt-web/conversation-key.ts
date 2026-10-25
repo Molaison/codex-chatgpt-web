@@ -88,6 +88,25 @@ function submittedPrefixLength(parsed: CodexParsedRequest, previous?: CodexParse
     ? priorMessages.length : 0;
 }
 
+/** Private fingerprints bind a saved chat to full canonical input, including native item identity. */
+export function canonicalConversationHistory(parsed: CodexParsedRequest): string[] | undefined {
+  const raw = parsed._rawBody as { input?: unknown; previous_response_id?: unknown } | undefined;
+  // Incremental API continuations have a separately proved saved-response contract.
+  if (!Array.isArray(raw?.input) || raw?.previous_response_id || parsed._chatgptSavedConversationContinuation) return undefined;
+  const messages = raw.input.filter((item): item is Record<string, unknown> => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const value = item as Record<string, unknown>;
+    return ((value.type === "message" || value.type === undefined) && (value.role === "user" || value.role === "assistant"))
+      || ["function_call", "custom_tool_call", "function_call_output", "custom_tool_call_output"].includes(String(value.type));
+  });
+  return messages.length ? messages.map(message => {
+    // Native item IDs distinguish a new identical instruction after rewind from
+    // the old accepted instruction. Runtime/developer preamble IDs are excluded.
+    const { type, role, id, phase, content, name, arguments: args, call_id, output } = message;
+    return createHash("sha256").update(JSON.stringify({ type, role, id, phase, content, name, arguments: args, call_id, output })).digest("hex");
+  }) : undefined;
+}
+
 /** Full history remains canonical; a retained epoch receives only the suffix after its last assistant reply. */
 export function retainedConversationResumeRequest(
   parsed: CodexParsedRequest,

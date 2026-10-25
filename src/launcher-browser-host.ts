@@ -55,6 +55,7 @@ export interface LauncherBrowserHostDescriptor {
   surfaceId: string;
   surfaceTargets: Record<string, string>;
   createdAt: string;
+  observationInstanceId?: string;
 }
 
 export interface LauncherBrowserConnection {
@@ -146,6 +147,8 @@ function assertDescriptorShape(value: unknown): LauncherBrowserHostDescriptor {
     surfaceId: descriptor.surfaceId,
     surfaceTargets: targets,
     createdAt: descriptor.createdAt,
+    ...(typeof descriptor.observationInstanceId === "string" && /^[A-Za-z0-9_-]{32}$/.test(descriptor.observationInstanceId)
+      ? { observationInstanceId: descriptor.observationInstanceId } : {}),
   };
 }
 
@@ -256,6 +259,7 @@ export async function connectLauncherBrowserHost(
   timeoutMs = 20_000,
   surfaceId?: string,
   abortSignal?: AbortSignal,
+  readOnly = false,
 ): Promise<LauncherBrowserConnection> {
   if (abortSignal?.aborted) {
     throw new DOMException("Launcher browser connection aborted", "AbortError");
@@ -283,8 +287,10 @@ export async function connectLauncherBrowserHost(
     );
     // Preserve the host's theme and other pages. Only our owned page needs
     // focus emulation for input while its Electron view is in the background.
-    const inputSession = await context.newCDPSession(page);
-    await inputSession.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+    if (!readOnly) {
+      const inputSession = await context.newCDPSession(page);
+      await inputSession.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+    }
     // The browser connection owns this session; disconnect releases the override.
     return { descriptor, browser, context, page };
   } catch (error) {
@@ -361,17 +367,28 @@ export async function inspectLauncherBrowserHost(
 export const LAUNCHER_SESSION_INSPECTION_TIMEOUT_MS = 30_000;
 export const LAUNCHER_CAPABILITY_INSPECTION_TIMEOUT_MS = 120_000;
 
+export class LauncherBrowserWriterConflictError extends Error {}
+
 export type LauncherTurnActivity =
+  | {
+      phase: "observe-ready" | "observe";
+      traceId: string;
+      helperPid: number;
+      surfaceId: string;
+      observation: import("./adapters/chatgpt-web/observation-recovery").BrowserObservationCheckpoint;
+    }
   | {
       phase: "approval";
       traceId: string;
       helperPid: number;
+      surfaceId?: string;
       pending: boolean;
     }
   | {
       phase: "usage";
       traceId: string;
       helperPid: number;
+      surfaceId?: string;
       receipt?: {
         id: string;
         accountKey: string;
@@ -384,7 +401,10 @@ export type LauncherTurnActivity =
       phase: "start";
       traceId: string;
       helperPid: number;
+      surfaceId?: string;
       conversationKey?: string;
+      conversationUrl?: string;
+      leaseFencing?: boolean;
       connectorIdentity?: string;
       requireRetainedConversation?: boolean;
     }
@@ -392,6 +412,7 @@ export type LauncherTurnActivity =
       phase: "heartbeat";
       traceId: string;
       helperPid: number;
+      surfaceId?: string;
       /** Re-establish the launcher's hidden viewport after the caller closes its CDP session. */
       refreshViewport?: boolean;
       progress?: {
@@ -403,6 +424,7 @@ export type LauncherTurnActivity =
       phase: "end";
       traceId: string;
       helperPid: number;
+      surfaceId?: string;
       status: "completed" | "failed" | "aborted";
       message?: string;
       retain?: boolean;
@@ -669,6 +691,9 @@ export async function notifyLauncherTurn(
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({})) as Record<string, unknown>;
+      if (response.status === 409 && body.code === "browser_writer_conflict") {
+        throw new LauncherBrowserWriterConflictError("The browser tab or conversation already has another writer");
+      }
       if (response.status === 409 && body.code === "turn_cancelled") {
         throw new LauncherBrowserTurnCancelledError(
           typeof body.error === "string" ? body.error : `Browser turn ${activity.traceId} was cancelled by the user`,
@@ -717,7 +742,8 @@ export async function notifyLauncherTurn(
     if (signal?.aborted) throw new DOMException("Launcher browser acquisition cancelled", "AbortError");
     if (controller.signal.aborted) throw new Error(`Launcher browser control ${activity.phase} timed out after ${timeoutMs}ms`);
     if (error instanceof LauncherBrowserTurnCancelledError
-      || error instanceof LauncherRetainedConversationUnavailableError) throw error;
+      || error instanceof LauncherRetainedConversationUnavailableError
+      || error instanceof LauncherBrowserWriterConflictError) throw error;
     throw new Error(`Launcher browser control channel failed: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
     clearTimeout(timer);

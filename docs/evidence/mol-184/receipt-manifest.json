@@ -1,0 +1,218 @@
+{
+  "status": "offline candidate frozen; CPR recovery incomplete; real acceptance not run",
+  "repository": "Molaison/codex-chatgpt-web",
+  "coordinatorBaseline": {
+    "sourceComposite": {
+      "pr7": "196f0c412fe6fc0f9d0a9143ff6e033268e3de1e",
+      "pr6QaPool": "fe8cd68b47ed0c258499f87391a0b8fccae190b1"
+    },
+    "evidenceType": "author-supplied production loopback HTTP plus SQLite; browser worker mocked",
+    "result": "2 pass, 4 fail; same on supplied repeat",
+    "reexecutedByDocumentAuthor": false,
+    "dependencyLimit": "existing MCP SDK 1.30.0 versus target ^1.31.0; no MCP invocation"
+  },
+  "files": {
+    "receipt-coordinator-baseline-observations.json": {
+      "sha256": "6b961f8e0f7ee5696b5915b5cd8a40de0db5968ea5d6be8ed1279d47ce937e50",
+      "source": "evidence/baseline-observations.json"
+    },
+    "receipt-coordinator-baseline.log": {
+      "sha256": "06e4283dbc1e3b65837c6516eaa72d116155ad2773daf0c94caa39f23bfcddc3",
+      "source": "evidence/baseline-run.log"
+    },
+    "receipt-coordinator-repeat-observations.json": {
+      "sha256": "fedf6c1fe4b45dc8700bfe62c21b9bfeed21533d1c09a529792a491f4882708c",
+      "source": "evidence/repeat-observations.json"
+    },
+    "receipt-coordinator-repeat.log": {
+      "sha256": "9b33b6a6a6077e23429f4bd7b53704154c5113f459fd9ab5a2b12085260781ea",
+      "source": "evidence/repeat-run.log"
+    },
+    "receipt-intermediate-candidate-composite.json": {
+      "sha256": "a4126bc6f9dc523b32a02a5293ae82e8979103a3ffb3a9b190458980332bdba1",
+      "source": "integration/evidence/candidate-composite.json"
+    },
+    "receipt-intermediate-candidate-memory-run.log": {
+      "sha256": "3b3252c667a92e2a9a78c7ed3ef5124b4ab66ff06a566b62aa424195544e338a",
+      "source": "integration/evidence/candidate-memory-run.log"
+    },
+    "receipt-intermediate-candidate-memory-observations.json": {
+      "sha256": "004e9eb16eda46948ee9b154c9280da7c2ca437b814dcd9379aa3e275729ea9b",
+      "source": "integration/evidence/candidate-memory-observations.json"
+    },
+    "receipt-intermediate-baseline-memory-run.log": {
+      "sha256": "fdc1fa4cc183e05507f45f3ba109cc7c6178c5d578ee2070b47dc579340d6ed2",
+      "source": "integration/evidence/baseline-memory-run.log"
+    },
+    "receipt-intermediate-baseline-memory-observations.json": {
+      "sha256": "be415f923cb3290a82e7f02b7b279e20d5869ad75969fa888df774b0b7aac050",
+      "source": "integration/evidence/baseline-memory-observations.json"
+    },
+    "receipt-candidate-suite.log": {
+      "sha256": "59eb50d032ba1bbd7617a14cd54cc54527e0dbdf7833b20f4a840aefad172a54",
+      "source": "/tmp/mol184-receipt-latest-suite.log"
+    },
+    "receipt-candidate-types.log": {
+      "sha256": "e576e4d30f5392d9dec436980fdafe8b9b900832b6fe6adc3043841047674093",
+      "source": "/tmp/mol184-receipt-test-types.log"
+    },
+    "receipt-two-pool.log": {
+      "sha256": "fc002b9f45184a104b04544dfce14646e0aece38ea9b42ad900fa54ae2711718",
+      "source": "/tmp/mol184-receipt-two-pool.log"
+    },
+    "receipt-two-pool-mutation-red.log": {
+      "sha256": "29d5ee8c975e48ef7fcc45dd48d56e3cc238616695827cee156275d5c8e15bb4",
+      "source": "/tmp/mol184-receipt-two-pool-mutation-red.log"
+    },
+    "receipt-related.log": {
+      "sha256": "3316f445e122247e16981286ac810c16d50c8066e882847d274506c4fb5be52e",
+      "source": "/tmp/mol184-receipt-related.log"
+    },
+    "receipt-memory-integration.test.ts.txt": {
+      "sha256": "7cb4f7091fb55154027013e64d1a65cf5370052625b46d8369081da408d1fe57",
+      "source": "integration/tests/dot-cross-layer-recovery.test.ts",
+      "usage": "Copy into an isolated checkout matching receipt-intermediate-candidate-composite.json; not a default CI suite."
+    },
+    "receipt-budget-single.log": {
+      "sha256": "b361170ffce9a29b17bf04c17166cb10d2d69035428b8da91c5367297bc15614",
+      "source": "/tmp/mol184-windows-budget-single.log"
+    },
+    "receipt-budget-focused.log": {
+      "sha256": "0e13531f11a3c5a4cee2baea49fc85c2b3cdacc36447865d80745eef75b16da8",
+      "source": "/tmp/mol184-windows-budget-focused.log"
+    },
+    "receipt-budget-types.log": {
+      "sha256": "e576e4d30f5392d9dec436980fdafe8b9b900832b6fe6adc3043841047674093",
+      "source": "/tmp/mol184-windows-budget-types.log"
+    },
+    "receipt-ci-first-run.json": {
+      "sha256": "ab459f5b728a0c2d07d8a0e7d3bb8819f618f76341f9482a588b53cbdf96cf48",
+      "source": "https://github.com/Molaison/codex-chatgpt-web/actions/runs/38942373166"
+    },
+    "receipt-three-regressions-red.log": {
+      "sha256": "8eae9e0e11c842929db7e5bbab7793edb6e56dba2ff2db06d5db0d2bb20c20a6",
+      "source": "/tmp/mol184-three-regressions-red.log"
+    },
+    "receipt-three-regressions-focused.log": {
+      "sha256": "1770f763b4ac1a495d4e13f03cad261c1edecd93da24ed459dc9070dbb0182af",
+      "source": "/tmp/mol184-three-regressions-focused.log"
+    },
+    "receipt-three-regressions-types.log": {
+      "sha256": "e576e4d30f5392d9dec436980fdafe8b9b900832b6fe6adc3043841047674093",
+      "source": "/tmp/mol184-three-regressions-types.log"
+    },
+    "receipt-three-regressions-related.log": {
+      "sha256": "2ab027b5c23dfd55c7b7712b250d1258b72e3e1950841e9096273a79135f859e",
+      "source": "/tmp/mol184-three-regressions-related.log"
+    },
+    "receipt-three-regressions-base.jsonl": {
+      "sha256": "116805a8546164e192bbb0240a8dac45743b1013913e1ee73960eebabe732208",
+      "source": "/tmp/mol184-regression-review/base.jsonl"
+    },
+    "receipt-three-regressions-candidate.jsonl": {
+      "sha256": "d640962cdb70cf5354e3701b4e5e4527fd5d163ca07427a173693f3d946bfef7",
+      "source": "/tmp/mol184-regression-review/candidate.jsonl"
+    },
+    "receipt-three-regressions-fixed.jsonl": {
+      "sha256": "5850c8ce7b71cbc720a9bf097528c52a31e45334c6b6e64fa54d72d67421d9fc",
+      "source": "/tmp/mol184-regression-review/fixed.jsonl"
+    }
+  },
+  "candidate": {
+    "sourceAndTestHashes": {
+      "src/qa-pool.ts": "fa32f05b47ec575632abe6c8ed910dfda98df4fd12ab4cecba8265f04bdd8b70",
+      "src/qa-pool-receipts.ts": "0715b8346e29edd7cf233274f25b6e284ccf7cfa7ca5f9b9bd4411222f84de66",
+      "tests/qa-pool-request-receipts.test.ts": "5192dc5333f901d94dbc7d57c54411e326b95fd8e20844a9a27e02b3f64b8370",
+      "tests/qa-pool-history-expiry.test.ts": "1f6ea90dbd8b28692ebf54107f329e4fc5da70c169f41606dc039f019f7438ac"
+    },
+    "suite": {
+      "command": "bun test tests/qa-pool.test.ts tests/qa-pool-history-expiry.test.ts tests/qa-pool-request-receipts.test.ts",
+      "result": "45 pass / 0 fail / 595 assertions",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "command": "bun run typecheck",
+      "result": "pass",
+      "exitCode": 0
+    },
+    "twoPool": {
+      "command": "bun test tests/qa-pool-request-receipts.test.ts --test-name-pattern \"a second pool committing\"",
+      "result": "1 pass / 12 assertions",
+      "exitCode": 0
+    },
+    "twoPoolMutation": {
+      "description": "isolated candidate with head CAS removed; not historical baseline",
+      "result": "1 fail / 6 assertions, expected 409 received 200",
+      "exitCode": 1
+    },
+    "runtime": "Bun 1.4.0",
+    "publishedHead": "5d80f8aaab4a2b1a12b660cfccaa0cca3d32c875",
+    "related": {
+      "command": "bun test tests/qa-portable-sessions.test.ts tests/qa-sessions.test.ts tests/paper-history.test.ts tests/paper-registry.test.ts tests/paper-recovery.test.ts tests/paper-recovery-reader.test.ts",
+      "result": "52 pass / 2 existing skips / 0 fail / 473 assertions",
+      "exitCode": 0
+    }
+  },
+  "independentReview": "see exact-head PR review decision; no approval asserted by document author",
+  "exactHeadCI": {
+    "firstRun": "receipt-ci-first-run.json",
+    "conclusion": "failure",
+    "afterTestBudgetCorrection": "completed: failure; d28024715ead3c31329039521e16beb3d528a02b; https://github.com/Molaison/codex-chatgpt-web/actions/runs/38943753938; see timeoutOnlyFollowup for per-platform results",
+    "timeoutOnlyFollowup": {
+      "head": "d28024715ead3c31329039521e16beb3d528a02b",
+      "runUrl": "https://github.com/Molaison/codex-chatgpt-web/actions/runs/38943753938",
+      "conclusion": "failure",
+      "receiptAndExpiry": "30 receipt and 10 expiry pass on all three platforms",
+      "rootSuites": {
+        "windows": "1205 pass / 104 skip / 10 fail",
+        "macos": "1213 pass / 96 skip / 10 fail",
+        "ubuntu": "1212 pass / 97 skip / 10 fail"
+      },
+      "coverageLimit": "does not cover subsequent three regression categories"
+    }
+  },
+  "realBrowser": "not run; no execution authorization added",
+  "intermediateIntegration": {
+    "result": "5 pass / 1 fail, 35 assertions",
+    "baseline": "1 pass / 5 fail includes extra single-fetch control constraint, not fifth original defect",
+    "aggregateSha256": "56be3b090004e1c739502416e33057612d322d71c64f8737c75d772478f3c171",
+    "scope": "in-memory HTTP dispatch; production CPR/pool/SQLite/response handler/adapter/registry; mocked browser worker",
+    "unresolved": "PR7 CPR random message IDs cause retry 409 rather than complete replay",
+    "finalCandidateEvidence": false
+  },
+  "testBudgetCorrection": {
+    "scope": "270-turn test timeout only: 5000ms default to 30000ms; production source and all assertions unchanged",
+    "testSha256": "8aaea1d0046db547f61b8d30c78723dc7a1bb9557c4de379a3495d16c11fe1d1",
+    "localSingle": "1 pass / 275 assertions / exit 0",
+    "localFocused": "45 pass / 595 assertions / exit 0",
+    "localTypecheck": "pass / exit 0",
+    "windowsAfterCorrection": "verified at d28024715ead3c31329039521e16beb3d528a02b; https://github.com/Molaison/codex-chatgpt-web/actions/runs/38943753938: 30 receipt and 10 expiry tests pass; root suite 1205 pass / 104 skip / 10 baseline failures",
+    "nextHeadCI": "completed: failure; d28024715ead3c31329039521e16beb3d528a02b; https://github.com/Molaison/codex-chatgpt-web/actions/runs/38943753938; this is the timeout-only correction, not the subsequent three-regression correction"
+  },
+  "threeRegressionCorrection": {
+    "sourceAndTestHashes": {
+      "src/qa-pool.ts": "bda36eb8584318cc3eb0a416d9d8bbbff691724ce0e86c2f875bad034793b38f",
+      "src/qa-pool-receipts.ts": "652dc732d2959b003a647b4ede90a676b04c9061979d662135cd4d25a544690c",
+      "tests/qa-pool-request-receipts.test.ts": "481e115749746f44abd016c1f3d41b9ca13b77201f54c27b5e7eb1bf250177d9"
+    },
+    "probeSources": [
+      "26bd5a9d94ddf82da8c5a3993b5b07aeda4bc4b1",
+      "d28024715ead3c31329039521e16beb3d528a02b",
+      "corrected working tree, hashes above"
+    ],
+    "scope": "actual pool/SQLite; injected refusal error code not real socket; real 91-page SQLite limit with second 200KiB response; inline trigger/memento paths",
+    "regressionRed": "4 fail / 17 assertions against frozen d280; exit 1",
+    "localFocused": {
+      "command": "bun test tests/qa-pool.test.ts tests/qa-pool-history-expiry.test.ts tests/qa-pool-request-receipts.test.ts",
+      "result": "50 pass / 650 assertions / exit 0"
+    },
+    "localTypecheck": {
+      "command": "bun run typecheck",
+      "result": "pass / exit 0"
+    },
+    "related": "52 pass / 2 existing skips / 473 assertions / exit 0",
+    "independentAudit": "5 pass / 55 assertions; candidate review approved, not real acceptance",
+    "nextCI": "pending",
+    "remaining": "generic 503 lacks trusted proof of non-submission; real browser and integrated CPR validation not established"
+  }
+}

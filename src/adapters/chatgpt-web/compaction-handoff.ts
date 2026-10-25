@@ -221,7 +221,7 @@ export async function settleActiveCompactionSource(
       if (signal?.aborted) source.cancel(abortReason(signal));
       throw error;
     } finally {
-      if (token) await broker.revoke(token);
+      if (token) await broker.revoke(token, undefined, { source: "compaction.cleanup", reason: "cleanup" });
     }
   });
 }
@@ -280,7 +280,7 @@ export async function settleActiveZeroRiskCompactionSource(
       if (signal?.aborted) source.cancel(abortReason(signal));
       throw error;
     } finally {
-      if (token) await broker.revoke(token);
+      if (token) await broker.revoke(token, undefined, { source: "compaction.cleanup", reason: "cleanup" });
     }
   });
 }

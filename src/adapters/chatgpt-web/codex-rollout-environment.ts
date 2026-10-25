@@ -240,11 +240,13 @@ function verifyHistoricalEnvironmentMessages(
   size: number,
   turnId: string,
   messages: ChatGptUnattributedEnvironmentMessage[],
-): void {
+): ChatGptUnattributedEnvironmentMessage[] {
   const pending = new Map(messages.map(message => [message.id, message.content]));
   if (pending.size !== messages.length) throw new Error("Codex environment history repeats a message id");
   let position = 0;
   let carry = Buffer.alloc(0);
+  let currentTask = false;
+  const currentMessages: ChatGptUnattributedEnvironmentMessage[] = [];
   while (position < size) {
     const length = Math.min(ROLLOUT_READ_CHUNK_BYTES, size - position);
     const chunk = Buffer.alloc(length);
@@ -264,7 +266,11 @@ function verifyHistoricalEnvironmentMessages(
       // Core writes task_started before this turn's environment update. Merely finding matching
       // XML somewhere in the file would also accept a current update as historical.
       if (item.type === "event_msg" && payload?.type === "task_started" && payload.turn_id === turnId) {
-        if (pending.size === 0) return;
+        currentTask = true;
+        if (pending.size === 0) return currentMessages;
+        continue;
+      }
+      if (currentTask && item.type === "event_msg" && payload?.type === "task_started") {
         throw new Error("Codex rollout does not authenticate the historical environment messages");
       }
       if (item.type !== "response_item" || payload?.type !== "message" || payload.role !== "user"
@@ -272,11 +278,22 @@ function verifyHistoricalEnvironmentMessages(
       if (!isDeepStrictEqual(payload.content, pending.get(payload.id))) {
         throw new Error("Historical environment message differs from its native Codex record");
       }
+      if (currentTask) {
+        const metadata = record(payload.internal_chat_message_metadata_passthrough);
+        const kinds = metadata?.content_item_kinds;
+        if (metadata?.turn_id !== turnId || !Array.isArray(payload.content) || !Array.isArray(kinds)
+          || kinds.length !== payload.content.length || kinds.some(kind => kind !== "environments.environment_context")) {
+          throw new Error("Codex rollout does not authenticate the historical environment messages");
+        }
+        currentMessages.push({ id: payload.id, content: payload.content });
+      }
       pending.delete(payload.id);
+      if (currentTask && pending.size === 0) return currentMessages;
     }
     carry = Buffer.from(data.subarray(start));
     if (carry.length > MAX_ROLLOUT_JSON_LINE_BYTES) throw new Error("Codex rollout JSONL record exceeds the bounded record size");
   }
+  if (currentTask) throw new Error("Codex rollout does not authenticate the historical environment messages");
   throw new Error("Codex rollout has no current task boundary for environment history");
 }
 
@@ -610,7 +627,7 @@ export function resolveCurrentCodexRolloutEnvironment(options: {
   compactionSourceTurnId?: string;
   tools?: readonly CodexTool[];
   historicalEnvironmentMessages?: ChatGptUnattributedEnvironmentMessage[];
-}): ChatGptTurnEnvironment | undefined {
+}): { environment: ChatGptTurnEnvironment; currentEnvironmentMessages: ChatGptUnattributedEnvironmentMessage[] } | undefined {
   const { codexHome, lineage, turnId, tools, compactionSourceTurnId } = options;
   const nativeThreadId = CODEX_ID.test(lineage.threadId);
   const nativeTurnId = CODEX_ID.test(turnId);
@@ -629,7 +646,7 @@ export function resolveCurrentCodexRolloutEnvironment(options: {
     throw new Error("Codex has no canonical rollout for the requested subagent thread");
   }
 
-  const matching: ChatGptTurnEnvironment[] = [];
+  const matching: Array<{ environment: ChatGptTurnEnvironment; currentEnvironmentMessages: ChatGptUnattributedEnvironmentMessage[] }> = [];
   for (const candidate of candidates) {
     const rolloutPath = validateRolloutPath(codexHome, candidate, lineage.threadId);
     const fd = openSync(rolloutPath, "r");
@@ -647,10 +664,9 @@ export function resolveCurrentCodexRolloutEnvironment(options: {
       }
       const environment = environmentFromTurnContext(latest, latest.turn_id as string, tools);
       validateMetadataConsistency(lineage, environment);
-      if (options.historicalEnvironmentMessages) {
-        verifyHistoricalEnvironmentMessages(fd, size, turnId, options.historicalEnvironmentMessages);
-      }
-      matching.push(environment);
+      const currentEnvironmentMessages = options.historicalEnvironmentMessages
+        ? verifyHistoricalEnvironmentMessages(fd, size, turnId, options.historicalEnvironmentMessages) : [];
+      matching.push({ environment, currentEnvironmentMessages });
     } finally {
       closeSync(fd);
     }

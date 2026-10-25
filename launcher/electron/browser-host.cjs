@@ -27,6 +27,22 @@ const {
   shellZoomActionForInput,
 } = require("./browser-state.cjs");
 
+function browserWriterConflict(message = "The browser tab or conversation already has another writer") {
+  const error = new Error(message);
+  error.code = "browser_writer_conflict";
+  return error;
+}
+
+function savedConversationId(value) {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    if (url.origin !== "https://chatgpt.com" || url.username || url.password
+      || url.searchParams.get("temporary-chat") === "true") return undefined;
+    return url.pathname.match(/^(?:\/g\/g-p-[a-f0-9]{32}(?:-[^/]+)?)?\/c\/([A-Za-z0-9][A-Za-z0-9_-]{0,127})\/?$/)?.[1];
+  } catch { return undefined; }
+}
+
 const TEMPORARY_CHAT_URL = "https://chatgpt.com/?temporary-chat=true";
 const CHATGPT_ORIGIN = "https://chatgpt.com";
 const IDLE_BROWSER_URL = "data:text/html;charset=utf-8,%3C!doctype%20html%3E%3Chtml%3E%3Chead%3E%3Cmeta%20charset%3D%22utf-8%22%3E%3Ctitle%3ECodex%20Web%20GPT%3C%2Ftitle%3E%3C%2Fhead%3E%3Cbody%3E%3C%2Fbody%3E%3C%2Fhtml%3E#codex-web-gpt-browser-host";
@@ -355,6 +371,7 @@ class BrowserHost {
       ? "persist:codex-web-gpt-dev-chatgpt"
       : "persist:codex-web-gpt-chatgpt";
     if (partition !== expectedPartition) throw new Error("Browser host partition does not match its profile");
+    this.observationInstanceId = randomBytes(24).toString("base64url");
     this.partition = partition;
     this.profile = profile;
     this.publishState = publishState;
@@ -466,6 +483,7 @@ class BrowserHost {
     }
     this.writeDescriptor();
     this.logger.info("browser.initialized", { url: this.view.webContents.getURL() });
+    void this.prepareStandbyView();
   }
 
   currentOperation() {
@@ -479,6 +497,7 @@ class BrowserHost {
   }
 
   async withInteractionModeChange(mode, action) {
+    this.discardStandbyView();
     if (mode !== "automatic" && mode !== "manual") {
       throw new Error("Browser interaction mode must be automatic or manual");
     }
@@ -567,7 +586,62 @@ class BrowserHost {
     return this.turnTabs.get(this.selectedTabId) || null;
   }
 
-  async createTurnTab(traceId, helperPid, conversationKey, connectorIdentity, signal) {
+  // One account-owned, empty document, never a turn or a capability. No message is sent.
+  async prepareStandbyView() {
+    if (this.destroyed || this.standbyView || this.reauthenticationRequired || this.manualOperation
+      || Date.now() - (this.lastStandbyFailureAt ?? 0) < 30_000
+      || browserInteractionModeFor(this) !== "automatic"
+      || this.turnTabs.size >= MAX_BROWSER_TABS || typeof WebContentsView !== "function") return;
+    const view = new WebContentsView({ webPreferences: {
+      partition: this.partition, contextIsolation: true, nodeIntegration: false,
+      sandbox: true, spellcheck: true, backgroundThrottling: false,
+    } });
+    const standby = { view, ready: false, startedAt: Date.now() };
+    this.standbyView = standby;
+    view.webContents.on("render-process-gone", () => {
+      if (this.standbyView === standby) this.discardStandbyView();
+    });
+    view.webContents.on("destroyed", () => {
+      if (this.standbyView === standby) this.standbyView = null;
+    });
+    this.window.contentView.addChildView(view);
+    view.setBounds(this.hiddenTurnBounds());
+    view.setVisible(true);
+    try {
+      await loadCommittedBrowserSurface(view.webContents, "https://chatgpt.com/");
+      const deadline = Date.now() + 60_000;
+      while (Date.now() < deadline && this.standbyView === standby && !this.destroyed) {
+        if (view.webContents.isDestroyed()) throw new Error("Standby renderer closed");
+        const empty = await view.webContents.executeJavaScript(`(() => {
+          const p = [...document.querySelectorAll(${JSON.stringify(COMPOSER_SELECTOR)})].find(p => p.getClientRects().length > 0);
+          return location.origin === 'https://chatgpt.com' && location.pathname === '/'
+            && !location.search && !!p && p.getAttribute('contenteditable') === 'true'
+            && !p.textContent.trim() && !document.querySelector('[data-message-author-role]');
+        })()`);
+        if (empty) {
+          standby.ready = true;
+          this.logger.info("browser.standby_ready", { durationMs: Date.now() - standby.startedAt });
+          return;
+        }
+        await sleep(250);
+      }
+      throw new Error("Standby empty composer was not ready");
+    } catch (error) {
+      this.lastStandbyFailureAt = Date.now();
+      this.logger.warn("browser.standby_unavailable", { message: String(error) });
+      if (this.standbyView === standby) this.discardStandbyView();
+    }
+  }
+
+  discardStandbyView() {
+    const standby = this.standbyView;
+    this.standbyView = null;
+    if (!standby) return;
+    try { this.window.contentView.removeChildView(standby.view); } catch {}
+    if (!standby.view.webContents.isDestroyed()) standby.view.webContents.close();
+  }
+
+  async createTurnTab(traceId, helperPid, conversationKey, connectorIdentity, signal, conversationId, leaseFencing) {
     signal?.throwIfAborted();
     if (this.turnTabs.size >= MAX_BROWSER_TABS
       && !BrowserHost.prototype.evictOldestReclaimableTurnTab.call(this)) {
@@ -580,7 +654,14 @@ class BrowserHost {
     const ordinal = Array.from({ length: MAX_BROWSER_TABS }, (_unused, index) => index + 1)
       .find(candidate => ![...this.turnTabs.values()].some(tab => tab.ordinal === candidate));
     if (!ordinal) throw new Error("ChatGPT Web browser tab allocation is inconsistent");
-    const view = new WebContentsView({
+    let standby = this.standbyView;
+    if (standby && (!standby.ready || standby.view.webContents.isDestroyed()
+      || standby.view.webContents.getURL() !== "https://chatgpt.com/")) {
+      this.discardStandbyView();
+      standby = null;
+    }
+    this.standbyView = null; // Claim exactly once before any await.
+    const view = standby?.view ?? new WebContentsView({
       webPreferences: {
         partition: this.partition,
         contextIsolation: true,
@@ -595,6 +676,8 @@ class BrowserHost {
       surfaceId,
       traceId,
       conversationKey,
+      conversationId,
+      leaseFencing,
       connectorIdentity,
       connectorBound: false,
       helperPid,
@@ -617,12 +700,26 @@ class BrowserHost {
     };
     this.turnTabs.set(id, tab);
     this.syncPowerSaveBlocker();
-    this.window.contentView.addChildView(view);
+    if (!standby) this.window.contentView.addChildView(view);
     this.presentTurnView(tab, false);
     view.webContents.setZoomFactor(this.state.zoomFactor);
     this.bindShellZoomShortcuts(view.webContents);
     this.bindTurnContents(tab);
-    await this.initializeTurnTab(tab, signal);
+    if (standby) {
+      try {
+        signal?.throwIfAborted();
+        await this.markTurnTabSurface(tab);
+        signal?.throwIfAborted();
+      } catch (error) {
+        this.removeTurnTab(tab, true);
+        throw error;
+      }
+      tab.initializingSurface = false;
+      this.logger.info("browser.standby_claimed", { traceId, tabId: id, ageMs: Date.now() - standby.startedAt });
+    } else {
+      await this.initializeTurnTab(tab, signal);
+    }
+    void this.prepareStandbyView();
     return tab;
   }
 
@@ -933,6 +1030,7 @@ class BrowserHost {
     tab.loading = false;
     tab.message = "ChatGPT requested sign-in. Open sign in in the launcher, then retry.";
     this.reauthenticationRequired = true;
+    this.discardStandbyView();
     // Invalidate any session read that started before this explicit redirect.
     this.authenticationRevision = (this.authenticationRevision ?? 0) + 1;
     this.setState({ authenticated: false, status: "signed-out", message: tab.message });
@@ -1510,7 +1608,7 @@ class BrowserHost {
     this.publishState?.(this.snapshot());
   }
 
-  heartbeatTurn(traceId, helperPid, refreshViewport = false, progress) {
+  heartbeatTurn(traceId, helperPid, refreshViewport = false, progress, surfaceId) {
     if (typeof refreshViewport !== "boolean") throw new Error("refreshViewport is invalid");
     const tab = [...this.turnTabs.values()].find(candidate => candidate.traceId === traceId);
     if (!tab) {
@@ -1518,6 +1616,8 @@ class BrowserHost {
       if (closedOwner === helperPid) throw new Error(`Browser turn ${traceId} was already released`);
       throw new Error(`Browser turn ownership mismatch: no browser tab owns ${traceId}`);
     }
+    if (tab.interactionMode === "automatic" && (tab.leaseFencing || surfaceId !== undefined)
+      && tab.surfaceId !== surfaceId) throw browserWriterConflict();
     if (tab.helperPid !== helperPid) {
       throw new Error(`Browser helper ownership mismatch: expected ${tab.helperPid}, received ${helperPid}`);
     }
@@ -1544,9 +1644,33 @@ class BrowserHost {
     return this.snapshot();
   }
 
-  setTurnApprovalPending(traceId, helperPid, pending) {
+  observeTurn(traceId, helperPid, surfaceId, observation, register = false) {
+    const tab = [...this.turnTabs.values()].find(candidate => candidate.traceId === traceId);
+    const c = observation;
+    const fail = () => { const error = new Error("The original read-only observation lease is unavailable");
+      error.code = "browser_writer_conflict"; throw error; };
+    if (!tab || !c || c.version !== 1 || !c.identity || !c.host || !c.lease || !c.conversation || !c.submission
+      || tab.interactionMode !== "automatic" || tab.status !== "running" || tab.failedAt !== undefined
+      || tab.authenticationRequired || this.userCancelledTurnOwners.has(traceId)
+      || tab.view.webContents.isDestroyed() || c.traceId !== traceId || c.host.pid !== process.pid
+      || c.host.instanceId !== this.observationInstanceId || c.host.profile !== this.profile || c.host.partition !== this.partition
+      || c.lease.helperPid !== tab.helperPid || c.lease.surfaceId !== tab.surfaceId || surfaceId !== tab.surfaceId
+      || c.lease.targetId !== tab.view.webContents.getOrCreateDevToolsTargetId()
+      || c.conversation.key !== tab.conversationKey || savedConversationId(c.conversation.url) !== savedConversationId(tab.view.webContents.getURL())
+      || !savedConversationId(c.conversation.url)) fail();
+    const digest = createHash("sha256").update(JSON.stringify(c)).digest("hex");
+    if (register) {
+      if (helperPid !== tab.helperPid || (tab.observationDigest && tab.observationDigest !== digest)) fail();
+      tab.observationDigest = digest;
+    } else if (tab.observationDigest !== digest) fail();
+    // Observation does not rotate the surface, replace helperPid, activate a writer or navigate.
+    tab.lastHeartbeatAt = Date.now();
+    return { ok: true };
+  }
+
+  setTurnApprovalPending(traceId, helperPid, pending, surfaceId) {
     if (typeof pending !== "boolean") throw new Error("Tool approval pending state must be a boolean");
-    this.heartbeatTurn(traceId, helperPid);
+    this.heartbeatTurn(traceId, helperPid, false, undefined, surfaceId);
     const tab = [...this.turnTabs.values()].find(candidate => candidate.traceId === traceId);
     if (tab.interactionMode !== "automatic") throw new Error("Tool approval requires an automatic browser turn");
     tab.approvalPending = pending;
@@ -1582,6 +1706,7 @@ class BrowserHost {
   }
 
   reapExpiredTurnTabs(now = Date.now()) {
+    void this.prepareStandbyView();
     const cancellations = [];
     const lastSweepAt = this.lastTurnSweepAt;
     this.lastTurnSweepAt = now;
@@ -2517,8 +2642,11 @@ class BrowserHost {
     connectorIdentity,
     requireRetainedConversation = false,
     signal,
+    conversationUrl,
+    leaseFencing = false,
   ) {
     signal?.throwIfAborted();
+    if (typeof leaseFencing !== "boolean") throw new Error("Browser lease fencing flag is invalid");
     if (this.manualOperation) {
       throw new Error(`ChatGPT browser is busy with ${this.manualOperation}`);
     }
@@ -2532,7 +2660,18 @@ class BrowserHost {
         this.removeTurnTab(tab, true);
       }
     }
+    const conversationId = savedConversationId(conversationUrl);
+    if (conversationUrl !== undefined && !conversationId) throw new Error("Saved conversation identity is invalid");
+    // BrowserHost is shared by QA and Full. Connector names must not partition writer ownership.
+    const conflict = [...this.turnTabs.values()].some(tab => tab.status === "running" && (
+      tab.traceId === traceId
+      || (conversationKey && tab.conversationKey === conversationKey)
+      || (conversationId && (tab.conversationId === conversationId || savedConversationId(tab.url) === conversationId))
+    ) && (tab.traceId !== traceId || tab.helperPid === helperPid
+      || processRunning(tab.helperPid) || tab.initializingSurface));
     const sameTrace = [...this.turnTabs.values()].find((tab) => tab.traceId === traceId);
+    if (conflict) throw browserWriterConflict(sameTrace && sameTrace.helperPid !== helperPid && processRunning(sameTrace.helperPid)
+      ? `ChatGPT browser turn ${traceId} is owned by another helper process` : undefined);
     if (sameTrace && sameTrace.interactionMode !== "automatic") {
       throw new Error(`Browser turn ${traceId} already belongs to Zero Risk interaction`);
     }
@@ -2569,6 +2708,15 @@ class BrowserHost {
           evidence: "previous helper exited",
         });
       }
+      // New clients fence every activation. Legacy helper/usage payloads keep their original
+      // surface contract; switching either direction still retires the previous nonce.
+      const rotateFence = leaseFencing || existing.leaseFencing;
+      if (rotateFence) {
+        existing.surfaceId = randomBytes(24).toString("base64url");
+        existing.observationDigest = undefined;
+      }
+      existing.leaseFencing = leaseFencing;
+      existing.conversationId = conversationId ?? existing.conversationId;
       existing.helperPid = helperPid;
       existing.traceId = traceId;
       existing.status = "running";
@@ -2584,6 +2732,20 @@ class BrowserHost {
       existing.lastHeartbeatAt = Date.now();
       if (!existing.view.webContents.isDestroyed()) {
         existing.view.webContents.setBackgroundThrottling(false);
+      }
+      if (rotateFence) {
+        const activationSurface = existing.surfaceId;
+        existing.initializingSurface = true;
+        try {
+          await this.markTurnTabSurface(existing);
+          signal?.throwIfAborted();
+          if (this.turnTabs.get(existing.id) !== existing || existing.status !== "running"
+            || existing.surfaceId !== activationSurface) throw browserWriterConflict();
+          existing.initializingSurface = false;
+        } catch (error) {
+          if (this.turnTabs.get(existing.id) === existing && existing.surfaceId === activationSurface) this.removeTurnTab(existing, true);
+          throw error;
+        }
       }
       this.selectedTabId = existing.id;
       if (reveal) this.show();
@@ -2605,7 +2767,10 @@ class BrowserHost {
     }
     // A retry may reuse the trace, but never the failed document or its incremental history.
     if (sameTrace?.failedAt !== undefined) this.removeTurnTab(sameTrace, false);
-    const tab = await this.createTurnTab(traceId, helperPid, conversationKey, connectorIdentity, signal);
+    const tab = await this.createTurnTab(traceId, helperPid, conversationKey, connectorIdentity, signal,
+      ...(conversationId || leaseFencing ? [conversationId, leaseFencing] : []));
+    signal?.throwIfAborted();
+    if (leaseFencing && (this.turnTabs.get(tab.id) !== tab || tab.status !== "running")) throw browserWriterConflict();
     this.selectedTabId = tab.id;
     if (reveal) this.show();
     else this.syncViewVisibility();
@@ -2623,6 +2788,7 @@ class BrowserHost {
     message,
     retain = false,
     connectorBound = false,
+    surfaceId,
   ) {
     const tab = [...this.turnTabs.values()].find((candidate) => candidate.traceId === traceId);
     if (!tab) {
@@ -2634,6 +2800,8 @@ class BrowserHost {
       }
       throw new Error(`Browser turn ownership mismatch: no browser tab owns ${traceId}`);
     }
+    if (tab.interactionMode === "automatic" && (tab.leaseFencing || surfaceId !== undefined)
+      && tab.surfaceId !== surfaceId) throw browserWriterConflict();
     if (tab.helperPid !== helperPid) {
       throw new Error(
         `Browser helper ownership mismatch: expected ${tab.helperPid}, received ${helperPid}`,
@@ -2686,6 +2854,7 @@ class BrowserHost {
     this.removeTurnTab(tab, false);
     if (hideAfterTurn && !this.activeTraceId) this.hide();
     this.logger.info("browser.tab_released", { tabId: tab.id, traceId, status: tab.status });
+    void this.prepareStandbyView();
     return { cancelledByUser, ...(authenticationRequired ? { authenticationRequired: true } : {}) };
   }
 
@@ -3264,6 +3433,7 @@ class BrowserHost {
       surfaceId: this.surfaceId,
       surfaceTargets,
       createdAt: new Date().toISOString(),
+      observationInstanceId: this.observationInstanceId,
     };
     writePrivateFileAtomic(this.descriptorPath, `${JSON.stringify(descriptor, null, 2)}\n`);
   }
@@ -3278,6 +3448,7 @@ class BrowserHost {
 
   destroy() {
     this.destroyed = true;
+    this.discardStandbyView();
     if (this.authenticationCookieListener) {
       this.view.webContents.session.cookies.off("changed", this.authenticationCookieListener);
     }
