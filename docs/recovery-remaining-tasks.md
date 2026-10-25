@@ -18,8 +18,12 @@ These are open outcomes, not completed features. The authoritative task records 
 | `bd_203_install_codex_proxy_rs_ywl-tur.3` | [恢复验收] 闭环旧Pro Ultra兼容与真实Full工具能力 | open |
 | `bd_203_install_codex_proxy_rs_ywl-tur.4` | [性能] 验证并降低预热后的实际首字延迟 | open |
 
-## Production preflight result
+## Production cutover result (2026-10-25)
 
-The four existing production MCP owners return HTTP404 for the native release-status endpoint. They do not expose the new pending-tool, continuation or unresolved-result inventory. Web HTTP/browser counters are zero, but that is not proof that MCP/Native work is settled. No production owner has been stopped or restarted.
+The approved maintenance exception was executed by the existing coordinated release owner. Fourteen Web/MCP listeners accepted traffic after the cutover; four paired Launchers retained their profiles and partitions. The old MCP inventory remains unreconciled: the native gate was not passed and no old request was replayed.
 
-Safe activation remains pending compatibility takeover and authoritative in-flight reconciliation. Do not fabricate zero counters, discard old memory sessions, restore stale databases or force-stop unknown tool work. The existing independent coordinated release entry point must own stop/recovery together.
+**Production business acceptance failed.** Full1 public canary162 (`f5e5d05c3a59`) activated Send but did not bind a saved conversation URL. Native tools executed zero times; the pending mapping is preserved. No second turn was sent and no request was replayed. A healthy listener is not a successful tool turn.
+
+The first failed cutover and its recovery evidence remain failed. The second original-record resume completed the cutover. Do not repeat deployment or blindly roll back live durable state to an incompatible old package.
+
+Next: repair saved-conversation binding and interrupted-stream completion in the isolated account-2 candidate. Production stays read-only; do not navigate its pages or send new test requests. The eleven UX outcomes remain open. Deployment adapter and reproducible canary are archived under `patches/deployment/02_production_handover_and_canary.patch`.
