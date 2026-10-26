@@ -1,6 +1,7 @@
-import { test, expect } from "bun:test";
+import { tmpdir } from "node:os";
+import { afterAll, test, expect } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, mkdirSync, readFileSync } from "node:fs";
+import { rmSync, mkdtempSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DurableOperation, OperationJournal, operationDigest, nativeOperationReleased, retainedOperationError, type OperationRecord } from "../src/adapters/chatgpt-web/operation-journal";
 import { ChatGptTurnSession, ChatGptTurnSessions, ChatGptTextFeed, ChatGptTraceFeed, chatGptTurnExecutionKey, chatGptTurnRoundKey, chatGptPartialReceiptRound } from "../src/adapters/chatgpt-web/turn-execution";
@@ -11,8 +12,8 @@ import { buildResponseJSON } from "../src/bridge";
 import { restoreNativeFinalRuntime as restore, reconcileNativeHostRelease, nativeScopeForOperation, acknowledgeNativeResultReady,
  restoreChatGptObserverRound, chatGptWebExecutionNamespace, chatGptWebTraceId } from "../src/adapters/chatgpt-web/index";
 
-const evidence = process.env.Q39_TEST_ROOT;
-if (!evidence) throw Error("Q39_TEST_ROOT must name the exclusive review33 evidence directory");
+const evidence = process.env.Q39_TEST_ROOT ?? mkdtempSync(join(tmpdir(), "native-evidence-"));
+afterAll(() => { if (!process.env.Q39_TEST_ROOT) rmSync(evidence, { recursive: true, force: true }); });
 mkdirSync(evidence, { recursive: true });
 function deferred<T>() { let resolve!: (v:T)=>void, reject!: (e:Error)=>void; const promise=new Promise<T>((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject}; }
 async function bounded<T>(promise:Promise<T>):Promise<T>{let timer:ReturnType<typeof setTimeout>|undefined;try{return await Promise.race([promise,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error("private fixture timeout")),800);})]);}finally{clearTimeout(timer);}}
@@ -73,6 +74,24 @@ test("current final strictly requires original round and exact prefix; release m
  expect(chatGptTurnExecutionKey(changed)).toBe(chatGptTurnExecutionKey(f.input));expect(chatGptTurnRoundKey(changed)).not.toBe(f.scope.roundKey);
  expect(()=>restore(f.op,changed)).toThrow("scope");
  f.record.rounds[f.scope.roundKey].events=[{type:"text_delta",text:"Other",phase:"final_answer"}];expect(()=>restore(f.op,f.input)).toThrow("prefix");
+});
+
+test("cold durable Native final restores its chart projection without a new writer", async () => {
+  const f = fixture();
+  f.record.richWidgets = [{ version: 1, kind: "pie_chart", id: "chart-1", title: "Original chart",
+    labelField: "label", valueField: "value", slices: [{ label: "original", value: 1 }] }];
+  f.op.nativeResultReady(f.ready());
+  f.op.nativeRelease(f.release());
+  f.record.generation = "final";
+  f.record.final = { answer: "Original answer", events: [], reasoning: [] };
+  f.record.physicalSettled = true;
+  f.op.checkpoint();
+  const operation = new DurableOperation(f.journal, f.journal.read<OperationRecord>(f.scope.executionKey)!);
+  const restored = restore(operation, f.input);
+  expect(await restored.browser).toBe("Original answer");
+  expect(restored.richWidgets).toEqual(f.record.richWidgets);
+  await restored.physicalSettlement;
+  expect(f.journal.unresolvedOwner(f.record.ownerKey!, "next")).toBeUndefined();
 });
 
 test("only the existing exact partial-item receipt proof aliases the original final round",async()=>{

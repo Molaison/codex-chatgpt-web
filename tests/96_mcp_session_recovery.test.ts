@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 // Actual HTTP/SDK/broker; physical Native execution is synthetic in this contract test.
 import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync, openSync, closeSync, rmSync } from "node:fs";
@@ -7,8 +8,8 @@ import { TurnBroker, type BrokerToolResult } from "../src/adapters/chatgpt-web/t
 import { OperationJournal, operationDigest } from "../src/adapters/chatgpt-web/operation-journal";
 
 test("fresh MCP id=1 polls are distinct; same-session duplicate joins; drain permits continuation reconnection", async () => {
-  mkdirSync(process.env.Q39_TEST_ROOT!, { recursive: true });
-  const root = mkdtempSync(join(process.env.Q39_TEST_ROOT!, "96-session-"));
+  mkdirSync((process.env.Q39_TEST_ROOT ?? tmpdir()), { recursive: true });
+  const root = mkdtempSync(join((process.env.Q39_TEST_ROOT ?? tmpdir()), "96-session-"));
   const fd = openSync(root, "r"); const socket = `/proc/${process.pid}/fd/${fd}/b.sock`;
   const broker = TurnBroker.forSocket(socket); await broker.listen();
   const token = await broker.register({ cwd: root, roots: [root], writableRoots: [], sandboxPolicy: { type: "readOnly", networkAccess: false }, tools: [
@@ -66,6 +67,9 @@ test("fresh MCP id=1 polls are distinct; same-session duplicate joins; drain per
     expect((await finalPoll).result).toEqual(terminal);
     expect((await admin()).native_continuations).toBe(0);
     expect(Object.keys(journal.read<any>(operationDigest(token)).calls)).toHaveLength(3);
+    // Terminal command receipts do not retire the browser turn's capability by themselves.
+    expect((await admin()).safe_to_stop).toBe(false);
+    broker.revoke(token);
     for (const session of sessions) {
       const response = await fetch(server.url.origin + "/mcp", { method: "DELETE", headers: {
         "mcp-session-id": session, "MCP-Protocol-Version": "2025-11-25" } });

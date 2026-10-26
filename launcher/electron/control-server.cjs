@@ -99,6 +99,8 @@ class BrowserControlServer {
     const isTurn = request.url === "/v1/turn/observe-ready"
       || request.url === "/v1/turn/native-submission-watch"
       || request.url === "/v1/turn/native-release-read"
+      || request.url === "/v1/turn/observe-complete"
+      || request.url === "/v1/turn/observe-end"
       || request.url === "/v1/turn/observe"
       || request.url === "/v1/turn/start"
       || request.url === "/v1/turn/heartbeat"
@@ -129,7 +131,7 @@ class BrowserControlServer {
       const body = await readJson(
         request,
         manualAction === "start" ? MAX_MANUAL_START_BODY_BYTES
-          : ["/v1/turn/native-submission-watch", "/v1/turn/native-release-read", "/v1/turn/observe-ready", "/v1/turn/observe"].includes(request.url)
+          : ["/v1/turn/native-submission-watch", "/v1/turn/native-release-read", "/v1/turn/observe-ready", "/v1/turn/observe", "/v1/turn/observe-complete", "/v1/turn/observe-end"].includes(request.url)
             ? MAX_NATIVE_WATCH_BODY_BYTES : MAX_BODY_BYTES,
       );
       if (request.url === "/v1/turn/native-submission-watch") {
@@ -335,6 +337,18 @@ class BrowserControlServer {
           body.retain === true,
         );
         writeJson(response, 200, { ok: true, ...release });
+        return;
+      }
+      if (request.url === "/v1/turn/observe-complete") {
+        if (host.browserInteractionMode() === "manual") throw new Error("Automatic browser interaction is disabled");
+        const result = await host.completeObservedNativeTurn(body);
+        writeJson(response, 200, { ok: true, ...result });
+        return;
+      }
+      if (request.url === "/v1/turn/observe-end") {
+        if (host.browserInteractionMode() === "manual") throw new Error("Automatic browser interaction is disabled");
+        const result = await host.endObservedTurn(body);
+        writeJson(response, 200, { ok: true, ...result });
         return;
       }
       if (request.url === "/v1/turn/native-release-read") {

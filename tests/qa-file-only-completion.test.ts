@@ -20,13 +20,15 @@ function fixtureWorker(page: Page, root: string, baseUrl: string, options: {
   const mode = resolveChatGptWebModelMode(CHATGPT_WEB_MODEL_ID, "low", { ...capabilities, localToolsEnabled: options.localTools === true });
   let ready!: () => void;
   const readyForObservation = new Promise<void>(resolve => { ready = resolve; });
-  const config = {
-    appName: "file-only-fixture", browserHost: "launcher", useSavedChats: false,
+  const config: ResolvedBrowserConfig = {
+    appName: "file-only-fixture", browserHost: "launcher",
+    storageStatePath: join(root, "unused-state.json"), chromeExecutablePath: join(root, "unused-chrome"),
+    headed: false, autoApproveToolCalls: false,
     browserDiagnosticsPath: join(root, "diagnostics"),
     ...(options.downloadDirectory === false ? {} : { downloadDirectory: join(root, "downloads") }),
     ...(options.downloadBaseUrl === false ? {} : { downloadBaseUrl: baseUrl }),
     turnTimeoutMs: options.timeoutMs ?? 10_000,
-  } as ResolvedBrowserConfig;
+  };
   const worker = Object.assign(Object.create(ChatGptBrowserWorker.prototype), {
     config,
     prepareChatSurface: async () => {},
@@ -48,7 +50,10 @@ function fixtureWorker(page: Page, root: string, baseUrl: string, options: {
   const deltas: string[] = [];
   let released = false;
   const turn: BrowserTurn = {
-    traceId: "file-only-fixture", modelId: CHATGPT_WEB_MODEL_ID, reasoning: "low",
+    traceId: "file-only-fixture", modelId: CHATGPT_WEB_MODEL_ID, reasoning: "low", sessionMode: "temporary",
+    // This fixture invokes the inner response loop; the public run() method
+    // normally derives this absolute deadline from config.turnTimeoutMs.
+    recoveryDeadlineAt: Date.now() + (options.timeoutMs ?? 10_000),
     capabilities: { ...capabilities, localToolsEnabled: options.localTools === true },
     prepare: async () => ({ text: "Create a fixture CSV", images: [], release: () => { released = true; } }),
     onTextDelta: delta => { deltas.push(delta); },

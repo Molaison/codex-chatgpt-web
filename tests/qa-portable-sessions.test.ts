@@ -39,7 +39,7 @@ function provider(accountId: string, overrides: CodexProviderConfig["chatgptWeb"
   const home = root();
   writePromptTestDescriptor(join(home, "launcher.json"));
   return { adapter: "chatgpt-web", baseUrl: "browser://portable-test", chatgptWeb: {
-    ...capabilities, accountId, browserHost: "launcher", useSavedChats: true,
+    ...capabilities, accountId, browserHost: "launcher",
     browserHostDescriptorPath: join(home, "launcher.json"),
     brokerSocketPath: join(home, "broker.sock"), ...overrides,
   } };
@@ -208,32 +208,29 @@ test("same account/thread still queues across mutable configuration changes", as
   });
 });
 
-test("QA config defaults to saved chats while explicit Temporary Chat opt-out survives reload", () => {
+test("portable configuration does not forward the retired global saved-chat setting", () => {
   process.env.CODEX_CHATGPT_WEB_HOME = root();
   const config: Record<string, unknown> = { ...defaultConfig() };
-  expect(config.useSavedChats).toBe(true); delete config.useSavedChats;
+  expect(config).not.toHaveProperty("useSavedChats");
   const persist = () => writeFileSync(join(process.env.CODEX_CHATGPT_WEB_HOME!, "config.json"), JSON.stringify(config));
-  persist();
-  expect(loadConfig()!.useSavedChats).toBe(true);
-  expect(providerConfig(loadConfig()!).chatgptWeb!.useSavedChats).toBe(true);
-  config.useSavedChats = false; persist();
-  expect(loadConfig()!.useSavedChats).toBe(false);
-  expect(providerConfig(loadConfig()!).chatgptWeb!.useSavedChats).toBe(false);
-  config.useSavedChats = "false"; persist();
-  expect(() => loadConfig()).toThrow("useSavedChats");
+  for (const retired of [undefined, false, true, "false"]) {
+    config.useSavedChats = retired; persist();
+    expect(loadConfig()).not.toHaveProperty("useSavedChats");
+    expect(providerConfig(loadConfig()!).chatgptWeb).not.toHaveProperty("useSavedChats");
+  }
 });
 
-test("manual configuration without a preference remains Temporary Chat", () => {
+test("manual configuration preserves its interaction mode without a global chat preference", () => {
   process.env.CODEX_CHATGPT_WEB_HOME = root();
   const config: Record<string, unknown> = { ...defaultConfig("full"), browserHost: "launcher",
     browserInteractionMode: "manual", browserHostDescriptorPath: join(process.env.CODEX_CHATGPT_WEB_HOME, "launcher.json") };
   config.tunnel = { binaryPath: join(process.env.CODEX_CHATGPT_WEB_HOME, "tunnel"),
     tunnelId: "tunnel_" + "a".repeat(32), runtimeKeyFile: join(process.env.CODEX_CHATGPT_WEB_HOME, "key"),
     profileDir: join(process.env.CODEX_CHATGPT_WEB_HOME, "profile"), profileName: "test", alias: "test" };
-  config.appName = config.manualAppName; delete config.useSavedChats;
+  config.appName = config.manualAppName;
   writeFileSync(join(process.env.CODEX_CHATGPT_WEB_HOME, "config.json"), JSON.stringify(config));
-  expect(loadConfig()!.useSavedChats).toBe(false);
-  expect(providerConfig(loadConfig()!).chatgptWeb!.useSavedChats).toBe(false);
+  expect(loadConfig()!.browserInteractionMode).toBe("manual");
+  expect(providerConfig(loadConfig()!).chatgptWeb).not.toHaveProperty("useSavedChats");
 });
 
 test("portable mapping directory resolves at the account home after relocation", () => {
@@ -258,16 +255,25 @@ test("saved-chat directory validation rejects invalid types, blanks and NULs", (
   }
 });
 
-test("direct worker and provider agree on QA defaults, account-relative paths and explicit opt-out", () => {
+test("direct worker and provider agree on account defaults and portable mapping paths", () => {
   process.env.CODEX_CHATGPT_WEB_HOME = root();
   const config: CodexProviderConfig = { adapter: "chatgpt-web", baseUrl: "https://chatgpt.com", chatgptWeb: {} };
-  expect(resolveBrowserConfig(config)).toMatchObject({ accountId: "default", useSavedChats: true,
+  expect(resolveBrowserConfig(config)).toMatchObject({ accountId: "default",
     conversationStoreDirectory: join(process.env.CODEX_CHATGPT_WEB_HOME, "runtime", "conversations") });
   config.chatgptWeb!.conversationStoreDirectory = "custom/mappings";
   expect(resolveBrowserConfig(config).conversationStoreDirectory).toBe(join(process.env.CODEX_CHATGPT_WEB_HOME, "custom", "mappings"));
-  config.chatgptWeb!.useSavedChats = false;
-  expect(resolveBrowserConfig(config).useSavedChats).toBe(false);
-  delete config.chatgptWeb!.useSavedChats;
   config.chatgptWeb!.localToolsEnabled = true;
-  expect(resolveBrowserConfig(config).useSavedChats).toBe(false);
+  expect(resolveBrowserConfig(config)).not.toHaveProperty("useSavedChats");
+});
+
+test("the adapter forwards explicit temporary and persistent modes per turn", async () => {
+  const modes: Array<BrowserTurn["sessionMode"]> = [];
+  await withBrowserProviders([provider(randomUUID())], async turn => { modes.push(turn.sessionMode); return "OK"; }, async ([adapter]) => {
+    for (const sessionMode of ["temporary", "persistent"] as const) {
+      const parsed = request(randomUUID(), [message("user", "Session mode fixture")]);
+      parsed._chatgptSessionMode = sessionMode;
+      await adapter!.runTurn(parsed, { headers: new Headers() }, () => {});
+    }
+  });
+  expect(modes).toEqual(["temporary", "persistent"]);
 });

@@ -20,7 +20,7 @@ function body(stream: boolean) {
 const req = (value: unknown) => new Request("http://offline/v1/responses", {
   method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(value),
 });
-const config = () => ({ ...defaultConfig("browser-only"), accountId: randomUUID(), useSavedChats: false });
+const config = () => ({ ...defaultConfig("browser-only"), accountId: randomUUID() });
 
 for (const stream of [true, false]) test(`source ambiguity is HTTP400 before adapter creation, stream=${stream}`, async () => {
   let adapters = 0;
@@ -91,7 +91,7 @@ test("Chat source preflight does not reinterpret the configured Tools route", as
   let adapters = 0;
   let parsed: CodexParsedRequest | undefined;
   const response = await responseRequest(req(body(false)), {
-    ...defaultConfig("full"), accountId: randomUUID(), useSavedChats: false, mcpProvider: "external-http",
+    ...defaultConfig("full"), accountId: randomUUID(), mcpProvider: "external-http",
   }, () => {
     adapters++;
     return { async runTurn(input: CodexParsedRequest, _context: unknown, emit: (event: any) => void) {

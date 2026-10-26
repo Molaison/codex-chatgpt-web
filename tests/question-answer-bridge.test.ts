@@ -28,10 +28,12 @@ test.each([
     { type: "function_call_output", call_id: "ordinary_call", output: "INTERNAL_TOOL_RESULT" },
   ] });
   const result = compileChatGptWebPrompt(parsed, capabilities, undefined, { importCodexPrompt: false });
-  expect(parsed.context.messages.at(-2)?.role).toBe("toolResult");
-  expect(parsed.context.messages.at(-2)?.content).toBe(output);
-  expect(result.text).toContain("Delegated task:\nExplain <sample> & its meaning.");
-  expect(result.text).toBe("Delegated task:\nExplain <sample> & its meaning.");
+  const nativeAgentDelivery = name === "send_message_to_thread";
+  expect(parsed.context.messages.at(-2)).toMatchObject({
+    role: nativeAgentDelivery ? "agentMessage" : "toolResult", content: output,
+    ...(nativeAgentDelivery ? { author: "parent" } : {}),
+  });
+  expect(result.text).toBe(`${nativeAgentDelivery ? "Delegated task from parent:" : "Delegated task:"}\nExplain <sample> & its meaning.`);
   expect(result.text).not.toContain("INTERNAL_");
   expect(result.text).not.toContain("/private/work");
   for (const mutation of [

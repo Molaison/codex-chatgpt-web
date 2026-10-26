@@ -20,9 +20,33 @@ test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("CodeMirror language invalida
       gap.style.height = "200px";
       editor.appendChild(gap);
     });
-    await expect(observe()).rejects.toThrow("one complete set of code lines");
+    let extractionError: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let snapshot;
+      try {
+        snapshot = await observe();
+      } catch (error) {
+        extractionError = error;
+        break;
+      }
+      // A budgeted probe may return no observation while parallel browsers are busy.
+      // Never accept a normal snapshot or any content from the incomplete code block.
+      expect(snapshot).toMatchObject({
+        observationTimedOut: true,
+        responsePresent: false,
+        fullHtml: "",
+        visibleText: "",
+        markdownSegments: [],
+        traceBlocks: [],
+        downloadableFiles: [],
+        images: [],
+        richWidgetSources: [],
+      });
+    }
+    expect(extractionError).toBeInstanceOf(Error);
+    expect((extractionError as Error).message).toContain("one complete set of code lines");
   } finally { await browser.close(); }
-});
+}, 15_000);
 
 test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("paragraph identity survives file preview movement in both response layouts", async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHATGPT_DOM_TEST_BROWSER, headless: true });

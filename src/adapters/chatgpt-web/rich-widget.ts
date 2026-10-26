@@ -25,6 +25,32 @@ const number = (value: unknown): value is number | string =>
   (typeof value === "number" || typeof value === "string") && String(value).trim().length > 0
   && Number.isFinite(Number(value));
 
+/** Validate the inert projection at IPC boundaries, independently of its source chart format. */
+export function isChatGptChartWidget(value: unknown): value is ChatGptChartWidget {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const widget = value as Record<string, unknown>;
+  if (widget.version !== 1 || !field(widget.id) || typeof widget.title !== "string" || widget.title.length > 160) return false;
+  const keys = (record: Record<string, unknown>, allowed: readonly string[]) => Object.keys(record).every(key => allowed.includes(key));
+  const text = (value: unknown) => typeof value === "string" && value.length <= 100;
+  const finite = (value: unknown) => typeof value === "number" && Number.isFinite(value);
+  const rows = (value: unknown): value is Array<Record<string, unknown>> => Array.isArray(value)
+    && value.length > 0 && value.length <= 300
+    && value.every(row => row !== null && typeof row === "object" && !Array.isArray(row));
+  const base = ["version", "kind", "id", "title"];
+  if (widget.kind === "cartesian_chart") return keys(widget, [...base, "mark", "xField", "yField", "seriesField", "points"])
+    && ["bar", "line", "point", "area"].includes(widget.mark as string) && field(widget.xField) && field(widget.yField)
+    && (widget.seriesField === undefined || field(widget.seriesField)) && rows(widget.points)
+    && widget.points.every(point => keys(point, ["x", "y", "series"]) && text(point.x) && finite(point.y)
+      && (widget.seriesField === undefined ? point.series === undefined : text(point.series)));
+  if (widget.kind === "pie_chart") return keys(widget, [...base, "labelField", "valueField", "slices"])
+    && field(widget.labelField) && field(widget.valueField) && rows(widget.slices)
+    && widget.slices.every(slice => keys(slice, ["label", "value"]) && text(slice.label) && finite(slice.value) && (slice.value as number) > 0);
+  if (widget.kind === "heatmap_chart") return keys(widget, [...base, "xField", "yField", "valueField", "cells"])
+    && field(widget.xField) && field(widget.yField) && field(widget.valueField) && rows(widget.cells)
+    && widget.cells.every(cell => keys(cell, ["x", "y", "value"]) && text(cell.x) && text(cell.y) && finite(cell.value));
+  return false;
+}
+
 export function parseChatGptChartWidgets(sources: readonly string[]): ChatGptChartWidget[] {
   const widgets: ChatGptChartWidget[] = [];
   for (const source of sources.slice(0, 4)) {

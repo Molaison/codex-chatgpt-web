@@ -7,6 +7,7 @@ import { createChatGptWebAdapter, chatGptWebExecutionNamespace } from "../src/ad
 import { chatGptTurnExecutionKey, chatGptTurnSessions } from "../src/adapters/chatgpt-web/turn-execution";
 import { OperationJournal, operationDigest, type OperationRecord } from "../src/adapters/chatgpt-web/operation-journal";
 import { parseBrowserObservation, type BrowserObservationCheckpoint } from "../src/adapters/chatgpt-web/observation-recovery";
+import type { NativeSubmissionRecord } from "../src/adapters/chatgpt-web/submission-identity";
 import { TurnBroker } from "../src/adapters/chatgpt-web/turn-broker";
 import { LAUNCHER_BROWSER_HOST_KIND, LAUNCHER_BROWSER_IDLE_URL } from "../src/launcher-browser-host";
 import type { AdapterEvent, CodexParsedRequest, CodexProviderConfig } from "../src/types";
@@ -21,6 +22,9 @@ async function fixture(full: boolean, scenario: Scenario) {
   const fd = openSync(root, "r");
   const socket = `/proc/self/fd/${fd}/fork${sequence++}.sock`;
   const descriptor = join(root, "launcher.json"), helper = join(root, "helper.cjs");
+  const nativeAcceptanceFailure = !full && scenario === "checkpoint-before-accept-failure";
+  // This scenario deliberately retains a physical Native owner beyond fixture cleanup.
+  const accountId = nativeAcceptanceFailure ? `account-${randomUUID()}` : "account-2";
   writeFileSync(helper, "// fixture only; never started\n");
   writeFileSync(descriptor, JSON.stringify({ version: 3, kind: LAUNCHER_BROWSER_HOST_KIND,
     profile: "production", pid: process.pid, endpoint: "http://127.0.0.1:9",
@@ -30,8 +34,8 @@ async function fixture(full: boolean, scenario: Scenario) {
     createdAt: new Date().toISOString(), observationInstanceId: "h".repeat(32),
   }), { mode: 0o600 });
   const provider: CodexProviderConfig = { adapter: "chatgpt-web", baseUrl: "browser://" + root,
-    chatgptWeb: { accountId: "account-2", appName: "Recovery42", browserHost: "launcher",
-      browserHostDescriptorPath: descriptor, localToolsEnabled: full, useSavedChats: true,
+    chatgptWeb: { accountId, appName: "Recovery42", browserHost: "launcher",
+      browserHostDescriptorPath: descriptor, localToolsEnabled: full,
       threadEnvironmentStatePath: join(root, "environment.json"), brokerSocketPath: socket } };
   const thread = "child-" + randomUUID(), turnId = "turn-" + randomUUID();
   const environment = `<environment_context><cwd>${root}</cwd><filesystem><workspace_roots><root>${root}</root></workspace_roots><permission_profile type="disabled"><file_system type="unrestricted" /></permission_profile></filesystem></environment_context>`;
@@ -65,16 +69,57 @@ async function fixture(full: boolean, scenario: Scenario) {
     if (scenario === "before-send-failure") throw new Error("fixture failed before Send");
     if (scenario === "resume" || scenario === "restored-after-prepare") browserTurn.onConversationRestored?.();
     await browserTurn.onSendActivated?.(); sends++;
-    const checkpoint = parseBrowserObservation({ version: 1,
+    const host = { pid: process.pid, instanceId: "h".repeat(32), profile: "production", partition: "persist:codex-web-gpt-chatgpt" };
+    const lease = { helperPid: process.pid, surfaceId: "s".repeat(32), targetId: "fixture-target" };
+    let native: NativeSubmissionRecord | undefined;
+    if (nativeAcceptanceFailure) {
+      // Ordinary QA durably binds its original Send before observing a v2 checkpoint.
+      // onSendActivated alone is only preparation validation under that contract.
+      expect(browserTurn.nativeSubmissionIdentity).toBeTrue();
+      const observedAt = Date.now() - 100, userMessageId = randomUUID();
+      const binding: NonNullable<NativeSubmissionRecord["binding"]> = {
+        roundKey: browserTurn.nativeSubmissionRoundKey!, stage: { kind: "final" }, documentEpoch: null, host, lease,
+      };
+      native = { version: 1, sendId: randomUUID(), revision: 1, phase: "send_activated", initialTurnIdentities: [], binding };
+      await browserTurn.onNativeSubmission!(native);
+      const watch: NonNullable<NativeSubmissionRecord["hostWatch"]> = {
+        version: 1, scope: browserTurn.nativeOperationScope!, traceId: browserTurn.traceId,
+        sendId: native.sendId, currentSendId: native.sendId,
+        binding: { ...binding, documentEpoch: "fork-document" }, segmentState: "watching", totalPostCount: 0,
+        segments: [], latePosts: [], host, lease, sessionEpoch: randomUUID(), documentEpoch: "fork-document",
+        mainFrame: { frameId: "frame", loaderId: "loader" }, seq: 1, active: true,
+        gap: false, gapReasons: [], conflict: false, conflictReasons: [], postCount: 0, identities: [],
+        startedAt: observedAt, readAt: observedAt, initialConversationId: null, boundConversationId: null,
+        flush: { stable: true, pending: 0, throughSeq: 1 },
+      };
+      native = { ...native, revision: 2, phase: "watch_ready", binding: watch.binding!, hostWatch: watch };
+      await browserTurn.onNativeSubmission!(native);
+      const post: NonNullable<NativeSubmissionRecord["post"]> = {
+        userMessageId, payloadSha256: operationDigest(prompt.text), action: { presence: "value", value: "next" },
+        parentMessageId: { presence: "value", value: "fork-root" }, conversationId: { presence: "absent" }, observedAt: observedAt + 1,
+      };
+      native = { ...native, revision: 3, phase: "post_observed", post,
+        hostWatch: { ...watch, seq: 2, postCount: 1, totalPostCount: 1,
+          identities: [{ ...post, ordinal: 1, watchOrdinal: 1, endpoint: "/backend-api/f/conversation",
+            requestId: "fork-request", frameId: "frame", loaderId: "loader" }],
+          flush: { stable: true, pending: 0, throughSeq: 2 } } };
+      await browserTurn.onNativeSubmission!(native);
+      const acceptedUserIdentity = `group:user:${userMessageId}`, assistantIdentity = `group:assistant:${userMessageId}`;
+      native = { ...native, revision: 4, phase: "accepted", dom: { acceptedUserIdentity, assistantIdentity,
+        acceptedTurnIdentities: [acceptedUserIdentity, assistantIdentity], proof: "same-bound-assistant-progress", observedAt: observedAt + 2 } };
+      await browserTurn.onNativeSubmission!(native);
+    }
+    const checkpoint = parseBrowserObservation({ version: native ? 2 : 1,
       identity: { ...browserTurn.observationIdentity!, ...(scenario === "wrong-round" ? { roundKey: "wrong-round" } : {}) },
-      traceId: browserTurn.traceId, modelId: parsed.modelId, accountId: "account-2", appName: "Recovery42",
-      host: { pid: process.pid, instanceId: "h".repeat(32), profile: "production", partition: "persist:codex-web-gpt-chatgpt" },
-      lease: { helperPid: process.pid, surfaceId: "s".repeat(32), targetId: "fixture-target" },
+      traceId: browserTurn.traceId, modelId: parsed.modelId, accountId, appName: "Recovery42", host, lease,
       conversation: { key: browserTurn.conversationKey!, url: "https://chatgpt.com/c/accepted-child", claim: randomUUID() },
       ...(full ? { toolChannel: { tokenHash: operationDigest(prompt.turnToken!) } } : {}),
-      submission: { receipt: `[codex-submission:${randomUUID()}]`, initialTurnIdentities: [],
-        acceptedUserIdentity: "group:user:child", assistantIdentity: "group:assistant:child",
-        acceptedTurnIdentities: ["group:user:child", "group:assistant:child"] },
+      submission: native ? { native, initialTurnIdentities: [],
+        acceptedUserIdentity: native.dom!.acceptedUserIdentity, assistantIdentity: native.dom!.assistantIdentity,
+        acceptedTurnIdentities: native.dom!.acceptedTurnIdentities }
+        : { receipt: `[codex-submission:${randomUUID()}]`, initialTurnIdentities: [],
+          acceptedUserIdentity: "group:user:child", assistantIdentity: "group:assistant:child",
+          acceptedTurnIdentities: ["group:user:child", "group:assistant:child"] },
     } satisfies BrowserObservationCheckpoint);
     if (scenario !== "accepted-without-checkpoint") {
       await browserTurn.onObservationReady?.(checkpoint);
@@ -107,6 +152,10 @@ async function fixture(full: boolean, scenario: Scenario) {
       expect(events.some(event => event.type === "error" && event.code === "chatgpt_submission_ambiguous")).toBeTrue();
       expect(read().generation).toBe("unknown");
       expect(read().recovery).toBe("retained");
+      if (nativeAcceptanceFailure) {
+        expect(read().nativeSubmissions?.at(-1)?.phase).toBe("accepted");
+        expect(read().submission).toBe("send_activated");
+      }
     }
     if (["accepted-without-checkpoint", "wrong-round"].includes(scenario)) {
       expect(events.some(event => event.type === "error")).toBeFalse();

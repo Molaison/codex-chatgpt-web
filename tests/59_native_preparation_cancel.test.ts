@@ -1,7 +1,8 @@
-import { test, expect } from "bun:test";
+import { tmpdir } from "node:os";
+import { afterAll, test, expect } from "bun:test";
 import ts from "typescript";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { rmSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { DurableOperation, OperationJournal, hasNativeExecution, retainedOperationError,
   nativePreparationCancelledError, type OperationRecord } from "../src/adapters/chatgpt-web/operation-journal";
@@ -12,9 +13,10 @@ import { ExplicitNativeCancellation, type NativeOperationScope, type NativeCance
 import { BrowserObservationDetached, observationUnavailable } from "../src/adapters/chatgpt-web/observation-recovery";
 import { ChatGptWebAdapterError, ChatGptCompactionHandoffAccepted } from "../src/adapters/chatgpt-web/adapter-error";
 import type { CodexParsedRequest } from "../src/types";
+import { retainedForwardWorkerPolicy } from "../src/adapters/chatgpt-web/retained-forward-surface";
 
-const evidence = process.env.Q39_TEST_ROOT;
-if (!evidence) throw Error("Q39_TEST_ROOT must be an exclusive38b evidence directory");
+const evidence = process.env.Q39_TEST_ROOT ?? mkdtempSync(join(tmpdir(), "native-evidence-"));
+afterAll(() => { if (!process.env.Q39_TEST_ROOT) rmSync(evidence, { recursive: true, force: true }); });
 mkdirSync(evidence, { recursive: true });
 const indexSource = resolve(import.meta.dir, "../src/adapters/chatgpt-web/index.ts");
 const workerSource = process.env.R38B_WORKER_SOURCE ?? resolve(import.meta.dir, "../src/adapters/chatgpt-web/browser-worker.ts");
@@ -166,7 +168,7 @@ test("preparation cancellation does not extend generation and remains available 
 
 for (const endFails of [false, true]) test("actual runExclusive releases empty lease only after explicit preparation cancellation end ACK: endFails=" + endFails, async () => {
   const f = fixture(), abort = new AbortController(), controls: Array<Record<string, unknown>> = [], Noop = class extends Error {};
-  const env = { persistentConversationContext: () => undefined,
+  const env = { retainedForwardWorkerPolicy, persistentConversationContext: () => undefined,
     notifyLauncherTurn: async (_path: unknown, request: Record<string, unknown>) => {
       controls.push(request); if (request.phase === "start") return { surfaceId: "s".repeat(32) };
       if (request.phase === "end" && endFails) throw Error("original empty lease end ACK lost");

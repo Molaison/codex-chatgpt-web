@@ -35,11 +35,12 @@ async function fixture(run: (page: Page, root: string, baseUrl: string, source: 
 }
 
 function workerFor(page: Page, root: string, baseUrl?: string) {
-  const config = { appName: "image-fixture", browserHost: "launcher", useSavedChats: false,
+  const config: ResolvedBrowserConfig = { appName: "image-fixture", browserHost: "launcher",
+    chromeExecutablePath: join(root, "unused-chrome"), headed: false, autoApproveToolCalls: false,
     storageStatePath: join(root, "browser", "state.json"), imageOutputDirectory: join(root, "images"),
     browserDiagnosticsPath: join(root, "diagnostics"), turnTimeoutMs: 10_000,
     ...(baseUrl ? { downloadDirectory: join(root, "downloads"), downloadBaseUrl: baseUrl } : {}),
-  } as ResolvedBrowserConfig;
+  };
   const mode = resolveChatGptWebModelMode(CHATGPT_WEB_MODEL_ID, "low", capabilities);
   const worker = Object.assign(Object.create(ChatGptBrowserWorker.prototype), { config,
     prepareChatSurface: async () => {}, selectModelAndEffort: async () => mode,
@@ -48,7 +49,8 @@ function workerFor(page: Page, root: string, baseUrl?: string) {
     waitForNewAssistantTurn: async () => ({ locator: page.locator("#turn"), identity: "test-current", acceptedTurnIdentities: ["test-current"] }),
   });
   const deltas: string[] = [];
-  const turn: BrowserTurn = { traceId: "image-test", modelId: CHATGPT_WEB_MODEL_ID, reasoning: "low", capabilities,
+  const turn: BrowserTurn = { traceId: "image-test", modelId: CHATGPT_WEB_MODEL_ID, reasoning: "low", capabilities, sessionMode: "temporary",
+    recoveryDeadlineAt: Date.now() + 10_000,
     prepare: async () => ({ text: "make an image", images: [], release() {} }), onTextDelta: text => deltas.push(text) };
   return { worker: worker as { runBrowserTurn(turn: BrowserTurn, surface: undefined, page: Page): Promise<string>; responseDomSnapshot: (locator: unknown, cache?: object) => Promise<any> }, turn, deltas };
 }

@@ -8,6 +8,9 @@ import { createQaPool, type QaPoolConfig } from "../src/qa-pool";
 import { ChatGptConversationStore } from "../src/adapters/chatgpt-web/conversation-persistence";
 import { chatGptQuestionAnswerKey, chatGptQuestionAnswerNamespace } from "../src/adapters/chatgpt-web/qa-conversation-key";
 import { poolSessionHash } from "../src/paper-registry";
+import { installReadyQaHealthFixture } from "./qa-pool-health-fixture";
+
+installReadyQaHealthFixture();
 
 test("paper protocol persists reservations and saved identity, strips repeats, serializes turns and refuses unsafe migration", async () => {
   const root = mkdtempSync(join(tmpdir(),"paper-registry-"));

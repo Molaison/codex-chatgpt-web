@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import { randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ChatGptWebAdapterError } from "../src/adapters/chatgpt-web/adapter-error";
@@ -11,6 +12,7 @@ import { compileChatGptWebPrompt } from "../src/adapters/chatgpt-web/prompt";
 import { TurnBroker } from "../src/adapters/chatgpt-web/turn-broker";
 import { parseRequest } from "../src/responses/parser";
 import type { AdapterEvent, CodexParsedRequest, CodexProviderConfig } from "../src/types";
+import { writePromptTestDescriptor } from "./44_prompt_fixture";
 
 const capabilities = { localToolsEnabled: false, solAvailable: true, extraHighAvailable: true, proAvailable: true };
 const qa = { questionAnswer: true };
@@ -37,15 +39,17 @@ function deferred<T>() {
 
 function harness(runBrowser: (turn: BrowserTurn) => Promise<string>, extra: CodexProviderConfig["chatgptWeb"] = {}) {
   const id = randomUUID();
-  const socketPath = join(tmpdir(), `qa-session-${id}.sock`);
+  const root = mkdtempSync(join(tmpdir(), "qa-session-"));
+  const socketPath = join(root, "broker.sock");
   const provider: CodexProviderConfig = {
     adapter: "chatgpt-web", baseUrl: "browser://qa-session-tests",
     chatgptWeb: {
       ...capabilities, accountId: id, browserHost: "launcher",
-      browserHostDescriptorPath: join(tmpdir(), `qa-session-${id}.json`),
+      browserHostDescriptorPath: join(root, "launcher.json"),
       brokerSocketPath: socketPath, ...extra,
     },
   };
+  writePromptTestDescriptor(provider.chatgptWeb!.browserHostDescriptorPath!);
   const worker = ChatGptBrowserWorker.forProvider(provider);
   const run = spyOn(worker, "run").mockImplementation(async turn => {
     const answer = await runBrowser(turn);
@@ -55,7 +59,11 @@ function harness(runBrowser: (turn: BrowserTurn) => Promise<string>, extra: Code
   const adapter = createChatGptWebAdapter(provider);
   return {
     provider, worker, run, adapter,
-    async close() { run.mockRestore(); await TurnBroker.forSocket(socketPath).close(); },
+    async close() {
+      run.mockRestore();
+      try { await TurnBroker.forSocket(socketPath).close(); }
+      finally { rmSync(root, { recursive: true, force: true }); }
+    },
   };
 }
 

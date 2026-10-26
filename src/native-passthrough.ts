@@ -69,7 +69,7 @@ function isBridgeReasoningItem(value: unknown): value is JsonObject {
   const encrypted = value.encrypted_content;
   if (typeof encrypted === "string" && encrypted.startsWith(BRIDGE_REASONING_PREFIX)) return true;
   return typeof value.id === "string"
-    && /^rs_[0-9a-f]{32}$/i.test(value.id)
+    && /^rs_[0-9a-f]{32}(?:_\d+)?$/i.test(value.id)
     && (encrypted === undefined || encrypted === null)
     && (Array.isArray(value.summary) || Array.isArray(value.content));
 }
@@ -79,6 +79,18 @@ function isBridgeCompactionItem(value: unknown): value is BridgeCompactionItem {
     && value.type === "compaction"
     && typeof value.encrypted_content === "string"
     && value.encrypted_content.startsWith(BRIDGE_COMPACTION_PREFIX);
+}
+
+function isReplayableBridgeItem(value: unknown): boolean {
+  if (!isObject(value) || typeof value.id !== "string") return false;
+  const match = /^(msg|rs|fc|ctc|tsc|cmp)_[0-9a-f]{32}_\d+$/i.exec(value.id);
+  if (!match) return false;
+  const types: Record<string, string> = {
+    msg: "message", rs: "reasoning", fc: "function_call", ctc: "custom_tool_call",
+    tsc: "tool_search_call", cmp: "compaction",
+  };
+  return value.type === types[match[1]!.toLowerCase()]
+    && (value.type !== "message" || value.role === "assistant");
 }
 
 /**
@@ -92,7 +104,7 @@ function isBridgeCompactionItem(value: unknown): value is BridgeCompactionItem {
 export function scrubBridgeArtifactsForNative(value: unknown): { value: unknown; changed: boolean } {
   if (!isObject(value)
     || !Array.isArray(value.input)
-    || !value.input.some(item => isBridgeReasoningItem(item) || isBridgeCompactionItem(item))) {
+    || !value.input.some(item => isBridgeReasoningItem(item) || isBridgeCompactionItem(item) || isReplayableBridgeItem(item))) {
     return { value, changed: false };
   }
 

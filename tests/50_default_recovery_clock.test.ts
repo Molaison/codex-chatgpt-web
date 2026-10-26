@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -10,8 +11,8 @@ import { LAUNCHER_BROWSER_HOST_KIND, LAUNCHER_BROWSER_IDLE_URL } from "../src/la
 import { ChatGptWebAdapterError } from "../src/adapters/chatgpt-web/adapter-error";
 
 function fixture(startedAt = 1000) {
-  mkdirSync(process.env.Q39_TEST_ROOT!, { recursive: true });
-  const root = mkdtempSync(join(process.env.Q39_TEST_ROOT!, "default-clock-"));
+  mkdirSync((process.env.Q39_TEST_ROOT ?? tmpdir()), { recursive: true });
+  const root = mkdtempSync(join((process.env.Q39_TEST_ROOT ?? tmpdir()), "default-clock-"));
   const record: OperationRecord = { version: 1, operationId: "op_clock", executionKey: "clock", traceId: "clock_trace",
     requestIds: [], submission: "prepared", generation: "not_started", delivery: "attached", recovery: "none",
     seq: 0, attempt: 1, startedAt, updatedAt: startedAt, rounds: {} };
@@ -118,7 +119,7 @@ test("real helper IPC preserves selected multipart input and acknowledges the ex
     helper: { executable: process.execPath, script: helper }, partition: "persist:codex-web-gpt-chatgpt", idleUrl: LAUNCHER_BROWSER_IDLE_URL,
     surfaceId: "s".repeat(32), surfaceTargets: { ["s".repeat(32)]: "target" }, createdAt: new Date().toISOString() }), { mode: 0o600 });
   const client = new LauncherBrowserHelperClient(resolveBrowserConfig({ adapter: "chatgpt-web", baseUrl: "browser://clock-fixture",
-    chatgptWeb: { accountId: "account2", browserHost: "launcher", browserHostDescriptorPath: descriptor, browserHelperScriptPath: helper, useSavedChats: false } }));
+    chatgptWeb: { accountId: "account2", browserHost: "launcher", browserHostDescriptorPath: descriptor, browserHelperScriptPath: helper } }));
   const state = f.operation.recoveryState();
   let preparations = 0;
   const signals: Array<string | undefined> = [];
@@ -211,7 +212,7 @@ test("the outer launcher path retains an expired recovery and preserves explicit
       helper: { executable: process.execPath, script: import.meta.path }, partition: "persist:codex-web-gpt-chatgpt", idleUrl: LAUNCHER_BROWSER_IDLE_URL,
       surfaceId: "s".repeat(32), surfaceTargets: { ["s".repeat(32)]: "target" }, createdAt: new Date().toISOString() }), { mode: 0o600 });
     const worker = Object.create(ChatGptBrowserWorker.prototype) as any;
-    worker.config = { browserHost: "launcher", browserHostDescriptorPath: descriptor, useSavedChats: false, appName: "Codex Native2" };
+    worker.config = { browserHost: "launcher", browserHostDescriptorPath: descriptor, appName: "Codex Native2" };
     worker.runBrowserTurn = async () => {
       if (expired) throw new ChatGptWebAdapterError("Recovery expired with original execution retained", {
         status: 503, errorType: "server_error", code: "chatgpt_recovery_budget_exhausted", retryable: false,
@@ -231,7 +232,7 @@ test("the outer launcher path retains an expired recovery and preserves explicit
 test("a core budget refusal detaches the helper and preserves the original typed failure", async () => {
   const client = new LauncherBrowserHelperClient({ appName: "Codex Native2", browserHost: "launcher",
     browserHostDescriptorPath: "/private/unused.json", storageStatePath: "/private/state.json", headed: true,
-    autoApproveToolCalls: false, useSavedChats: false } as any);
+    autoApproveToolCalls: false } as any);
   const internal = client as any;
   const child = {};
   internal.child = child;

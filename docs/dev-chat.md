@@ -128,7 +128,7 @@ huge tool result, and its wait is capped at five minutes independently of the no
 After the structured handoff is accepted, the bridge explicitly ends that one-purpose browser turn
 and waits for its physical launcher settlement before closing the old surface; the next epoch then
 starts a fresh chat. This does not depend on ChatGPT rendering assistant text or a Copy
-action after the control-only response. If the retained private chat was already closed, the bridge
+action after the control-only response. If the retained task chat was already closed, the bridge
 starts one read-only fallback chat from the canonical Codex history instead. Browser-only mode
 has no retained MCP boundary and uses the six-message compaction path so its summarizer receives
 the complete expanded history.

@@ -2162,6 +2162,8 @@ test("observed CLI fresh-conversation changes retire completed tabs once and def
     assert.deepEqual(removed, [old.id]);
     assert.equal(browserHost.turnTabs.get(active.id), active);
     assert.equal(browserHost.turnTabs.get(manual.id), manual);
+    await assert.rejects(browserHost.beginTurn("new-trace", false, 123, key, "Codex Native2"), { code: "browser_writer_conflict" });
+    browserHost.turnTabs.delete(active.id);
     const lease = await browserHost.beginTurn("new-trace", false, 123, key, "Codex Native2");
     assert.equal(lease.reused, false);
     assert.equal(lease.tabId, "new");

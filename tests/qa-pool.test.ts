@@ -5,6 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { createQaPool, normalizeQaPoolRequest, type QaPoolConfig } from "../src/qa-pool";
+import { installReadyQaHealthFixture } from "./qa-pool-health-fixture";
+
+installReadyQaHealthFixture();
 
 test("project route pins only new threads, preserves legacy owners and strips forged project metadata", async () => {
   const root = mkdtempSync(join(tmpdir(), "qa-project-route-"));

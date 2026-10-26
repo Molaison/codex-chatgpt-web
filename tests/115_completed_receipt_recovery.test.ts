@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 // Real socket/HTTP abort and SDK dispatch; Native receipts below are synthetic, not E2E acceptance.
 import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync, openSync, closeSync, rmSync } from "node:fs";
@@ -10,8 +11,8 @@ const terminal: BrokerToolResult = { content: [{ type: "text", text: "Wall time:
 const running: BrokerToolResult = { content: [{ type: "text", text: "Wall time: 0.0001 seconds\nProcess running with session ID 42\nOutput:\n" }] };
 
 test("real public HTTP abort retains Native, verified result rebuilds once, both old page and recovery page cannot execute", async () => {
-  mkdirSync(process.env.Q39_TEST_ROOT!, { recursive: true });
-  const root = mkdtempSync(join(process.env.Q39_TEST_ROOT!, "115-http-"));
+  mkdirSync((process.env.Q39_TEST_ROOT ?? tmpdir()), { recursive: true });
+  const root = mkdtempSync(join((process.env.Q39_TEST_ROOT ?? tmpdir()), "115-http-"));
   const fd = openSync(root, "r"), socket = `/proc/${process.pid}/fd/${fd}/b.sock`;
   const broker = TurnBroker.forSocket(socket); await broker.listen();
   const token = await broker.register({ cwd: root, roots: [root], writableRoots: [], sandboxPolicy: { type: "readOnly", networkAccess: false }, tools: [
@@ -68,7 +69,7 @@ test("real public HTTP abort retains Native, verified result rebuilds once, both
 }, 15_000);
 
 test("a proven running receipt stays read-only until owner resume; unrelated RPC is not loss evidence", async () => {
-  const root = mkdtempSync(join(process.env.Q39_TEST_ROOT!, "115-gate-")), fd = openSync(root, "r"), socket = `/proc/${process.pid}/fd/${fd}/b.sock`;
+  const root = mkdtempSync(join((process.env.Q39_TEST_ROOT ?? tmpdir()), "115-gate-")), fd = openSync(root, "r"), socket = `/proc/${process.pid}/fd/${fd}/b.sock`;
   const broker = TurnBroker.forSocket(socket); await broker.listen();
   const token = await broker.register({ cwd: root, roots: [root], writableRoots: [], sandboxPolicy: { type: "readOnly", networkAccess: false }, tools: [] });
   const activityId = "activity_115runningproofabcde";

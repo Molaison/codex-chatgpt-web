@@ -25,10 +25,14 @@ test("legacy Pro retains old Ultra input identity and fixed browser Max", () => 
   }
 });
 
-test("other route model metadata does not inherit the legacy Pro override", () => {
+test("selectors retain their supported default while other routes inherit the native effort", () => {
   for (const route of availableChatGptWebModelRoutes(config, true)) {
     if (route.slug === "chatgpt-web/pro") continue;
     const model: any = buildChatGptWebModel(template, route, config);
-    expect(model.multi_agent_reasoning_effort).toBe("high");
+    expect(model.multi_agent_reasoning_effort).toBe(route.toolAccess ? "xhigh" : "high");
+    if (route.toolAccess) {
+      expect(model.supported_reasoning_levels.map((value: { effort: string }) => value.effort))
+        .toContain(model.multi_agent_reasoning_effort);
+    }
   }
 });

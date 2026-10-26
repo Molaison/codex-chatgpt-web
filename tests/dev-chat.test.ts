@@ -22,6 +22,7 @@ import {
 } from "../src/dev-chat/session";
 import { startDevChatTransport } from "../src/dev-chat/transport";
 import type { CodexProviderConfig } from "../src/types";
+import { writePromptTestDescriptor } from "./44_prompt_fixture";
 
 const roots: string[] = [];
 
@@ -382,6 +383,8 @@ test("DEV driver supports an injected tool-capable adapter while an unrelated Re
   await localBroker.listen();
   const remote = new RemoteTurnBroker(config.brokerSocketPath);
   const stateRoot = join(root, "state");
+  const descriptorPath = join(root, "launcher.json");
+  writePromptTestDescriptor(descriptorPath);
   // The official automatic provider intentionally disables local tools in this fork.
   // Inject tool support only in this driver/broker fixture, not in the production DEV configuration.
   expect(providerConfig(config).chatgptWeb?.localToolsEnabled).toBe(false);
@@ -390,6 +393,7 @@ test("DEV driver supports an injected tool-capable adapter while an unrelated Re
     chatgptWeb: {
       ...provider.chatgptWeb,
       localToolsEnabled: true,
+      browserHostDescriptorPath: descriptorPath,
       brokerSocketPath: config.brokerSocketPath,
       threadEnvironmentStatePath: join(stateRoot, "thread-environments.json"),
       lunaCheckpointStatePath: join(stateRoot, "luna-checkpoints.json"),
@@ -429,7 +433,18 @@ test("DEV driver supports an injected tool-capable adapter while an unrelated Re
       prepared.release();
     }
   };
-  const factory = (provider: CodexProviderConfig) => createChatGptWebAdapter(devProvider(provider), { broker: remote });
+  const factory = (provider: CodexProviderConfig): ProviderAdapter => {
+    const adapter = createChatGptWebAdapter(devProvider(provider), { broker: remote });
+    return {
+      ...adapter,
+      runTurn(parsed, incoming, emit) {
+        // This fixture deliberately injects tools into the legacy DEV route. The public
+        // automatic provider still selects Chat unless the user chooses a Tools selector.
+        parsed._chatgptLocalTools = true;
+        return adapter.runTurn(parsed, incoming, emit);
+      },
+    };
+  };
   const driver = new DevChatDriver(config, new DevChatStore(join(root, "chats")), factory, root);
   try {
     const state = driver.open("tool-round").state;

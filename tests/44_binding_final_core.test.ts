@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import { expect, test } from "bun:test";
 import { closeSync, mkdirSync, mkdtempSync, openSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -6,8 +7,8 @@ import { TurnBroker } from "../src/adapters/chatgpt-web/turn-broker";
 import { OperationJournal, operationDigest } from "../src/adapters/chatgpt-web/operation-journal";
 
 test("binding correction requires a fresh RPC and exact current token; rejected receipts and instance isolation survive", async () => {
-  mkdirSync(process.env.Q39_TEST_ROOT!, { recursive: true });
-  const root = mkdtempSync(join(process.env.Q39_TEST_ROOT!, "43-binding-"));
+  mkdirSync((process.env.Q39_TEST_ROOT ?? tmpdir()), { recursive: true });
+  const root = mkdtempSync(join((process.env.Q39_TEST_ROOT ?? tmpdir()), "43-binding-"));
   const otherRoot = join(root, "other-instance"); mkdirSync(otherRoot);
   const fd = openSync(root, "r");
   const otherFd = openSync(otherRoot, "r");
@@ -21,7 +22,7 @@ test("binding correction requires a fresh RPC and exact current token; rejected 
       description: "synthetic Native receipt only", parameters: {
         type: "object", properties: { cmd: { type: "string" } }, required: ["cmd"],
       } }] });
-  const wrongToken = token.slice(0, -1);
+  const wrongToken = token.slice(0, -1) + (token.endsWith("A") ? "B" : "A");
   const key = join(root, "release.key");
   writeFileSync(key, "43-synthetic-control-key", { mode: 0o600 });
   const server = startChatGptMcpHttpServer({ brokerSocketPath: socket, port: 0,

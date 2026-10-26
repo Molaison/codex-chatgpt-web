@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultBrokerEndpoint } from "../src/config";
+import { operationDigest } from "../src/adapters/chatgpt-web/operation-journal";
 import { callTurnBroker, TurnBroker, type BrokerRetirementDiagnostics } from "../src/adapters/chatgpt-web/turn-broker";
 
 const failure = { code: "codex_tool_timeout" as const, tool: "exec_command", timeoutMs: 90_000 };
@@ -69,7 +70,12 @@ test("retirement diagnostics distinguish queue time from result wait and exclude
       ],
     });
     const event = f.logs.find(line => line.includes(" broker_retired "))!;
-    expect(JSON.parse(event.split(" broker_retired ")[1]!)).toEqual({ ...released.diagnostics, failure });
+    expect(JSON.parse(event.split(" broker_retired ")[1]!)).toEqual({
+      ...released.diagnostics, failure, event: "retired", runtimeInstanceId: expect.stringMatching(/^runtime_/),
+      pid: process.pid, brokerHash: operationDigest(f.socketPath).slice(0, 12),
+      tokenHash: operationDigest(f.token).slice(0, 12), externalOwner: false, activityRevision: 1,
+      source: "broker.revoke", reason: "explicit_revoke",
+    });
     const diagnosticText = JSON.stringify(released);
     for (const privateValue of ["PRIVATE", f.root, f.token, f.bindingId, "completed_tool"]) {
       expect(diagnosticText).not.toContain(privateValue);

@@ -1,10 +1,11 @@
+import { tmpdir } from "node:os";
 import {expect,test} from "bun:test";
 import {mkdtempSync,rmSync,mkdirSync,writeFileSync} from "node:fs";
 import {join} from "node:path";
 import {TurnBroker} from "../src/adapters/chatgpt-web/turn-broker";
 import {startChatGptMcpHttpServer} from "../src/adapters/chatgpt-web/mcp-http";
 
-const rootPath=()=>{mkdirSync(process.env.Q39_TEST_ROOT!,{recursive:true});return mkdtempSync(join(process.env.Q39_TEST_ROOT!,"release-"));};
+const rootPath=()=>{mkdirSync((process.env.Q39_TEST_ROOT ?? tmpdir()),{recursive:true});return mkdtempSync(join((process.env.Q39_TEST_ROOT ?? tmpdir()),"release-"));};
 test("broker and MCP replacement retain durable unknown; zero process-local counters cannot seal or close",async()=>{
   const root=rootPath();
   const brokerModule=new URL("../src/adapters/chatgpt-web/turn-broker.ts",import.meta.url).href;

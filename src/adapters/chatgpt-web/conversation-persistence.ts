@@ -14,10 +14,18 @@ export interface SavedChatConversation {
   pendingProject?: { id: string; name: string };
   /** Accepted canonical message fingerprints, not text or permission authority. */
   history?: string[];
-  previous?: Array<{ claim: string; state: "pending" | "bound"; url?: string; createdAt: string }>;
+  previous?: Array<Pick<SavedChatConversation, "claim" | "state" | "url" | "createdAt" | "history" | "pendingProject">>;
 }
 
 function hash(value: string): string { return createHash("sha256").update(value).digest("hex"); }
+
+function validConversationDetails(value: Pick<SavedChatConversation, "history" | "pendingProject">): boolean {
+  return (value.history === undefined || (Array.isArray(value.history) && value.history.length > 0
+    && value.history.every(item => typeof item === "string" && /^[a-f0-9]{64}$/.test(item))))
+    && (value.pendingProject === undefined || (value.pendingProject !== null
+      && /^g-p-[a-f0-9]{32}$/.test(value.pendingProject.id)
+      && typeof value.pendingProject.name === "string" && !!value.pendingProject.name.trim()));
+}
 
 export function conversationPersistenceError(code: string, message: string, cause?: unknown, diagnostics?: Record<string, unknown>): ChatGptWebAdapterError {
   return new ChatGptWebAdapterError(message, {
@@ -71,11 +79,10 @@ export class ChatGptConversationStore {
         || !["pending", "bound"].includes(value.state) || typeof value.claim !== "string"
         || !/^[a-f0-9-]{36}$/.test(value.claim) || typeof value.createdAt !== "string"
         || !Number.isFinite(Date.parse(value.createdAt))
-        || (value.history !== undefined && (!Array.isArray(value.history) || !value.history.length
-          || value.history.some(item => typeof item !== "string" || !/^[a-f0-9]{64}$/.test(item))))
-        || (value.pendingProject !== undefined && (!/^g-p-[a-f0-9]{32}$/.test(value.pendingProject.id) || typeof value.pendingProject.name !== "string" || !value.pendingProject.name.trim()))
+        || !validConversationDetails(value)
         || (value.previous !== undefined && (!Array.isArray(value.previous) || value.previous.some(old => !old
           || !/^[a-f0-9-]{36}$/.test(old.claim) || !Number.isFinite(Date.parse(old.createdAt))
+          || !validConversationDetails(old)
           || !["pending", "bound"].includes(old.state) || (old.state === "pending" && old.url !== undefined)
           || (old.state === "bound" && (typeof old.url !== "string" || canonicalSavedChatUrl(old.url) !== old.url)))))
         || (value.state === "pending" && value.url !== undefined)
@@ -143,7 +150,9 @@ export class ChatGptConversationStore {
     const record: SavedChatConversation = { version: 1, account: current.account, conversation: current.conversation,
       createdAt: new Date().toISOString(), claim: randomUUID(), state: "pending",
       previous: [...(current.previous ?? []), { claim: current.claim, state: current.state,
-        ...(current.url ? { url: current.url } : {}), createdAt: current.createdAt }] };
+        ...(current.url ? { url: current.url } : {}), createdAt: current.createdAt,
+        ...(current.history ? { history: current.history } : {}),
+        ...(current.pendingProject ? { pendingProject: current.pendingProject } : {}) }] };
     const temporary = this.writeTemporary(key, record);
     try { renameSync(temporary, this.path(key)); this.flushDirectory(); } catch (error) {
       try { unlinkSync(temporary); } catch {}
@@ -187,7 +196,22 @@ export class ChatGptConversationStore {
     if (!current || current.claim !== claim.claim || current.account !== claim.account || current.state !== "pending") {
       throw conversationPersistenceError("saved_conversation_conflict", "Only an unsubmitted owned reservation may be cancelled.");
     }
-    try { unlinkSync(this.path(key)); this.flushDirectory(); } catch (error) {
+    const previous = current.previous?.at(-1);
+    let temporary: string | undefined;
+    try {
+      if (previous) {
+        // The failed recovery never sent a message. Restore its complete prior
+        // mapping, including any uncertainty, instead of erasing accepted history.
+        const record: SavedChatConversation = { version: 1, account: current.account, conversation: current.conversation,
+          ...previous, ...(current.previous!.length > 1 ? { previous: current.previous!.slice(0, -1) } : {}) };
+        temporary = this.writeTemporary(key, record);
+        renameSync(temporary, this.path(key));
+      } else {
+        unlinkSync(this.path(key));
+      }
+      this.flushDirectory();
+    } catch (error) {
+      if (temporary) { try { unlinkSync(temporary); } catch {} }
       throw conversationPersistenceError("conversation_store_unavailable", "An unsubmitted reservation could not be cancelled safely.", error);
     }
   }

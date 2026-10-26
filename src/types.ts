@@ -1,3 +1,5 @@
+import type { ChatGptChartWidget } from "./adapters/chatgpt-web/rich-widget";
+
 export interface CodexParsedRequest {
   modelId: string;
   previousResponseId?: string;
@@ -9,7 +11,7 @@ export interface CodexParsedRequest {
   _chatgptModelFamily?: "5.6" | "6";
   /** True only for a routed Pro model (for example GPT-5.6 Pro or GPT-6 Pro). */
   _chatgptProModel?: boolean;
-  /** Full session mode resolved from the public effort at the request boundary. */
+  /** Session mode resolved from the selector, effort or pool metadata at the request boundary. */
   _chatgptSessionMode?: "temporary" | "persistent";
   /** Server-owned Chat/Tools selector, never inferred from caller metadata. */
   _chatgptLocalTools?: boolean;
@@ -210,8 +212,6 @@ export interface CodexProviderContinuationState {
   [provider: string]: Record<string, unknown> | undefined;
 }
 
-import type { ChatGptChartWidget } from "./adapters/chatgpt-web/rich-widget";
-
 export interface ProviderNotice {
   version: 1;
   id: string;
@@ -311,7 +311,7 @@ export interface CodexProviderConfig {
     imageOutputDirectory?: string;
     downloadDirectory?: string;
     downloadBaseUrl?: string;
-    /** ChatGPT custom connector attached to tool-capable temporary chats. */
+    /** ChatGPT custom connector attached to tool-capable chats. */
     appName?: string;
     /** Whether ChatGPT DOM interaction is automatic or explicitly driven by the user. */
     browserInteractionMode?: "automatic" | "manual";
@@ -364,7 +364,5 @@ export interface CodexProviderConfig {
     experimentalSkillAttachments?: boolean;
     /** Explicitly rebuild each automatic turn in a fresh browser conversation. */
     experimentalFreshConversationPerTurn?: boolean;
-    /** Save automatic QA chats by default. Explicit false selects Temporary Chat and disables durable mappings. */
-    useSavedChats?: boolean;
   };
 }

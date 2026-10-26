@@ -1,12 +1,14 @@
-import { expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, openSync, closeSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { afterAll, describe, expect, test } from "bun:test";
+import { rmSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, openSync, closeSync } from "node:fs";
 import { join } from "node:path";
 import { createQaPool } from "../src/qa-pool";
 import { startChatGptMcpHttpServer } from "../src/adapters/chatgpt-web/mcp-http";
 import { TurnBroker } from "../src/adapters/chatgpt-web/turn-broker";
+import { installReadyQaHealthFixture } from "./qa-pool-health-fixture";
 
-const root = process.env.Q39_TEST_ROOT!;
-if (!root?.includes('/unified-native-takeover-20261022-s01/web-validation/')) throw Error('Explicit isolated test root required');
+const root = process.env.Q39_TEST_ROOT ?? mkdtempSync(join(tmpdir(), "native-admission-"));
+afterAll(() => { if (!process.env.Q39_TEST_ROOT) rmSync(root, { recursive: true, force: true }); });
 mkdirSync(root, {recursive: true});
 const token = 'q39-synthetic-release-key-not-production';
 const poolKey = 'q39-synthetic-pool-client-not-production';
@@ -24,63 +26,67 @@ async function until(check: () => Promise<boolean>) {
   throw Error('Native lifecycle did not settle');
 }
 
-test('pool native admission fences dispatch but preserves receipt join, detached completion and current DB', async () => {
-  const directory = mkdtempSync(join(root, 'pool-'));
-  const keyFile = join(directory, 'client.key'); writeFileSync(keyFile, poolKey);
-  const releaseControl = control(directory);
-  let dispatches = 0;
-  const pending: ReadableStreamDefaultController<Uint8Array>[] = [];
-  const bytes = new TextEncoder();
-  const backend = Bun.serve({hostname: '127.0.0.1', port: 0, fetch: async request => {
-    await request.json(); dispatches++;
-    return new Response(new ReadableStream<Uint8Array>({start(controller) {
-      pending.push(controller); controller.enqueue(bytes.encode('event: response.created\ndata: {"type":"response.created"}\n\n'));
-    }}), {headers: {'content-type': 'text/event-stream'}});
-  }});
-  const config = {host: '127.0.0.1', port: 0, databasePath: join(directory, 'sessions.sqlite'), releaseControl,
-    clients: [{id: 'synthetic', keyFile}], accounts: [{id: 'qa2', origin: 'http://127.0.0.1:'+backend.port, models: ['synthetic'], sessionModes: true}]};
-  let pool = createQaPool(config);
-  let listener = Bun.serve({hostname: config.host, port: 0, fetch: pool.fetch});
-  let origin = 'http://127.0.0.1:'+listener.port;
-  const payload = (turn: string, input = 'fixture') => ({model: 'synthetic', input, stream: true, reasoning: {effort: 'high-temporary'},
-    client_metadata: {'x-codex-turn-metadata': JSON.stringify({thread_id: 'fixture-'+turn, turn_id: turn})}});
-  const post = (value: unknown, signal?: AbortSignal) => fetch(origin+'/v1/responses', {method: 'POST', headers: {authorization: 'Bearer '+poolKey, 'content-type': 'application/json'}, body: JSON.stringify(value), signal});
-  const finish = (controller: ReadableStreamDefaultController<Uint8Array>, id: string) => {
-    controller.enqueue(bytes.encode('event: response.completed\ndata: '+JSON.stringify({type: 'response.completed', response: {id, status: 'completed', output: []}})+'\n\n')); controller.close();
-  };
-  const first = post(payload('one')).then(r => r.text());
-  await until(async () => dispatches === 1);
-  const drained = await admin(origin, 'drain');
-  expect(drained.accepting_new).toBe(false); expect(drained.pending_dispatches).toBe(1); expect(drained.safe_to_stop).toBe(false);
-  expect(() => pool.close()).toThrow('not drained');
-  expect((await fetch(origin+'/admin/release/seal',{method:'POST',headers:{authorization:'Bearer '+token}})).status).toBe(409);
-  const blocked = await post(payload('new')); expect(blocked.status).toBe(503); await blocked.text();
-  const duplicate = post(payload('one')).then(r => r.text());
-  await Bun.sleep(30); expect(dispatches).toBe(1);
-  finish(pending.shift()!, 'resp_one');
-  expect(await first).toContain('resp_one'); expect(await duplicate).toContain('resp_one');
-  const conflict = await post(payload('one', 'conflict')); expect(conflict.status).toBe(409); await conflict.text();
-  await until(async () => (await admin(origin)).safe_to_stop);
-  expect((await admin(origin, 'seal')).phase).toBe('sealed');
-  expect((await post(payload('one'))).status).toBe(503);
-  pool.close(); await listener.stop();
-  // Same CURRENT SQLite, new listener owner; sticky admission survives replacement.
-  pool = createQaPool(config); listener = Bun.serve({hostname: config.host, port: 0, fetch: pool.fetch}); origin = 'http://127.0.0.1:'+listener.port;
-  expect((await admin(origin)).accepting_new).toBe(false);
-  expect((await post(payload('one'))).status).toBe(503);
-  await admin(origin, 'resume');
-  expect(await (await post(payload('one'))).text()).toContain('resp_one'); expect(dispatches).toBe(1);
-  const disconnected = new AbortController();
-  const lost = post(payload('lost'), disconnected.signal).then(r => r.text()).catch(() => 'disconnected');
-  await until(async () => dispatches === 2); disconnected.abort(); await lost;
-  await admin(origin, 'drain');
-  expect((await admin(origin)).safe_to_stop).toBe(false);
-  finish(pending.shift()!, 'resp_lost');
-  const recovered = await post(payload('lost')); expect(await recovered.text()).toContain('resp_lost'); expect(dispatches).toBe(2);
-  await until(async () => (await admin(origin)).safe_to_stop);
-  pool.close(); await listener.stop(); await backend.stop();
-  writeFileSync(join(directory, 'result.json'), JSON.stringify({passed: true, dispatches, expectedInitialDispatches: 2, duplicateExtraDispatch: 0, currentDatabase: config.databasePath}));
-}, 15000);
+describe('pool native admission', () => {
+  installReadyQaHealthFixture();
+
+  test('fences dispatch but preserves receipt join, detached completion and current DB', async () => {
+    const directory = mkdtempSync(join(root, 'pool-'));
+    const keyFile = join(directory, 'client.key'); writeFileSync(keyFile, poolKey);
+    const releaseControl = control(directory);
+    let dispatches = 0;
+    const pending: ReadableStreamDefaultController<Uint8Array>[] = [];
+    const bytes = new TextEncoder();
+    const backend = Bun.serve({hostname: '127.0.0.1', port: 0, fetch: async request => {
+      await request.json(); dispatches++;
+      return new Response(new ReadableStream<Uint8Array>({start(controller) {
+        pending.push(controller); controller.enqueue(bytes.encode('event: response.created\ndata: {"type":"response.created"}\n\n'));
+      }}), {headers: {'content-type': 'text/event-stream'}});
+    }});
+    const config = {host: '127.0.0.1', port: 0, databasePath: join(directory, 'sessions.sqlite'), releaseControl,
+      clients: [{id: 'synthetic', keyFile}], accounts: [{id: 'qa2', origin: 'http://127.0.0.1:'+backend.port, models: ['synthetic'], sessionModes: true}]};
+    let pool = createQaPool(config);
+    let listener = Bun.serve({hostname: config.host, port: 0, fetch: pool.fetch});
+    let origin = 'http://127.0.0.1:'+listener.port;
+    const payload = (turn: string, input = 'fixture') => ({model: 'synthetic', input, stream: true, reasoning: {effort: 'high-temporary'},
+      client_metadata: {'x-codex-turn-metadata': JSON.stringify({thread_id: 'fixture-'+turn, turn_id: turn})}});
+    const post = (value: unknown, signal?: AbortSignal) => fetch(origin+'/v1/responses', {method: 'POST', headers: {authorization: 'Bearer '+poolKey, 'content-type': 'application/json'}, body: JSON.stringify(value), signal});
+    const finish = (controller: ReadableStreamDefaultController<Uint8Array>, id: string) => {
+      controller.enqueue(bytes.encode('event: response.completed\ndata: '+JSON.stringify({type: 'response.completed', response: {id, status: 'completed', output: []}})+'\n\n')); controller.close();
+    };
+    const first = post(payload('one')).then(r => r.text());
+    await until(async () => dispatches === 1);
+    const drained = await admin(origin, 'drain');
+    expect(drained.accepting_new).toBe(false); expect(drained.pending_dispatches).toBe(1); expect(drained.safe_to_stop).toBe(false);
+    expect(() => pool.close()).toThrow('not drained');
+    expect((await fetch(origin+'/admin/release/seal',{method:'POST',headers:{authorization:'Bearer '+token}})).status).toBe(409);
+    const blocked = await post(payload('new')); expect(blocked.status).toBe(503); await blocked.text();
+    const duplicate = post(payload('one')).then(r => r.text());
+    await Bun.sleep(30); expect(dispatches).toBe(1);
+    finish(pending.shift()!, 'resp_one');
+    expect(await first).toContain('resp_one'); expect(await duplicate).toContain('resp_one');
+    const conflict = await post(payload('one', 'conflict')); expect(conflict.status).toBe(409); await conflict.text();
+    await until(async () => (await admin(origin)).safe_to_stop);
+    expect((await admin(origin, 'seal')).phase).toBe('sealed');
+    expect((await post(payload('one'))).status).toBe(503);
+    pool.close(); await listener.stop();
+    // Same CURRENT SQLite, new listener owner; sticky admission survives replacement.
+    pool = createQaPool(config); listener = Bun.serve({hostname: config.host, port: 0, fetch: pool.fetch}); origin = 'http://127.0.0.1:'+listener.port;
+    expect((await admin(origin)).accepting_new).toBe(false);
+    expect((await post(payload('one'))).status).toBe(503);
+    await admin(origin, 'resume');
+    expect(await (await post(payload('one'))).text()).toContain('resp_one'); expect(dispatches).toBe(1);
+    const disconnected = new AbortController();
+    const lost = post(payload('lost'), disconnected.signal).then(r => r.text()).catch(() => 'disconnected');
+    await until(async () => dispatches === 2); disconnected.abort(); await lost;
+    await admin(origin, 'drain');
+    expect((await admin(origin)).safe_to_stop).toBe(false);
+    finish(pending.shift()!, 'resp_lost');
+    const recovered = await post(payload('lost')); expect(await recovered.text()).toContain('resp_lost'); expect(dispatches).toBe(2);
+    await until(async () => (await admin(origin)).safe_to_stop);
+    pool.close(); await listener.stop(); await backend.stop();
+    writeFileSync(join(directory, 'result.json'), JSON.stringify({passed: true, dispatches, expectedInitialDispatches: 2, duplicateExtraDispatch: 0, currentDatabase: config.databasePath}));
+  }, 15000);
+});
 
 test('native MCP fences new work, retains session/receipts, joins long-poll duplicates and retires only completed handles', async () => {
   const directory = mkdtempSync(join(root, 'mcp-'));
@@ -128,6 +134,13 @@ test('native MCP fences new work, retains session/receipts, joins long-poll dupl
   broker.completeTool(turn, read!.callId, {content: [{type: 'text', text: JSON.stringify({exit_code: 0, output: 'done'})}]});
   expect((await waiting).result.content[0].text).toContain('done'); expect((await pollDuplicate).result.content[0].text).toContain('done');
   const deleted = await fetch(origin+'/mcp', {method: 'DELETE', headers: {...headers, 'mcp-session-id': session}}); expect(deleted.status).toBe(200); await deleted.text();
+  // Closing the MCP observer does not finish the accepted native turn. Its owner must
+  // commit browser completion before the durable release inventory can be drained.
+  expect((await admin(origin)).durable_live_turns).toBe(1);
+  const completion = broker.beginCompletionFence(turn);
+  expect(typeof completion).toBe('number');
+  expect(broker.commitCompletionFence(turn, completion!)).toBe(true);
+  broker.revoke(turn);
   await until(async () => (await admin(origin)).safe_to_stop);
   expect((await admin(origin, 'seal')).phase).toBe('sealed');
   await server.close();
@@ -138,6 +151,6 @@ test('native MCP fences new work, retains session/receipts, joins long-poll dupl
   await admin(origin, 'resume'); expect((await rpc(command, session)).status).toBe(404); const fresh = await rpc(initialize); expect(fresh.status).toBe(200); const freshSession = fresh.headers.get('mcp-session-id')!; expect(freshSession).not.toBe(session); await fresh.text();
   const closeFresh = await fetch(origin+'/mcp', {method: 'DELETE', headers: {...headers, 'mcp-session-id': freshSession}}); await closeFresh.text();
   await admin(origin, 'drain'); await until(async () => (await admin(origin)).safe_to_stop); await server.close();
-  broker.revoke(turn); await broker.close(); closeSync(directoryFd);
+  await broker.close(); closeSync(directoryFd);
   writeFileSync(join(directory, 'result.json'), JSON.stringify({passed: true, syntheticNativeCalls: 2, duplicateExtraDispatch: 0, staleSessionStatus: 404, freshSession: true}));
 }, 15000);

@@ -47,6 +47,7 @@ import {
 } from "./codex-integration";
 import {
   CHATGPT_WEB_LUNA_BACKEND_MODEL,
+  chatGptWebLocalToolsEnabled,
   isChatGptWebModelSlug,
   requireChatGptWebModelRoute,
   type ChatGptWebModelRoute,
@@ -371,6 +372,29 @@ export class HttpTurnCounter {
 
 type ChatGptWebAdapterFactory = (provider: CodexProviderConfig) => ProviderAdapter;
 
+function coalesceAdapterDeltas(previous: AdapterEvent, next: AdapterEvent): AdapterEvent | undefined {
+  // Durable replay is synchronous. Bound each combined chunk while retaining all item,
+  // phase, tool and signature boundaries; never mutate the journal's original events.
+  const limit = 64 * 1024;
+  if (previous.type === "text_delta" && next.type === "text_delta" && previous.phase === next.phase
+    && previous.text.length + next.text.length <= limit) {
+    return { ...previous, text: previous.text + next.text };
+  }
+  if (previous.type === "thinking_delta" && next.type === "thinking_delta"
+    && previous.thinking.length + next.thinking.length <= limit) {
+    return { ...previous, thinking: previous.thinking + next.thinking };
+  }
+  if (previous.type === "reasoning_raw_delta" && next.type === "reasoning_raw_delta"
+    && previous.text.length + next.text.length <= limit) {
+    return { ...previous, text: previous.text + next.text };
+  }
+  if (previous.type === "tool_call_delta" && next.type === "tool_call_delta"
+    && previous.arguments.length + next.arguments.length <= limit) {
+    return { ...previous, arguments: previous.arguments + next.arguments };
+  }
+  return undefined;
+}
+
 export interface ResponseRequestOptions {
   /** DEV and other in-process harnesses can keep continuation state in their own canonical store. */
   rememberState?: boolean;
@@ -385,12 +409,25 @@ export function routeChatGptWebRequest(parsed: CodexParsedRequest, config: AppCo
   const selection = config.mode === "full" && config.browserInteractionMode !== "manual"
     ? parseChatGptSessionEffort(parsed.options.reasoning) : undefined;
   const route = requireChatGptWebModelRoute(parsed.modelId, config, selection ? selection.effort : parsed.options.reasoning);
-  if (route.sessionMode === "persistent" && parsed.options.reasoning?.endsWith("-temporary")) {
-    throw new Error("A persistent selector cannot request a temporary effort suffix");
+  if (route.sessionMode && selection?.explicit && route.sessionMode !== selection.mode) {
+    throw new Error("ChatGPT session mode conflicts with the selected model or effort");
   }
-  if (route.sessionMode || selection) parsed._chatgptSessionMode = route.sessionMode ?? selection!.mode;
+  const metadataMode = config.mode === "browser-only"
+    ? (parsed._rawBody as { client_metadata?: { _chatgpt_session_mode?: unknown } } | undefined)
+      ?.client_metadata?._chatgpt_session_mode
+    : undefined;
+  if (metadataMode !== undefined && metadataMode !== "temporary" && metadataMode !== "persistent") {
+    throw new Error("ChatGPT session mode must be temporary or persistent");
+  }
+  const explicitMode = route.sessionMode ?? (selection?.explicit ? selection.mode : undefined);
+  if (explicitMode && metadataMode && explicitMode !== metadataMode) {
+    throw new Error("ChatGPT session mode conflicts with the selected model or effort");
+  }
+  // Resolve the pool's per-request mode here so aliases, recovery and browser admission
+  // all see the same choice. Retired global saved-chat preferences no longer participate.
+  parsed._chatgptSessionMode = explicitMode ?? metadataMode ?? selection?.mode ?? "persistent";
   parsed._chatgptLocalTools = route.toolAccess ? route.toolAccess === "tools"
-    : config.mode === "full" && (config.browserInteractionMode === "manual" || config.mcpProvider === "external-http");
+    : chatGptWebLocalToolsEnabled(config);
   if (route.interactionMode === "automatic" && route.modelFamily) parsed._chatgptModelFamily = route.modelFamily;
   else delete parsed._chatgptModelFamily;
   if (route.requiresPro) parsed._chatgptProModel = true;
@@ -855,25 +892,35 @@ export async function responseRequest(
     });
   }
   const adapter = adapterFactory(provider);
-  const queue = new AsyncEventQueue<AdapterEvent>();
+  const queue = new AsyncEventQueue<AdapterEvent>(10_000, coalesceAdapterDeltas);
+  const events: AdapterEvent[] = [];
+  let terminal: Extract<AdapterEvent, { type: "done" | "incomplete" | "error" }> | undefined;
+  const emit = (event: AdapterEvent): void => {
+    if (terminal) return;
+    if (parsed.stream) queue.push(event);
+    else events.push(event);
+    if (event.type === "done" || event.type === "incomplete" || event.type === "error") terminal = event;
+    options.onAdapterEvent?.(event);
+  };
   const abort = new AbortController();
   if (req.signal.aborted) abort.abort();
   else req.signal.addEventListener("abort", () => abort.abort(), { once: true });
   const run = async () => {
     try {
-      await adapter.runTurn!(parsed, { headers: req.headers, abortSignal: abort.signal }, event => {
-        options.onAdapterEvent?.(event);
-        queue.push(event);
-      });
+      await adapter.runTurn!(parsed, { headers: req.headers, abortSignal: abort.signal }, emit);
     } catch (error) {
-      const event: AdapterEvent = {
+      if (terminal) return;
+      const event: Extract<AdapterEvent, { type: "error" }> = {
         type: "error", message: error instanceof Error ? error.message : String(error),
         ...(error instanceof ChatGptWebAdapterError ? {
           status: error.status, errorType: error.errorType, code: error.code, retryable: error.retryable,
         } : {}),
       };
-      options.onAdapterEvent?.(event);
-      queue.push(event);
+      terminal = event;
+      if (parsed.stream) queue.close(event);
+      else events.push(event);
+      try { options.onAdapterEvent?.(event); }
+      catch { /* A failed observer hook cannot suppress the original terminal failure. */ }
     } finally {
       queue.close();
     }
@@ -882,7 +929,6 @@ export async function responseRequest(
   const responseModel = route.slug;
 
   if (parsed.stream) {
-    void run();
     const stream = bridgeToResponsesSSE(
       queue,
       responseModel,
@@ -901,6 +947,7 @@ export async function responseRequest(
         onCompletedResponse: rememberCompletedResponse,
       },
     );
+    void run();
     return new Response(stream, {
       headers: {
         "Content-Type": "text/event-stream",
@@ -912,7 +959,6 @@ export async function responseRequest(
   }
 
   await run();
-  const events = await queue.collect();
   const json = buildResponseJSON(events, responseModel, {
     replayIdentity,
     hideThinkingSummary: parsed.options.hideThinkingSummary,
@@ -927,7 +973,7 @@ export async function responseRequest(
     return Response.json({ error: { message: error.message, type: error.errorType,
       code: error.code, retryable: error.retryable } }, { status: error.status });
   }
-  const capacityRejected = events.some(event => event.type === "error" && event.code === "concurrency_limit_exceeded");
+  const capacityRejected = terminal?.type === "error" && terminal.code === "concurrency_limit_exceeded";
   return Response.json(json, { status: capacityRejected ? 429 : 200 });
 }
 

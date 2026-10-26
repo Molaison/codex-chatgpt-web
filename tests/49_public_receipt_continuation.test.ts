@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 // Real local HTTP/SDK/broker boundary. Native completion values are fixtures, not ChatGPT E2E.
 import {expect,test} from "bun:test";
 import {mkdirSync,mkdtempSync,openSync,closeSync,rmSync,writeFileSync} from "node:fs";
@@ -8,7 +9,7 @@ import {McpAdmissionBook} from "../src/adapters/chatgpt-web/mcp-admission";
 import {OperationJournal,operationDigest} from "../src/adapters/chatgpt-web/operation-journal";
 
 test("public MCP lost A receipt resumes distinct B, patch/custom shape and rejects unauthorized tool without dispatch",async()=>{
-  mkdirSync(process.env.Q39_TEST_ROOT!,{recursive:true});const root=mkdtempSync(join(process.env.Q39_TEST_ROOT!,"public-"));
+  mkdirSync((process.env.Q39_TEST_ROOT ?? tmpdir()),{recursive:true});const root=mkdtempSync(join((process.env.Q39_TEST_ROOT ?? tmpdir()),"public-"));
   const fd=openSync(root,"r"),socket=`/proc/${process.pid}/fd/${fd}/b.sock`,broker=TurnBroker.forSocket(socket);await broker.listen();
   const token=await broker.register({cwd:root,roots:[root],writableRoots:[root],sandboxPolicy:{type:"workspaceWrite",writableRoots:[root],networkAccess:false},
     tools:[{name:"exec_command",description:"fixture",parameters:{type:"object"}},

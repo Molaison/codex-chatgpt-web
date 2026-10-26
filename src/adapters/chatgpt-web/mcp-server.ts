@@ -45,8 +45,8 @@ const nativeTurnTokenSchema = z.string().regex(/^turn_[A-Za-z0-9_-]{32}$/,
 const jsonArgumentsSchema = z.record(z.string(), z.unknown()).default({});
 // Match Codex's default wait interval while returning before the MCP invocation deadline.
 export const CHATGPT_WEB_AGENT_WAIT_POLL_MS = 30_000;
-const CHATGPT_WEB_STDIN_POLL_MAX_MS = 30_000;
-const STDIN_POLL_TRANSPORT_RULE = `ChatGPT Web write_stdin requires yield_time_ms <= ${CHATGPT_WEB_STDIN_POLL_MAX_MS} when specified. Use short polls and poll the same session_id again if it is still running; a poll timeout is not process completion. Omit yield_time_ms to keep the native default. Do not restart or resubmit the command.`;
+export const CHATGPT_WEB_COMMAND_POLL_MAX_MS = 60_000;
+const COMMAND_POLL_TRANSPORT_RULE = `ChatGPT Web transport rule: write_stdin yield_time_ms must be at most ${CHATGPT_WEB_COMMAND_POLL_MAX_MS}. A running command returns partial output and its session_id; return after each poll and use a separate MCP call to poll again if needed. Longer waits are rejected before execution because they can exceed the MCP deadline.`;
 const AGENT_WAIT_TRANSPORT_RULE = `ChatGPT Web transport rule: wait for exactly ${CHATGPT_WEB_AGENT_WAIT_POLL_MS / 1_000} seconds per call, matching the Codex default, then release the MCP channel so spawned Web agents can use their own tools. A wait timeout is not task completion; check agent progress and wait again if needed. Keep the native tool's declared arguments.`;
 // The OpenAI tunnel currently owns a two-minute command-response deadline. The local MCP server
 // must settle first so an abandoned native tool call is returned as an MCP error instead of
@@ -156,28 +156,31 @@ function isGatewayAgentWaitTool(name: string): boolean {
 }
 
 function browserToolDescription(tool: CodexTool): string {
-  if (!tool.namespace && tool.name === "write_stdin") return `${tool.description}\n\n${STDIN_POLL_TRANSPORT_RULE}`;
   if (isAgentWaitTool(tool)) return `${tool.description}\n\n${AGENT_WAIT_TRANSPORT_RULE}`;
+  if (!tool.namespace && tool.name === "write_stdin") return `${tool.description}\n\n${COMMAND_POLL_TRANSPORT_RULE}`;
   if (!tool.namespace && tool.name === "exec") {
-    return `${tool.description}\n\n${AGENT_WAIT_TRANSPORT_RULE} This rule is enforced for wait_agent calls made inside exec; recursive raw exec is unavailable.\n\n${STDIN_POLL_TRANSPORT_RULE} This rule is also enforced for write_stdin calls made inside exec.`;
+    return `${tool.description}\n\n${AGENT_WAIT_TRANSPORT_RULE} This rule is enforced for wait_agent calls made inside exec; recursive raw exec is unavailable. ${COMMAND_POLL_TRANSPORT_RULE}`;
   }
   return tool.description;
 }
 
 function browserToolParameters(tool: CodexTool): Record<string, unknown> {
-  const isStdin = !tool.namespace && tool.name === "write_stdin";
-  if (!isAgentWaitTool(tool) && !isStdin) return tool.parameters;
+  if (!tool.namespace && tool.name === "write_stdin") {
+    const parameters = structuredClone(tool.parameters);
+    const properties = parameters.properties as Record<string, Record<string, unknown>> | undefined;
+    if (properties?.yield_time_ms) {
+      const yieldTime = properties.yield_time_ms;
+      yieldTime.maximum = Math.min(typeof yieldTime.maximum === "number" ? yieldTime.maximum : Infinity, CHATGPT_WEB_COMMAND_POLL_MAX_MS);
+      if (typeof yieldTime.default === "number" && yieldTime.default > Number(yieldTime.maximum)) delete yieldTime.default;
+      yieldTime.description = COMMAND_POLL_TRANSPORT_RULE;
+    }
+    return parameters;
+  }
+  if (!isAgentWaitTool(tool)) return tool.parameters;
   const parameters = structuredClone(tool.parameters);
   const properties = parameters.properties && typeof parameters.properties === "object" && !Array.isArray(parameters.properties)
     ? parameters.properties as Record<string, unknown>
     : {};
-  if (isStdin) {
-    const yieldTime = properties.yield_time_ms && typeof properties.yield_time_ms === "object" && !Array.isArray(properties.yield_time_ms)
-      ? properties.yield_time_ms as Record<string, unknown> : {};
-    return { ...parameters, properties: { ...properties, yield_time_ms: {
-      type: "number", ...yieldTime, maximum: CHATGPT_WEB_STDIN_POLL_MAX_MS, description: STDIN_POLL_TRANSPORT_RULE,
-    } } };
-  }
   const timeout = properties.timeout_ms && typeof properties.timeout_ms === "object" && !Array.isArray(properties.timeout_ms)
     ? properties.timeout_ms as Record<string, unknown>
     : {};
@@ -204,21 +207,32 @@ function browserToolParameters(tool: CodexTool): Record<string, unknown> {
 }
 
 function assertBrowserToolArguments(tool: CodexTool, args: Record<string, unknown>): void {
-  assertGatewayToolArguments(wireName(tool), args);
+  if (!tool.namespace && tool.name === "write_stdin") assertCommandPollArguments(args);
+  if (!isAgentWaitTool(tool)) return;
+  if (args.timeout_ms !== CHATGPT_WEB_AGENT_WAIT_POLL_MS) {
+    throw new Error(
+      `ChatGPT Web wait_agent requires timeout_ms=${CHATGPT_WEB_AGENT_WAIT_POLL_MS}`
+      + " so the shared MCP channel remains available to spawned Web agents",
+    );
+  }
 }
 
 function assertGatewayToolArguments(name: string, args: Record<string, unknown>): void {
-  if (name === "write_stdin" && args.yield_time_ms !== undefined
-    && (typeof args.yield_time_ms !== "number" || !Number.isFinite(args.yield_time_ms)
-      || args.yield_time_ms > CHATGPT_WEB_STDIN_POLL_MAX_MS)) {
-    throw new Error(STDIN_POLL_TRANSPORT_RULE);
-  }
+  if (name === "write_stdin") assertCommandPollArguments(args);
   if (!isGatewayAgentWaitTool(name)) return;
   if (args.timeout_ms !== CHATGPT_WEB_AGENT_WAIT_POLL_MS) {
     throw new Error(
       `ChatGPT Web wait_agent requires timeout_ms=${CHATGPT_WEB_AGENT_WAIT_POLL_MS}`
       + " so the shared MCP channel remains available to spawned Web agents",
     );
+  }
+}
+
+function assertCommandPollArguments(args: Record<string, unknown>): void {
+  const value = args.yield_time_ms;
+  if (value !== undefined && (typeof value !== "number" || !Number.isInteger(value)
+    || value < 250 || value > CHATGPT_WEB_COMMAND_POLL_MAX_MS)) {
+    throw new Error(COMMAND_POLL_TRANSPORT_RULE);
   }
 }
 
@@ -265,7 +279,7 @@ interface GatewayToolCatalogPage {
 }
 
 function gatewayToolDescription(tool: GatewayToolDescriptor): string {
-  if (tool.name === "write_stdin") return `${tool.description}\n\n${STDIN_POLL_TRANSPORT_RULE}`;
+  if (tool.name === "write_stdin") return `${tool.description}\n\n${COMMAND_POLL_TRANSPORT_RULE}`;
   if (!isGatewayAgentWaitTool(tool.name)) return tool.description;
   return `${tool.description}\n\n${AGENT_WAIT_TRANSPORT_RULE}`;
 }
@@ -403,8 +417,8 @@ function transportBoundRawExecProgram(input: string, blockedExecName: string): s
     `  const waitNames = new Set(${JSON.stringify([...GATEWAY_AGENT_WAIT_TOOL_NAMES])});`,
     `  const blockedExecName = ${JSON.stringify(blockedExecName)};`,
     `  const pollMs = ${CHATGPT_WEB_AGENT_WAIT_POLL_MS};`,
-    `  const stdinPollMaxMs = ${CHATGPT_WEB_STDIN_POLL_MAX_MS};`,
-    `  const stdinPollRule = ${JSON.stringify(STDIN_POLL_TRANSPORT_RULE)};`,
+    `  const commandPollMaxMs = ${CHATGPT_WEB_COMMAND_POLL_MAX_MS};`,
+    `  const commandPollRule = ${JSON.stringify(COMMAND_POLL_TRANSPORT_RULE)};`,
     "  const registryNames = new Set(Reflect.ownKeys(source));",
     "  if (typeof ALL_TOOLS !== \"undefined\" && Array.isArray(ALL_TOOLS)) {",
     "    for (const tool of ALL_TOOLS) if (typeof tool?.name === \"string\") registryNames.add(tool.name);",
@@ -425,9 +439,8 @@ function transportBoundRawExecProgram(input: string, blockedExecName: string): s
     "      };",
     "    } else if (typeof value === \"function\" && name === \"write_stdin\") {",
     "      exposed = args => {",
-    "        if (!args || typeof args !== \"object\" || Array.isArray(args)) throw new Error(stdinPollRule);",
-    "        const yieldMs = args.yield_time_ms;",
-    "        if (yieldMs !== undefined && (typeof yieldMs !== \"number\" || !Number.isFinite(yieldMs) || yieldMs > stdinPollMaxMs)) throw new Error(stdinPollRule);",
+    "        const wait = args?.yield_time_ms;",
+    "        if (wait !== undefined && (typeof wait !== \"number\" || !Number.isInteger(wait) || wait < 250 || wait > commandPollMaxMs)) throw new Error(commandPollRule);",
     "        return Reflect.apply(value, source, [args]);",
     "      };",
     "    } else if (typeof value === \"function\") {",
@@ -486,7 +499,10 @@ export interface ChatGptMcpServerOptions {
 }
 
 /** The tool contract and broker authorization are independent of the wire transport. */
-export function createChatGptMcpServer(options: ChatGptMcpServerOptions): McpServer {
+export function createChatGptMcpServer(
+  options: ChatGptMcpServerOptions,
+  onClaimStarted?: (requestId: string | number) => void,
+): McpServer {
   const contract = options.contract ?? "native";
   const readiness = options.readinessEvidence ?? new McpReadinessEvidence();
   const server = new McpServer(
@@ -499,6 +515,7 @@ export function createChatGptMcpServer(options: ChatGptMcpServerOptions): McpSer
     turnToken: string,
     extra: McpRequestExtra,
   ): Promise<ClaimedTurn> => {
+    onClaimStarted?.(extra.requestId);
     console.error(`[chatgpt-web-mcp] ${toolName} scope=${requestScopeSummary(extra)}`);
     const activityId = `activity_${randomBytes(18).toString("base64url")}`;
     try {
@@ -783,12 +800,12 @@ export function createChatGptMcpServer(options: ChatGptMcpServerOptions): McpSer
     "codex_write_stdin",
     {
       title: "Continue a native Codex command session",
-      description: afterSafeStart(contract, `Write characters to, or poll, a session_id returned by codex_exec. ${STDIN_POLL_TRANSPORT_RULE}`),
+      description: afterSafeStart(contract, `Write characters to, or poll, a session_id returned by codex_exec. ${COMMAND_POLL_TRANSPORT_RULE}`),
       inputSchema: {
         ...turnReferenceInput(contract),
         session_id: z.number().int().nonnegative(),
         chars: z.string().max(1_000_000).optional(),
-        yield_time_ms: z.number().int().min(250).max(CHATGPT_WEB_STDIN_POLL_MAX_MS, { error: STDIN_POLL_TRANSPORT_RULE }).optional(),
+        yield_time_ms: z.number().int().min(250).max(CHATGPT_WEB_COMMAND_POLL_MAX_MS).optional(),
         max_output_tokens: z.number().int().min(1).max(1_000_000).optional(),
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
@@ -1041,11 +1058,14 @@ export function createChatGptMcpServer(options: ChatGptMcpServerOptions): McpSer
           if (input !== undefined && args && Object.keys(args).length > 0) {
             throw new Error(`Codex nested tool ${wire_name} accepts either arguments or freeform input, not both`);
           }
+          if (wire_name === "write_stdin" && input !== undefined) {
+            throw new Error("ChatGPT Web write_stdin requires structured arguments. " + COMMAND_POLL_TRANSPORT_RULE);
+          }
           if (isGatewayAgentWaitTool(wire_name) && input !== undefined) {
             throw new Error(`ChatGPT Web wait_agent requires structured arguments and timeout_ms=${CHATGPT_WEB_AGENT_WAIT_POLL_MS}`);
           }
           if (wire_name === "write_stdin" && input !== undefined) {
-            throw new Error(`ChatGPT Web write_stdin requires structured arguments. ${STDIN_POLL_TRANSPORT_RULE}`);
+            throw new Error(`ChatGPT Web write_stdin requires structured arguments. ${COMMAND_POLL_TRANSPORT_RULE}`);
           }
           const invocationArguments = args ?? {};
           assertGatewayToolArguments(wire_name, invocationArguments);
@@ -1106,7 +1126,38 @@ export async function connectChatGptMcpServer(
   transport: Transport,
 ): Promise<McpServer> {
   const readiness = options.readinessEvidence ?? new McpReadinessEvidence();
-  const server = createChatGptMcpServer({ ...options, readinessEvidence: readiness });
+  // The SDK validates input before invoking a tool callback. Record that local boundary
+  // so a schema rejection cannot strand an accepted HTTP identity as unknown Native work.
+  // Replies after entering claim use the broker/handler proofs above, never their text.
+  const requests = new Map<string | number, { entered: boolean } | null>();
+  const server = createChatGptMcpServer({ ...options, readinessEvidence: readiness }, id => {
+    const state = requests.get(id);
+    if (state) state.entered = true;
+  });
+  if (options.contract !== "safe" && options.onToolNotDispatched) {
+    const receive = transport.onmessage;
+    transport.onmessage = (message, extra) => {
+      if ("id" in message && "method" in message && message.method === "tools/call") {
+        if (requests.has(message.id)) requests.set(message.id, null);
+        else if (requests.size < 1_024) requests.set(message.id, { entered: false });
+      }
+      receive?.(message, extra);
+    };
+    const send = transport.send.bind(transport);
+    transport.send = async (message, sendOptions) => {
+      if ("id" in message && message.id !== undefined && message.id !== null && !("method" in message)) {
+        const state = requests.get(message.id);
+        requests.delete(message.id);
+        if (state && !state.entered) {
+          try { options.onToolNotDispatched!(message.id); }
+          catch { console.error("[chatgpt-web-mcp] local validation evidence unavailable; retain uncertainty"); }
+        }
+      }
+      return send(message, sendOptions);
+    };
+    const close = transport.onclose;
+    transport.onclose = () => { requests.clear(); close?.(); };
+  }
   await server.connect(observeMcpToolCalls(transport, BRIDGE_TOOL_NAMES, undefined, event => {
     readiness.observe(event);
     console.error(`[chatgpt-web-mcp] readiness=${JSON.stringify(readiness.snapshot())}`);

@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import {expect,test} from "bun:test";
 import {mkdirSync,mkdtempSync,openSync,closeSync,readFileSync,appendFileSync,writeFileSync} from "node:fs";
 import {join} from "node:path";
@@ -7,12 +8,13 @@ import {OperationJournal,operationDigest} from "../src/adapters/chatgpt-web/oper
 
 const terminal=(exit:number,output:string):BrokerToolResult=>({content:[{type:"text",text:`Wall time: 0 seconds\nProcess exited with code ${exit}\nOutput:\n${output}`}]});
 const running=(id:number):BrokerToolResult=>({content:[{type:"text",text:`Wall time: 0 seconds\nProcess running with session ID ${id}\nOutput:\n`}]});
+const applyPatch = process.env.BROKER_APPLY_PATCH ?? Bun.which("apply_patch");
 async function eventually(check:()=>boolean) {
   for(let i=0;i<200&&!check();i++) await Bun.sleep(10);
   expect(check()).toBe(true);
 }
 async function fixture() {
-  const root=mkdtempSync(join(process.env.Q39_TEST_ROOT!,"real-local-effects-"));
+  const root=mkdtempSync(join((process.env.Q39_TEST_ROOT ?? tmpdir()),"real-local-effects-"));
   const fd=openSync(root,"r"),socket=`/proc/${process.pid}/fd/${fd}/b.sock`;
   const broker=TurnBroker.forSocket(socket);await broker.listen();
   const environment={cwd:root,roots:[root],writableRoots:[root],sandboxPolicy:{type:"workspaceWrite" as const,writableRoots:[root],networkAccess:false},
@@ -60,7 +62,7 @@ async function command(root:string,cmd:string):Promise<BrokerToolResult> {
   return terminal(exit,out+err);
 }
 
-test("local HTTP A result recovery permits B once, real apply_patch/custom effects and new intent",async()=>{
+test.skipIf(!applyPatch)("local HTTP A result recovery permits B once, real apply_patch/custom effects and new intent",async()=>{
   const f=await fixture();
   try {
     const cmd="printf 'A\\n' >> markers.txt";
@@ -75,7 +77,7 @@ test("local HTTP A result recovery permits B once, real apply_patch/custom effec
     const patch="*** Begin Patch\n*** Add File: patched.txt\n+patch-once\n*** End Patch";
     const p=await f.step("codex_apply_patch",{patch},async call=>{
       expect(call.freeform).toBe(true);expect(call.input).toBe(patch);
-      const child=Bun.spawn([process.env.BROKER_APPLY_PATCH!,call.input!],{cwd:f.root,stdout:"pipe",stderr:"pipe"});
+      const child=Bun.spawn([applyPatch!,call.input!],{cwd:f.root,stdout:"pipe",stderr:"pipe"});
       const [out,err,exit]=await Promise.all([new Response(child.stdout).text(),new Response(child.stderr).text(),child.exited]);
       expect(exit,err).toBe(0);return {content:[{type:"text",text:out}]};
     },true);

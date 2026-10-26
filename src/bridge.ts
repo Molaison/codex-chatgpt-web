@@ -607,7 +607,7 @@ export function bridgeToResponsesSSE(
               // Redacted-only turns (or hidden thinking without a trailing signature event) still
               // need their envelope-only reasoning item so the blocks replay next turn.
               flushHiddenReasoningEnvelope();
-              if (options?.compaction) {
+              if (options?.compaction && event.stopReason !== "max_tokens" && event.stopReason !== "content_filter") {
                 // Exactly one compaction item per turn; codex-rs takes the first and fatals on 0.
                 const item = {
                   type: "compaction", id: outputItemId("cmp"),
@@ -881,6 +881,7 @@ export function buildResponseJSON(
   const itemId = (prefix: string) => options?.replayIdentity
     ? `${prefix}_${options.replayIdentity}_${output.length}` : `${prefix}_${uuid()}`;
   const output: OutputItem[] = [];
+  const richWidgets: Array<Extract<AdapterEvent, { type: "rich_widget" }>["widget"]> = [];
   let usage: CodexUsage | undefined;
   let errorEvent: Extract<AdapterEvent, { type: "error" }> | undefined;
   let incompleteEvent: Extract<AdapterEvent, { type: "incomplete" }> | undefined;
@@ -986,7 +987,14 @@ export function buildResponseJSON(
   };
 
   for (const e of events) {
+    if (options?.compaction) {
+      if (e.type === "text_delta") { compactionText += e.text; continue; }
+      if (e.type !== "done" && e.type !== "incomplete" && e.type !== "error") continue;
+    }
     switch (e.type) {
+      case "rich_widget":
+        richWidgets.push(e.widget);
+        break;
       case "assistant_boundary":
         flushText();
         flushSummaryReasoning();
@@ -998,13 +1006,8 @@ export function buildResponseJSON(
         if (currentSummaryReasoning) flushSummaryReasoning();
         if (currentRawReasoning) flushRawReasoning();
         if (currentToolCallId) flushToolCall();
-        // Compaction turns keep the summary out of normal message output (replay dedup — see
-        // bridgeToResponsesSSE); it ships only inside the synthetic compaction item below.
-        if (options?.compaction) compactionText += e.text;
-        else {
-          currentTextPhase = e.phase;
-          currentText += e.text;
-        }
+        currentTextPhase = e.phase;
+        currentText += e.text;
         break;
       case "thinking_delta":
         if (currentText) flushText();
@@ -1056,9 +1059,12 @@ export function buildResponseJSON(
         usage = e.usage;
         endTurn = e.endTurn;
         if (e.providerState) options?.onProviderState?.(e.providerState);
-        if (e.stopReason === "max_tokens") stopReason = "max_tokens";
+        if (e.stopReason === "max_tokens" || e.stopReason === "content_filter") stopReason = e.stopReason;
         break;
     }
+    // The producer may finish cleanup after reporting its terminal result. Late callbacks
+    // cannot change the result already observed by a streaming client.
+    if (e.type === "done" || e.type === "incomplete" || e.type === "error") break;
   }
   flushText();
   flushSummaryReasoning();
@@ -1071,14 +1077,14 @@ export function buildResponseJSON(
   }
   // A truncated turn must never become replacement history. Emit a compaction item only after
   // authoritative turn completion.
-  if (options?.compaction && !errorEvent && !incompleteEvent && stopReason !== "max_tokens") {
-    output.push({ type: "compaction", id: `cmp_${uuid()}`, encrypted_content: encodeCompactionSummary(compactionText) });
+  if (options?.compaction && !errorEvent && !incompleteEvent && !stopReason) {
+    output.push({ type: "compaction", id: itemId("cmp"), encrypted_content: encodeCompactionSummary(compactionText) });
   }
 
   const failure = errorEvent ? adapterFailureFromEvent(errorEvent) : undefined;
   const status = errorEvent
     ? "failed"
-    : incompleteEvent || stopReason === "max_tokens"
+    : incompleteEvent || stopReason
       ? "incomplete"
       : "completed";
   return {
@@ -1086,6 +1092,7 @@ export function buildResponseJSON(
     created_at: Math.floor(Date.now() / 1000),
     status,
     model: modelId, output,
+    ...(richWidgets.length ? { rich_widgets: richWidgets } : {}),
     ...(endTurn !== undefined ? { end_turn: endTurn } : {}),
     ...(failure ? { error: failure.error, last_error: failure.error } : {}),
     ...(errorEvent?.retryable !== undefined ? { retryable: errorEvent.retryable } : {}),
@@ -1095,8 +1102,8 @@ export function buildResponseJSON(
         ...(incompleteEvent.message ? { message: incompleteEvent.message } : {}),
         ...(incompleteEvent.retryable !== undefined ? { retryable: incompleteEvent.retryable } : {}),
       },
-    } : stopReason === "max_tokens" ? {
-      incomplete_details: { reason: "max_output_tokens" },
+    } : stopReason ? {
+      incomplete_details: { reason: stopReason === "max_tokens" ? "max_output_tokens" : "content_filter" },
     } : {}),
     usage: responsesUsage(incompleteEvent?.usage ?? usage),
   };

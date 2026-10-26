@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 // Reproduces slot52's real invalid-binding admission leak; Native dispatch must stay zero.
 import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync, openSync, closeSync, rmSync } from "node:fs";
@@ -7,8 +8,8 @@ import { TurnBroker, callTurnBroker, brokerClaimRejection } from "../src/adapter
 import { McpAdmissionBook } from "../src/adapters/chatgpt-web/mcp-admission";
 
 test("exact invalid token remains denied without dispatch or new uncertainty; real proof cannot clear older unknowns", async () => {
-  mkdirSync(process.env.Q39_TEST_ROOT!, { recursive: true });
-  const root = mkdtempSync(join(process.env.Q39_TEST_ROOT!, "117-denied-"));
+  mkdirSync((process.env.Q39_TEST_ROOT ?? tmpdir()), { recursive: true });
+  const root = mkdtempSync(join((process.env.Q39_TEST_ROOT ?? tmpdir()), "117-denied-"));
   const fd = openSync(root, "r"), socket = `/proc/${process.pid}/fd/${fd}/b.sock`;
   const broker = TurnBroker.forSocket(socket); await broker.listen();
   const key = join(root, "release.key"); writeFileSync(key, "117-isolated-test-only-release-key", { mode: 0o600 });
@@ -20,7 +21,8 @@ test("exact invalid token remains denied without dispatch or new uncertainty; re
   }, body: JSON.stringify(body) });
   const init = await rpc({ jsonrpc: "2.0", id: 0, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "117", version: "1" } } });
   const session = init.headers.get("mcp-session-id")!; await init.text();
-  const message = (id: number) => ({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "codex_exec", arguments: { turn_token: "turn_intentionally_invalid_binding", cmd: "must never run" } } });
+  const rejectedToken = `turn_${"x".repeat(32)}`;
+  const message = (id: number) => ({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "codex_exec", arguments: { turn_token: rejectedToken, cmd: "must never run" } } });
   try {
     const response = await rpc(message(1), session); const body = await response.json();
     expect(body.result.isError).toBe(true); expect(JSON.stringify(body)).toContain("invalid, expired, or revoked");
@@ -28,7 +30,7 @@ test("exact invalid token remains denied without dispatch or new uncertainty; re
     const status = await (await fetch(server.url.origin + "/admin/release/status", { headers: { authorization: "Bearer 117-isolated-test-only-release-key" } })).json();
     expect(status.uncertain_requests).toBe(0); expect(status.native_continuations).toBe(0); expect(status.active_tool_calls).toBe(0);
     let proof: unknown;
-    try { await callTurnBroker(socket, { method: "claim", token: "turn_intentionally_invalid_binding" }); }
+    try { await callTurnBroker(socket, { method: "claim", token: rejectedToken }); }
     catch (error) { proof = brokerClaimRejection(error); }
     expect(proof).toBeDefined();
     const book = new McpAdmissionBook(undefined, true);

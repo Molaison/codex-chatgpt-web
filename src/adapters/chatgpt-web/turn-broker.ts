@@ -423,6 +423,23 @@ export class TurnBroker implements TurnBrokerOwner {
     this.journal.write(channel.durable.tokenHash, channel.durable);
   }
 
+  private archiveRetiredChannel(channel: TurnChannel): void {
+    if (channel.activities.size || channel.invocations.size || channel.queuedCallIds.length
+      || channel.deliveredCallIds.size || this.nativeSessions(channel.durable).open.size) return;
+    for (const call of Object.values(channel.durable.calls)) {
+      if (call.state !== "completed" || !call.result || call.resultHash !== operationDigest(JSON.stringify(call.result))
+        || call.observerLost && !call.reconciliation) return;
+      // An accepted RPC is not proof that an asynchronous command/gateway stopped. Keep any
+      // unsupported native lifetime in active inventory; its original receipts remain intact.
+      const receipt = nativeExecutionReceipt(call.result);
+      if (["exec_command", "write_stdin"].includes(call.request.wireName) && receipt.state === "unknown"
+        || ["exec", "wait"].includes(call.request.wireName) && receipt.state !== "terminal") return;
+    }
+    this.journal.archive(channel.durable.tokenHash);
+    if (channel.bindingId) this.journal.archive(`binding:${operationDigest(channel.bindingId)}`);
+    if (channel.ingressToken) this.journal.archive(`ingress:${operationDigest(channel.ingressToken)}`);
+  }
+
   releaseStatus(): Record<string, number> {
     const counts = { durable_live_turns:[...this.channels.values()].filter(c=>!c.completionCommitted).length,
       durable_unknown_calls:0,durable_native_continuations:0,durable_active_mcp_requests:0,durable_inventory_errors:0 };
@@ -566,7 +583,7 @@ export class TurnBroker implements TurnBrokerOwner {
     if (!Number.isSafeInteger(args.session_id) || (args.session_id as number) < 0) return false;
     if (Object.keys(args).some(key => !["session_id", "chars", "yield_time_ms", "max_output_tokens"].includes(key))) return false;
     if (args.yield_time_ms !== undefined && (!Number.isSafeInteger(args.yield_time_ms)
-      || (args.yield_time_ms as number) < 250 || (args.yield_time_ms as number) > 30_000)) return false;
+      || (args.yield_time_ms as number) < 250 || (args.yield_time_ms as number) > 60_000)) return false;
     return this.nativeSessions(channel).open.has(Number(args.session_id));
   }
 
@@ -751,9 +768,9 @@ export class TurnBroker implements TurnBrokerOwner {
       this.logToolDelivery(channel, ready, "immediate");
       return ready;
     }
-    if (Object.values(channel.durable.calls).some(call => call.observerLost && !call.reconciliation)) {
-      throw new Error("Tool execution retained with unknown outcome; owner must reconcile the original invocation, not dispatch it again");
-    }
+    // Losing an MCP observer fences dispatch, not the owning browser turn. Keep this owner
+    // wait alive while the original invocation settles or an exact receipt is reconciled.
+    // takeQueued and invoke still prevent this wait from authorizing another side effect.
     if (signal?.aborted) throw new DOMException("tool wait aborted", "AbortError");
     return new Promise<BrokerToolRequest[]>((resolveWait, rejectWait) => {
       const waiter: ToolWaiter = { resolve: resolveWait, reject: rejectWait, ...(signal ? { signal } : {}) };
@@ -859,9 +876,15 @@ export class TurnBroker implements TurnBrokerOwner {
     // The owner must accept the reconstructed context before the fresh page gets execution.
     // Old bindings retain exact-result query access, never admission to new calls.
     this.checkpoint(channel);
-    if (channel.bindingId) this.bindings.delete(channel.bindingId);
+    if (channel.bindingId) {
+      this.bindings.delete(channel.bindingId);
+      this.journal.archive(`binding:${operationDigest(channel.bindingId)}`);
+    }
     channel.bindingId = undefined;
-    if (channel.ingressToken) this.recoveryIngress.delete(channel.ingressToken);
+    if (channel.ingressToken) {
+      this.recoveryIngress.delete(channel.ingressToken);
+      this.journal.archive(`ingress:${operationDigest(channel.ingressToken)}`);
+    }
     channel.ingressToken = ingress;
     this.recoveryIngress.set(ingress, token);
     console.info(`[chatgpt-web] receipt_context_recovery=${JSON.stringify({ trace: channel.traceId,
@@ -979,7 +1002,10 @@ export class TurnBroker implements TurnBrokerOwner {
     channel.durable = { ...channel.durable, observationIngressHash: ingressHash };
     // Checkpoint the unchanged zero-dispatch boundary before exposing a new browser capability.
     this.checkpoint(channel);
-    if (channel.ingressToken) this.recoveryIngress.delete(channel.ingressToken);
+    if (channel.ingressToken) {
+      this.recoveryIngress.delete(channel.ingressToken);
+      this.journal.archive(`ingress:${operationDigest(channel.ingressToken)}`);
+    }
     channel.ingressToken = ingress;
     this.recoveryIngress.set(ingress, token);
     return ingress;
@@ -1187,6 +1213,7 @@ export class TurnBroker implements TurnBrokerOwner {
     }
     this.retire(this.retiredTokens, token, channel.traceId);
     this.resolveSafeWaiters(channel.retirementWaiters, failure);
+    this.archiveRetiredChannel(channel);
     this.rejectChannel(channel, reason);
   }
 
@@ -1892,6 +1919,7 @@ export class TurnBroker implements TurnBrokerOwner {
   private wakeToolWaiters(channel: TurnChannel): void {
     if (channel.queuedCallIds.length === 0 || channel.waiters.size === 0) return;
     const batch = this.takeQueued(channel);
+    if (batch.length === 0) return;
     this.logToolDelivery(channel, batch, "waiter");
     const waiters = [...channel.waiters];
     channel.waiters.clear();

@@ -11,6 +11,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { gunzipSync, zstdDecompressSync } from "node:zlib";
+import type { ProviderNotice } from "./types";
 
 export interface QaPoolAccount { id: string; origin: string; models: string[]; enabled?: boolean; sessionModes?: boolean; conversationStoreDirectory?: string; browserHostDescriptorPath?: string; runtimeControlTokenFile?: string; qaHealthPinPath?: string }
 export interface QaPoolConfig {
@@ -342,6 +343,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
     }
     const hash = createHash("sha256").update(JSON.stringify(["qa-pool/v1", sessionScope, normalized.thread])).digest("hex");
     let owner = find.get(hash);
+    let assignmentNotice: ProviderNotice | undefined;
     if (!owner && admitted) {
       const candidates = config.accounts.filter(a => a.enabled !== false && a.models.includes(model) && (!route || a.id === route.accountId));
       if (!candidates.length) return failure(400, "model_unavailable", "No account supports the requested model");
@@ -353,15 +355,35 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
       owner = find.get(hash);
       if (!owner) {
         const counts = new Map(count.all().map(row => [row.account_id, row.n]));
-        const selected = candidates.filter(a => checks.some(c => c.id === a.id && c.ready) && health.eligibleNow(a))
-          .sort((a, b) => (counts.get(a.id) ?? 0) - (counts.get(b.id) ?? 0) || a.id.localeCompare(b.id))[0];
-        if (selected) {
+        const eligible = candidates.filter(a => checks.some(c => c.id === a.id && c.ready))
+          .sort((a, b) => (counts.get(a.id) ?? 0) - (counts.get(b.id) ?? 0) || a.id.localeCompare(b.id));
+        let admissionFailed = false;
+        for (const selected of eligible) {
+          owner = find.get(hash);
+          if (owner) break;
+          if (!health.eligibleNow(selected)) { admissionFailed = true; continue; }
           const consume = await health.authorizeSelected(selected, hash);
           if (closed) return failure(503, "pool_closed", "The QA pool is closed");
+          if (admission?.draining || admission?.sealed) return failure(503, "pool_draining", "New work is fenced; no new message was sent");
           // A concurrent caller may have committed the original mapping while
           // this request waited. Preserve it even if our fresh admission failed.
-          try { owner = find.get(hash) ?? (consume ? select(hash, model, selected, consume, route) : undefined) ?? null; }
+          try {
+            owner = find.get(hash);
+            if (!owner && consume) {
+              owner = select.immediate(hash, model, selected, consume, route) ?? null;
+              if (owner && admissionFailed && owner.account_id === selected.id) assignmentNotice = {
+                version: 1, id: randomUUID(), execution_id: randomUUID(), seq: 1,
+                kind: "account_pinned", observed_at: new Date().toISOString(),
+                message: "The server selected another eligible account before submitting this new conversation.",
+                source: "chatgpt-web", evidence: "observed",
+              };
+            }
+          }
           catch { return failure(503, "account_admission_unavailable", "The account admission could not be persisted; no new message was sent"); }
+          if (owner) break;
+          // No ownership or submission was committed. Only this boundary may
+          // try another account; existing sessions and dispatched work stay pinned.
+          admissionFailed = true;
         }
       }
       if (!owner) return failure(503, "account_health_unavailable", "No configured account has current authenticated health proof; no new message was sent");
@@ -630,7 +652,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
                   const committed = (paper || retainHistory) ? completed(event.response, receipt && cacheable ? Buffer.concat(wire) : undefined, cacheable) : terminalKnown;
                   if (receipt && !committed) throw new Error("Invalid completed response");
                   terminalSaved = true;
-                } else if (event.type === "response.failed" || event.type === "error") {
+                } else if (["response.failed", "response.incomplete", "response.cancelled", "error"].includes(String(event.type))) {
                   terminalKnown ||= terminalResponse(event.response);
                   if (preSendAttachmentFailure(event, Boolean(retainHistory))) notSubmitted = true;
                 }
@@ -652,6 +674,22 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
           },
         });
       } else release();
+      if (assignmentNotice && streaming && body instanceof ReadableStream) {
+        // Provider notices have their own sequence and never enter the model's
+        // input, canonical response, or Responses event sequence_number.
+        const reader = body.getReader();
+        const notice = new TextEncoder().encode(`event: response.provider_notice\ndata: ${JSON.stringify({ type: "response.provider_notice", notice: assignmentNotice })}\n\n`);
+        body = new ReadableStream<Uint8Array>({
+          start(controller) { controller.enqueue(notice); },
+          async pull(controller) {
+            try {
+              const chunk = await reader.read();
+              if (chunk.done) controller.close(); else controller.enqueue(chunk.value);
+            } catch (error) { controller.error(error); }
+          },
+          cancel(reason) { return reader.cancel(reason); },
+        });
+      }
       return new Response(body, { status: response.status, headers: {
         "content-type": response.headers.get("content-type") ?? "application/json",
         "cache-control": "no-store",

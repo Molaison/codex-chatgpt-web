@@ -1,8 +1,9 @@
-import { test, expect } from "bun:test";
+import { tmpdir } from "node:os";
+import { afterAll, test, expect } from "bun:test";
 import ts from "typescript";
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { rmSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { DurableOperation, OperationJournal, hasNativeExecution, retainedOperationError, type OperationRecord } from "../src/adapters/chatgpt-web/operation-journal";
 import { ChatGptTurnSession, ChatGptTurnSessions, ChatGptTextFeed, ChatGptTraceFeed, chatGptTurnRoundKey, chatGptTurnExecutionKey } from "../src/adapters/chatgpt-web/turn-execution";
@@ -11,9 +12,10 @@ import { BrowserObservationDetached, observationUnavailable } from "../src/adapt
 import { ChatGptWebAdapterError, ChatGptCompactionHandoffAccepted } from "../src/adapters/chatgpt-web/adapter-error";
 import type { NativeOperationScope } from "../src/adapters/chatgpt-web/native-execution";
 import type { CodexParsedRequest } from "../src/types";
+import { retainedForwardWorkerPolicy } from "../src/adapters/chatgpt-web/retained-forward-surface";
 
-const evidence = process.env.Q39_TEST_ROOT;
-if (!evidence) throw Error("Q39_TEST_ROOT must be an exclusive R38 evidence path");
+const evidence = process.env.Q39_TEST_ROOT ?? mkdtempSync(join(tmpdir(), "native-evidence-"));
+afterAll(() => { if (!process.env.Q39_TEST_ROOT) rmSync(evidence, { recursive: true, force: true }); });
 mkdirSync(evidence, { recursive: true });
 const indexSource = process.env.R38_INDEX_SOURCE ?? resolve(import.meta.dir, "../src/adapters/chatgpt-web/index.ts");
 const workerSource = process.env.R38_WORKER_SOURCE ?? resolve(import.meta.dir, "../src/adapters/chatgpt-web/browser-worker.ts");
@@ -71,7 +73,7 @@ test("actual runExclusive post-parent handshake heartbeat failure has zero slot/
   f.record.nativeScope = f.scope; f.op.checkpoint();
   let preparedAck = false, clicks = 0, collectors = 0;
   const controls: Array<Record<string, unknown>> = [], Noop = class extends Error {};
-  const env = { persistentConversationContext: () => undefined,
+  const env = { retainedForwardWorkerPolicy, persistentConversationContext: () => undefined,
     notifyLauncherTurn: async (_path: unknown, request: Record<string, unknown>) => {
       controls.push(request);
       if (request.phase === "start") return { surfaceId: "s".repeat(32) };

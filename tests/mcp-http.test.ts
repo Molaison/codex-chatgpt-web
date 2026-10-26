@@ -151,7 +151,7 @@ test("HTTP disconnect retains its accepted request without releaseControl and ex
   const { transport } = await connect(http.url);
   const controller = new AbortController();
   const body = JSON.stringify({ jsonrpc: "2.0", id: 7, method: "tools/call", params: {
-    name: "codex_exec", arguments: { turn_token: "fixture_turn_01234567890123456789", cmd: "fixture pending" },
+    name: "codex_exec", arguments: { turn_token: `turn_${"d".repeat(32)}`, cmd: "fixture pending" },
   } });
   const requestHeaders = { ...headers, "Mcp-Session-Id": transport.sessionId! };
   const call = fetch(http.url, { method: "POST", headers: requestHeaders, signal: controller.signal, body }).catch(error => error);
@@ -188,9 +188,9 @@ test("SDK cancellation isolates HTTP requests for distinct simulated broker turn
   });
   cleanup.push(() => broker.mockRestore());
   const controller = new AbortController();
-  const cancelled = client.callTool({ name: "codex_exec", arguments: { turn_token: "fixture_cancel_01234567890123456789", cmd: "cancel" } }, undefined, { signal: controller.signal }).catch(error => error);
-  const sameSession = client.callTool({ name: "codex_exec", arguments: { turn_token: "fixture_same-session_01234567890123456789", cmd: "same-session" } });
-  const otherSession = other.callTool({ name: "codex_exec", arguments: { turn_token: "fixture_other-session_01234567890123456789", cmd: "other-session" } });
+  const cancelled = client.callTool({ name: "codex_exec", arguments: { turn_token: `turn_${"c".repeat(32)}`, cmd: "cancel" } }, undefined, { signal: controller.signal }).catch(error => error);
+  const sameSession = client.callTool({ name: "codex_exec", arguments: { turn_token: `turn_${"s".repeat(32)}`, cmd: "same-session" } });
+  const otherSession = other.callTool({ name: "codex_exec", arguments: { turn_token: `turn_${"o".repeat(32)}`, cmd: "other-session" } });
   await allReceived;
   const aborted = new Promise<void>(resolve => pending.get("cancel")!.signal.addEventListener("abort", () => resolve(), { once: true }));
   controller.abort();
@@ -240,7 +240,7 @@ test("zero and empty request IDs cancel broker work and can be safely reused", a
   const post = (message: unknown) => fetch(http.url, { method: "POST", headers: sessionHeaders, body: JSON.stringify(message) });
   for (const id of [0, "", "0"] as const) {
     const received = new Promise<void>(resolve => { reached = resolve; });
-    const call = post({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "codex_exec", arguments: { turn_token: "fixture_token_01234567890123456789", cmd: "fixture" } } });
+    const call = post({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "codex_exec", arguments: { turn_token: `turn_${"f".repeat(32)}`, cmd: "fixture" } } });
     await received;
     expect((await post({ jsonrpc: "2.0", id, method: "tools/list" })).status).toBe(409);
     const cancelled = await post({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: id } });

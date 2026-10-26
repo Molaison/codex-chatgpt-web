@@ -1,6 +1,7 @@
 import { retainsBrowserExecution } from "./submission-identity";
 import { assertRetainedForwardRequest } from "./retained-forward-lane";
 import { observationSuffix, observationUnavailable, parseBrowserObservation } from "./observation-recovery";
+import { finalizeObservedNativeResult } from "./native-observation-completion";
 import { DurableOperation, OperationJournal, hasNativeExecution, operationRuntimeDirectory, operationDigest, retainedOperationError, nativePreparationCancelledError, type OperationRecord } from "./operation-journal";
 import type { NativeOperationScope, NativeResultReady, NativeReleaseReceipt, NativeCancelRequest, NativeCancelTerminal, NativePreparationCancellation } from "./native-execution";
 import { createHash, randomBytes } from "node:crypto";
@@ -30,7 +31,7 @@ import type { ProviderAdapter } from "../base";
 import { parseDataUrl } from "../image";
 import { decodeCompactionSummary, isReadableCompactionSummaryText, SUMMARY_PREFIX } from "../../responses/compaction";
 import { ChatGptWebAdapterError, chatGptToolTimeoutError } from "./adapter-error";
-import { ChatGptBrowserWorker, chatGptSuspensionClock, remainingStageBudgetMs } from "./browser-worker";
+import { ChatGptBrowserWorker, chatGptSuspensionClock, remainingStageBudgetMs, type BrowserTurn } from "./browser-worker";
 import { chatGptEnvironmentDiagnostic, extractChatGptTurnEnvironment, extractChatGptTurnIdentity, MissingTrustedCodexEnvironmentError, priorChatGptAbortedTurnIds } from "./environment";
 import { CHATGPT_WEB_LUNA_MODEL_ID, resolveChatGptWebModelMode, type ChatGptWebCapabilities } from "./model";
 import { chatGptReadOnlyContextWarning, compileChatGptWebPrompt } from "./prompt";
@@ -166,6 +167,26 @@ export function acknowledgeNativeResultReady(
   operation.nativeResultReady(ready);
 }
 
+function collectRichWidgets(
+  target: ChatGptChartWidget[], widgets: ChatGptChartWidget[], operation?: DurableOperation,
+): void {
+  const accepted = new Map(target.map(widget => [widget.id, widget]));
+  for (const widget of widgets) {
+    const previous = accepted.get(widget.id);
+    if (previous && JSON.stringify(previous) !== JSON.stringify(widget)) throw retainedOperationError();
+    if (!previous) accepted.set(widget.id, structuredClone(widget));
+  }
+  const next = [...accepted.values()];
+  if (next.length === target.length) return;
+  if (operation) {
+    const previous = operation.record.richWidgets;
+    operation.record.richWidgets = next;
+    try { operation.checkpoint(); }
+    catch (error) { operation.record.richWidgets = previous; throw error; }
+  }
+  target.splice(0, target.length, ...next);
+}
+
 /** No worker, DOM or writer rights are needed to return an already durable exact final. */
 export function restoreNativeFinalRuntime(operation: DurableOperation, parsed: CodexParsedRequest): ChatGptTurnRuntime {
   const ready = operation.nativeFinalFor(nativeScopeForOperation(operation, parsed));
@@ -177,7 +198,8 @@ export function restoreNativeFinalRuntime(operation: DurableOperation, parsed: C
   const physicalSettlement = operation.hasNativeRelease() ? Promise.resolve() : Promise.reject(retainedOperationError());
   void physicalSettlement.catch(() => {});
   return { mode: "read-only", operation, browser: Promise.resolve(ready.answer), physicalSettlement,
-    trace: new ChatGptTraceFeed(), text, submission: { phase: operation.record.submission }, usageInput: parsed,
+    trace: new ChatGptTraceFeed(), text, richWidgets: structuredClone(operation.record.richWidgets ?? []),
+    submission: { phase: operation.record.submission }, usageInput: parsed,
     conversationKey: operation.record.conversationKey, cancel() {} };
 }
 
@@ -203,6 +225,21 @@ export async function reconcileNativeHostRelease(
   }
   if (expected && JSON.stringify(expected) !== JSON.stringify(result.nativeRelease)) throw retainedOperationError();
   operation.nativeRelease(result.nativeRelease);
+  return true;
+}
+
+async function finishDurableNativeResult(
+  operation: DurableOperation, descriptorPath: string, signal?: AbortSignal,
+): Promise<boolean> {
+  if (operation.hasNativeRelease() || await reconcileNativeHostRelease(operation, descriptorPath)) return true;
+  const { nativeFinal, observation } = operation.record;
+  if (!nativeFinal || !observation) return false;
+  operation.assertNativeObservation(observation);
+  const ready = operation.nativeFinalFor(nativeFinal.scope);
+  await finalizeObservedNativeResult({ descriptorPath, checkpoint: observation,
+    submission: operation.record.nativeSubmissions!.at(-1)!, ready, signal,
+    onRelease: receipt => reconcileNativeHostRelease(operation, descriptorPath, receipt).then(() => {}),
+  });
   return true;
 }
 
@@ -650,6 +687,7 @@ export function createChatGptWebAdapter(
       return {
         importCodexPrompt: mode.localTools,
         appName: worker.appName,
+        includeContextTokenBreakdown: true,
         captureLunaCheckpoint,
         experimentalSkillAttachments,
         ...(experimentalMultipartParts !== undefined
@@ -684,15 +722,10 @@ export function createChatGptWebAdapter(
     });
     const trace = new ChatGptTraceFeed();
     const text = new ChatGptTextFeed();
-    const richWidgets: ChatGptChartWidget[] = [];
-    let lastGenerationNotice = 0;
+    const richWidgets = structuredClone(hooks.operation?.record.richWidgets ?? []);
     const onGenerationProgress = (): void => {
       trace.recordProgress();
       hooks.onCompactionProgress?.("generation");
-      if (hooks.operation && Date.now() - lastGenerationNotice >= 30_000) {
-        lastGenerationNotice = Date.now();
-        hooks.operation.notice("resumed", "已观察到ChatGPT网页仍有生成进展，继续等待当前回合；没有重新发送请求。");
-      }
     };
     const observedCapabilityTokens = new Set<string>();
     const observeCapabilityRetirement = (
@@ -805,7 +838,6 @@ export function createChatGptWebAdapter(
         if (nativeSubmissionIdentity) {
           if (!hooks.operation || !nativeOperationScope) throw retainedOperationError();
           hooks.operation.prepareNativeSubmission(nativeOperationScope);
-          submission.phase = "send_activated";
           return;
         }
         hooks.operation?.beforeSend();
@@ -830,6 +862,47 @@ export function createChatGptWebAdapter(
         }
         hooks.onCompactionProgress?.("submitted");
       },
+    };
+    const runNativeBrowserTurn = async (turn: BrowserTurn): Promise<string> => {
+      let current = turn;
+      let suffix: ReturnType<typeof observationSuffix> | undefined;
+      for (;;) {
+        try {
+          const answer = await worker.run(current);
+          suffix?.finish(answer);
+          return answer;
+        } catch (error) {
+          const operation = hooks.operation;
+          if (!nativeSubmissionIdentity || !operation || !retainedLauncherDescriptor || browserAbort.signal.aborted
+            || error instanceof DOMException && error.name === "AbortError"
+            || operation.record.nativeCancelIntent || operation.record.nativePreparationCancel) throw error;
+          // Result durability and physical release are separate handshakes. A helper may die
+          // after publishing the exact final; finish that original Host ACK without a new Page.
+          if (operation.record.nativeFinal) {
+            if (!await finishDurableNativeResult(operation, retainedLauncherDescriptor, browserAbort.signal)) throw error;
+            return operation.nativeFinalFor(nativeOperationScope!).answer;
+          }
+          if (error instanceof ChatGptWebAdapterError && error.code !== "chatgpt_submission_identity_unproven"
+            && !(error.retryable && error.status >= 500 && error.errorType === "server_error")) throw error;
+          if (operation.record.submission !== "accepted" || !operation.record.observation) throw error;
+          const checkpoint = parseBrowserObservation(operation.record.observation);
+          if (checkpoint.version !== 2) throw error;
+          operation.assertNativeObservation(checkpoint);
+          if (Object.entries({ ...checkpoint.identity, traceId: checkpoint.traceId }).some(([key, value]) =>
+            nativeOperationScope?.[key as keyof NativeOperationScope] !== value)) throw retainedOperationError();
+          operation.reserveRecovery("observer_reconnect");
+          syncRecoveryState();
+          operation.notice("reconnecting", "浏览器观察连接已中断，服务端正在接回原回答；保持原账号，不会再次发送本条消息。");
+          suffix = observationSuffix(text.value(), delta => text.push(delta));
+          current = { ...turn, observation: checkpoint,
+            nativeObservationSubmission: operation.record.nativeSubmissions!.at(-1)!,
+            prepare: async () => { throw observationUnavailable("an observer cannot prepare a prompt"); },
+            prepareResume: undefined,
+            onTextDelta: delta => { suffix!.push(delta); onGenerationProgress(); },
+            onObservationResumed: () => { operation.notice("resumed"); },
+          };
+        }
+      }
     };
     const multipartProgressLifecycle = hooks.onCompactionProgress
       ? { onMultipartStageAcknowledged: (part: number) => hooks.onCompactionProgress?.("multipart_acknowledged", part) }
@@ -958,6 +1031,7 @@ export function createChatGptWebAdapter(
           // retirement observer also aborts browserAbort, but that self-induced abort must not turn
           // an ordinary launcher/runtime failure into a user cancellation.
           const externallyAborted = browserAbort.signal.aborted;
+          externalProgress.retire(normalized);
           if (activeToken) await Promise.resolve(broker.revoke(activeToken, normalized, { source: "runtime.failure", reason: externallyAborted ? "cancelled" : "failure" })).catch(() => {});
           try {
             await finishLauncher(externallyAborted ? "aborted" : "failed");
@@ -1060,9 +1134,9 @@ export function createChatGptWebAdapter(
         return { ...compiled, release: () => {} };
       };
       const project = (parsed._rawBody as { client_metadata?: { _chatgpt_project?: { id: string; name: string } } } | undefined)?.client_metadata?._chatgpt_project;
-      const sessionMode = parsed._chatgptSessionMode ?? (parsed._rawBody as { client_metadata?: { _chatgpt_session_mode?: "temporary" | "persistent" } } | undefined)?.client_metadata?._chatgpt_session_mode;
+      const sessionMode = parsed._chatgptSessionMode ?? "persistent";
       const deferTextUntilComplete = (parsed._rawBody as { client_metadata?: { _chatgpt_defer_text_until_complete?: boolean } } | undefined)?.client_metadata?._chatgpt_defer_text_until_complete === true;
-      const browserTurn = cancellableBrowserTurn(finalizeCheckpoint(worker.run({
+      const browserTurn = cancellableBrowserTurn(finalizeCheckpoint(runNativeBrowserTurn({
         traceId,
         modelId: parsed.modelId,
         ...(hooks.operation && identity.threadId && identity.turnId && conversationKey
@@ -1104,7 +1178,9 @@ export function createChatGptWebAdapter(
         onReasoningSummary: (text, continuation) => trace.push({ kind: "reasoning", text, ...(continuation ? { continuation: true } : {}) }),
         onCommentary: (text, continuation) => trace.push({ kind: "commentary", text, ...(continuation ? { continuation: true } : {}) }),
         onTextDelta: delta => { text.push(delta); onGenerationProgress(); },
-        ...(deferTextUntilComplete ? { onRichWidgets: (widgets: ChatGptChartWidget[]) => { richWidgets.push(...widgets); } } : {}),
+        ...(deferTextUntilComplete ? { onRichWidgets: (widgets: ChatGptChartWidget[]) => {
+          collectRichWidgets(richWidgets, widgets, hooks.operation);
+        } } : {}),
         onGenerationProgress,
         ...(captureLunaCheckpoint ? {
           captureLunaCheckpoint: true,
@@ -1294,7 +1370,7 @@ export function createChatGptWebAdapter(
           throw error;
         }
       };
-      const runChatGptWebTurn = async (): Promise<void> => {
+      const runChatGptWebTurn = async (): Promise<"retry_prepared" | void> => {
         const manualRequest = isChatGptWebZeroRiskBackendModel(parsed.modelId);
         if (manualRequest !== manualInteraction) {
           emit({
@@ -1766,7 +1842,7 @@ export function createChatGptWebAdapter(
           const operation = chatGptTurnSessions.findPhysicalOwner(candidate.executionKey)?.runtime.operation
             ?? new DurableOperation(operationJournal, candidate);
           if (!operation.hasNativeRelease()) {
-            await reconcileNativeHostRelease(operation, retainedLauncherDescriptor).catch(() => {
+            await finishDurableNativeResult(operation, retainedLauncherDescriptor, incoming.abortSignal).catch(() => {
               // An exact durable answer remains readable without release. The owner gates
               // below continue to reject successor intents until actual release is proven.
             });
@@ -1835,11 +1911,14 @@ export function createChatGptWebAdapter(
                   const text = new ChatGptTextFeed();
                   text.push(prefix); text.drain();
                   const suffix = observationSuffix(prefix, delta => text.push(delta));
+                  const deferTextUntilComplete = (parsed._rawBody as { client_metadata?: { _chatgpt_defer_text_until_complete?: boolean } } | undefined)?.client_metadata?._chatgpt_defer_text_until_complete === true;
+                  const richWidgets = structuredClone(saved.richWidgets ?? []);
                   const abort = new AbortController();
                   operation.freezeRecoveryBudget(timeoutMs);
                   operation.reserveRecovery("observer_reconnect");
                   operation.notice("reconnecting");
                   const observerRecoveryState = operation.recoveryState();
+                  const observationScope = c.version === 2 ? nativeScopeForOperation(operation, parsed) : undefined;
                   const browser = worker.run({ traceId, modelId: parsed.modelId, capabilities: turnCapabilities,
                     recoveryDeadlineAt: operation.record.recoveryBudget?.deadlineAt,
                     recoveryState: observerRecoveryState,
@@ -1852,7 +1931,28 @@ export function createChatGptWebAdapter(
                       Object.assign(observerRecoveryState, state);
                       return true;
                     },
+                    ...(observationScope ? {
+                      nativeSubmissionIdentity: true,
+                      nativeOperationScope: observationScope,
+                      nativeSubmissionRoundKey: roundKey,
+                      nativeObservationSubmission: saved.nativeSubmissions!.at(-1)!,
+                      onNativeSubmission: (value: import("./submission-identity").NativeSubmissionRecord) => {
+                        operation.nativeSubmission(value, observationScope);
+                      },
+                      onNativeResultReady: async (ready: NativeResultReady) => { acknowledgeNativeResultReady(operation, text, ready); },
+                      onNativeRelease: async (receipt: NativeReleaseReceipt) => {
+                        if (!retainedLauncherDescriptor) throw retainedOperationError();
+                        await reconcileNativeHostRelease(operation, retainedLauncherDescriptor, receipt);
+                      },
+                      onNativeCancelIntent: async (request: NativeCancelRequest) => operation.nativeCancelIntent(request),
+                      onNativePreparationCancel: async (request: NativeCancelRequest) => operation.nativePreparationCancellation(request, observationScope),
+                      onNativeCancelTerminal: async (terminal: NativeCancelTerminal) => { operation.nativeCancelTerminal(terminal); },
+                    } : {}),
                     observation: c, ...(toolFence ? { observationToolFence: toolFence } : {}), abortSignal: abort.signal,
+                    ...(deferTextUntilComplete ? { deferTextUntilComplete: true,
+                      onRichWidgets: (widgets: ChatGptChartWidget[]) => {
+                        collectRichWidgets(richWidgets, widgets, operation);
+                      } } : {}),
                     prepare: async () => { throw observationUnavailable("an observer cannot prepare a prompt"); },
                     onTextDelta: delta => suffix.push(delta),
                     onConversationRestored: () => { operation.notice("conversation_restored"); },
@@ -1864,7 +1964,7 @@ export function createChatGptWebAdapter(
                   return { mode: "read-only" as const, operation, browser,
                     physicalSettlement: browser.then(() => {
                       if (hasNativeExecution(operation.record) && !operation.hasNativeRelease()) throw retainedOperationError();
-                    }), trace: new ChatGptTraceFeed(), text,
+                    }), trace: new ChatGptTraceFeed(), text, richWidgets,
                     submission: { phase: "accepted" as const }, usageInput: parsed, conversationKey: saved.conversationKey,
                     cancel(reason?: Error) { abort.abort(reason); } };
                 }
@@ -1883,6 +1983,7 @@ export function createChatGptWebAdapter(
               restoredText.push(prefix); restoredText.drain(); restoredText.push(suffix);
               return { mode: "read-only" as const, operation, browser: Promise.resolve(saved.final.answer),
                 physicalSettlement: Promise.resolve(), trace: new ChatGptTraceFeed(), text: restoredText,
+                richWidgets: structuredClone(saved.richWidgets ?? []),
                 submission: { phase: saved.submission }, usageInput: parsed,
                 conversationKey: saved.conversationKey, cancel() {} };
             }
@@ -1985,6 +2086,17 @@ export function createChatGptWebAdapter(
           emitRoundEvents(events);
         };
         const emitRoundEvent = (event: AdapterEvent): void => emitRoundEvents([event]);
+        const emitRichWidgets = (): void => {
+          const accepted = new Map(session.roundEvents(roundKey).flatMap(event =>
+            event.type === "rich_widget" ? [[event.widget.id, event.widget] as const] : []));
+          const events: AdapterEvent[] = [];
+          for (const widget of session.runtime.richWidgets ?? []) {
+            const previous = accepted.get(widget.id);
+            if (previous && JSON.stringify(previous) !== JSON.stringify(widget)) throw retainedOperationError();
+            if (!previous) events.push({ type: "rich_widget", widget });
+          }
+          if (events.length) emitRoundEvents(events);
+        };
         let awaitingRuntime = false;
         const releaseObserver = session.runtime.manualControl ? undefined : session.observeRound(roundKey, () => {
           observerAbort.abort(new DOMException("ChatGPT observer replaced by an exact reconnect", "AbortError"));
@@ -2038,6 +2150,7 @@ export function createChatGptWebAdapter(
               }
               const reasoning = session.roundReasoning(roundKey);
               session.setFinalReasoning(reasoning);
+              emitRichWidgets();
               session.setFinalEvents(session.roundEvents(roundKey));
               emitRoundBatch(buffer => emitBrowserCompletion(
                 settled,
@@ -2051,9 +2164,11 @@ export function createChatGptWebAdapter(
 
             let turnToken: string | undefined;
             if (session.runtime.mode === "tools") {
-              turnToken = await withAbort(session.runtime.token, incoming.abortSignal);
               if (!environment) throw new Error("Tool-capable ChatGPT web runtime lost its trusted environment");
+              awaitingRuntime = true;
+              turnToken = await withAbort(session.runtime.token, incoming.abortSignal);
               await broker.updateEnvironment(turnToken, environment);
+              awaitingRuntime = false;
 
               const outstanding = session.outstanding();
               if (outstanding.length > 0) {
@@ -2146,7 +2261,6 @@ export function createChatGptWebAdapter(
                 emitNewTrace(session.runtime.trace.drain());
                 emitNewText(session.runtime.text.drain());
                 session.setFinalReasoning(roundReasoning);
-                session.setFinalEvents(session.roundEvents(roundKey));
                 if (turnToken) await broker.revoke(turnToken, undefined, { source: "runtime.browser_outcome", reason: completedOutcome.type === "error" ? "failure" : "completed" });
                 if (completedOutcome.type === "error") throw completedOutcome.error;
                 if (session.runtime.text.value() !== completedOutcome.answer) {
@@ -2156,11 +2270,8 @@ export function createChatGptWebAdapter(
                 if (bufferStructuredOutput) {
                   emitRoundBatch(buffer => emitTextDeltas([completedOutcome.answer], buffer));
                 }
-                if (session.runtime.richWidgets?.length) {
-                  emitRoundBatch(buffer => {
-                    for (const widget of session.runtime.richWidgets!) buffer({ type: "rich_widget", widget });
-                  });
-                }
+                emitRichWidgets();
+                session.setFinalEvents(session.roundEvents(roundKey));
                 emitRoundBatch(buffer => emitBrowserCompletion(
                   completedOutcome,
                   estimateChatGptWebUsage(currentUsageInput(parsed), { answer: completedOutcome.answer, reasoning: roundReasoning }, turnCapabilities, experimentalBiggerContext, experimentalSkillAttachments, provider.chatgptWeb?.appName),
@@ -2252,6 +2363,9 @@ export function createChatGptWebAdapter(
           // Validation and result-delivery failures never enter this branch.
           const settled = awaitingRuntime ? session.settledOutcome() : undefined;
           if (settled?.type === "error") error = settled.error;
+          else if (awaitingRuntime && session.runtime.mode === "tools") {
+            error = session.runtime.externalProgress.retirementFailure() ?? error;
+          }
           const turnError = submittedTurnFailure(session, error);
           const handledError = turnError instanceof ChatGptWebAdapterError && turnError.retryable
             ? session.runtime.operation
@@ -2271,6 +2385,19 @@ export function createChatGptWebAdapter(
           }
           if (!(turnError instanceof ChatGptWebAdapterError && turnError.retryable)) {
             chatGptWebTurnRetryPolicy.clear(retryKey);
+          }
+          if (!manualRequest && !parsed._compactionRequest && !incoming.abortSignal?.aborted
+            && handledError instanceof ChatGptWebAdapterError && handledError.retryable
+            && handledError.status >= 500 && handledError.errorType === "server_error"
+            && operation?.record.submission === "prepared" && !hasNativeExecution(operation.record)
+            && !operation.record.nativePreparationCancel && !session.runtime.text.value()
+            && operation.recoveryAvailable()) {
+            // Finish this owner's cleanup and finally block before the next attempt can replace
+            // its journal. A response observer never has to retry a proven pre-Send failure.
+            chatGptTurnSessions.retire(executionKey, session);
+            await session.waitForPhysicalSettlement(incoming.abortSignal);
+            operation.notice("reconnecting", "上游在发送前暂时不可用，服务端正在重试准备；本条消息尚未发送。");
+            return "retry_prepared";
           }
           if (handledError instanceof ChatGptWebAdapterError && !handledError.retryable) {
             // A deterministic request failure remains replayable so a native reconnect cannot burn
@@ -2326,7 +2453,13 @@ export function createChatGptWebAdapter(
       );
       try {
         emit({ type: "heartbeat" });
-        await runChatGptWebTurn();
+        let preparedRetries = 0;
+        while (await runChatGptWebTurn() === "retry_prepared") {
+          // The durable operation owns the retry/time budget; this short delay only avoids a
+          // burst of preparation requests while the same upstream transport is unavailable.
+          const delay = Math.min(2_000, 250 * 2 ** preparedRetries++);
+          await withAbort(new Promise<void>(resolve => setTimeout(resolve, delay)), incoming.abortSignal);
+        }
       } finally {
         clearInterval(heartbeat);
       }

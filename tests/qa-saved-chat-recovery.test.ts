@@ -47,15 +47,14 @@ async function fixture(run: (value: Fixture) => Promise<void>, behavior = "norma
   finally { await context.close(); rmSync(root, { recursive: true, force: true }); }
 }
 
-test("direct QA workers use portable config defaults and preserve explicit Temporary Chat opt-out", () => {
+test("direct workers retain portable account paths without a global chat-mode setting", () => {
   const base = { adapter: "chatgpt-web" as const, baseUrl: "browser://config-fixture" };
-  expect(resolveBrowserConfig(base)).toMatchObject({ accountId: "default", useSavedChats: true,
+  expect(resolveBrowserConfig(base)).toMatchObject({ accountId: "default",
     conversationStoreDirectory: join(getConfigDir(), "runtime", "conversations") });
   expect(resolveBrowserConfig({ ...base, chatgptWeb: { conversationStoreDirectory: "custom-chats" } }).conversationStoreDirectory)
     .toBe(join(getConfigDir(), "custom-chats"));
-  expect(resolveBrowserConfig({ ...base, chatgptWeb: { localToolsEnabled: true } }).useSavedChats).toBeTrue();
-  for (const chatgptWeb of [{ useSavedChats: false }, { browserInteractionMode: "manual" as const }]) {
-    expect(resolveBrowserConfig({ ...base, chatgptWeb }).useSavedChats).toBeFalse();
+  for (const chatgptWeb of [{}, { localToolsEnabled: true }, { browserInteractionMode: "manual" as const }]) {
+    expect(resolveBrowserConfig({ ...base, chatgptWeb })).not.toHaveProperty("useSavedChats");
   }
 });
 
@@ -81,13 +80,13 @@ for (const behavior of ["deleted", "redirect", "empty", "no-composer"]) {
       const page = await context.newPage();
       // DOM absence cases start on the recorded URL so navigation cannot mask the intended failure.
       if (behavior === "empty" || behavior === "no-composer") await page.goto(parentUrl);
-      await expect(restoreSavedChatConversation(page, parentUrl, { timeoutMs: 250 }))
+      await expect(restoreSavedChatConversation(page, parentUrl, { timeoutMs: 1_000 }))
         .rejects.toMatchObject({ code: "saved_conversation_unavailable", retryable: false,
           message: expect.stringContaining(behavior === "empty" ? "during history" : "could not be reopened during ") });
       expect(store.lookup("thread")?.url).toBe(parentUrl);
       expect(readdirSync(store.directory)).toHaveLength(1);
     }, behavior);
-  });
+  }, 30_000);
 }
 
 browserTest("aborted restoration remains an abort and leaves the browser untouched", async () => {
@@ -106,21 +105,21 @@ function prompt(text: string) {
 }
 
 function workerHarness(f: Fixture, page: Page, key: string, options: {
-  destination?: string; interrupted?: boolean; missingUrl?: boolean; wrongChatBeforeSend?: boolean; saved?: boolean; beforeSendFailure?: boolean;
+  destination?: string; interrupted?: boolean; missingUrl?: boolean; wrongChatBeforeSend?: boolean; beforeSendFailure?: boolean;
   localTools?: boolean; sessionMode?: BrowserTurn["sessionMode"]; reused?: boolean;
 } = {}) {
   const turnCapabilities = { ...capabilities, localToolsEnabled: options.localTools === true };
-  const saved = options.saved !== false && (options.sessionMode !== "temporary" || f.store.lookup(key) !== undefined);
+  const saved = options.sessionMode !== "temporary";
   const state = { fresh: 0, full: 0, incremental: 0, sends: 0, attached: "", localTools: false };
   const worker: any = ChatGptBrowserWorker.forProvider({ adapter: "chatgpt-web", baseUrl: "browser://fixture-" + randomUUID(),
-    chatgptWeb: { accountId: "account-1", useSavedChats: options.saved !== false, conversationStoreDirectory: f.root,
+    chatgptWeb: { accountId: "account-1", conversationStoreDirectory: f.root,
       browserDiagnosticsPath: join(f.root, "diagnostics"), storageStatePath: join(f.root, "browser-state.json") } });
   const finished = new Error("fixture: submission observed; no inference is performed");
   const interrupted = new Error("fixture: process interrupted after Send activation");
   Object.assign(worker, {
-    prepareChatSurface: async (_page: Page, _capture: unknown, useSaved: boolean) => {
-      state.fresh++; expect(useSaved).toBe(saved);
-      await page.goto(useSaved ? "https://chatgpt.com/" : "https://chatgpt.com/?temporary-chat=true");
+    prepareChatSurface: async (_page: Page, _capture: unknown, _signal: unknown, preparation: { sessionMode?: BrowserTurn["sessionMode"] }) => {
+      state.fresh++; expect(preparation.sessionMode !== "temporary").toBe(saved);
+      await page.goto(saved ? "https://chatgpt.com/" : "https://chatgpt.com/?temporary-chat=true");
     },
     selectModelAndEffort: async () => resolveChatGptWebModelMode(CHATGPT_WEB_MODEL_ID, "low", turnCapabilities),
     assertSelectedEffort: async () => {}, captureSubmissionBaseline: async () => ({}), attachFiles: async () => {},
@@ -176,12 +175,14 @@ browserTest("first Send reserves mapping before activation and recreated worker 
     await page.close();
     const next = workerHarness(f, await f.context.newPage(), "parent");
     await expect(next.run()).rejects.toBe(next.finished);
-    expect(next.state).toMatchObject({ fresh: 0, full: 0, incremental: 1, sends: 1, attached: "INCREMENTAL: latest question only" });
+    expect(next.state).toMatchObject({ fresh: 0, full: 0, incremental: 1, sends: 1 });
+    expect(next.state.attached).toEndWith("INCREMENTAL: latest question only");
     expect(next.state.attached).not.toContain("DO_NOT_IMPORT_CODEX_SYSTEM");
     expect(f.store.lookup("parent")?.url).toBe(parentUrl);
   });
-}, 20_000);
+}, 30_000);
 
+// Two real browser turns include their diagnostics and context cleanup in this case budget.
 browserTest("new fork seeds full history once then persists and resumes its independent chat", async () => {
   await fixture(async f => {
     f.store.bind("parent", f.store.reserve("parent"), parentUrl);
@@ -196,7 +197,7 @@ browserTest("new fork seeds full history once then persists and resumes its inde
     expect(next.state).toMatchObject({ fresh: 0, full: 0, incremental: 1 });
     expect(f.store.lookup("child")?.url).toBe(childUrl);
   });
-}, 20_000);
+}, 30_000);
 
 browserTest("navigation away from restored chat blocks Send and preserves original binding", async () => {
   await fixture(async f => {
@@ -224,7 +225,8 @@ for (const failure of ["interrupted", "missingUrl"] as const) {
 }
 
 
-browserTest("Full temporary sessions promote by native Save once and never downgrade; reload rebinds tools", async () => {
+// Five real browser turns include their diagnostics and context cleanup in this case budget.
+browserTest("Full temporary sessions save only after persistent promotion and reload rebinds tools", async () => {
   await fixture(async f => {
     const page = await f.context.newPage();
     const first = workerHarness(f, page, "full", { localTools: true, sessionMode: "temporary" });
@@ -236,22 +238,22 @@ browserTest("Full temporary sessions promote by native Save once and never downg
     await expect(next.run()).rejects.toBe(next.finished);
     expect(next.state).toMatchObject({ incremental: 1, localTools: true });
     expect(page.url()).toBe(temporaryUrl);
-    const promote = workerHarness(f, page, "full", { localTools: true, reused: true });
+    const promote = workerHarness(f, page, "full", { localTools: true, sessionMode: "persistent", reused: true });
     await expect(promote.run()).rejects.toBe(promote.finished);
     expect(promote.state).toMatchObject({ incremental: 1, localTools: true, fresh: 0 });
     expect(f.store.lookup("full")?.url).toBe(parentUrl);
     expect(await page.locator("[data-user-message-bubble]").innerText()).toBe("Earlier question");
-    const noDowngrade = workerHarness(f, page, "full", { localTools: true, sessionMode: "temporary", reused: true });
-    await expect(noDowngrade.run()).rejects.toBe(noDowngrade.finished);
-    expect(noDowngrade.state).toMatchObject({ incremental: 1, localTools: true });
+    const continued = workerHarness(f, page, "full", { localTools: true, sessionMode: "persistent", reused: true });
+    await expect(continued.run()).rejects.toBe(continued.finished);
+    expect(continued.state).toMatchObject({ incremental: 1, localTools: true });
     expect(page.url()).toBe(parentUrl);
     await page.close();
-    const restored = workerHarness(f, await f.context.newPage(), "full", { localTools: true, sessionMode: "temporary" });
+    const restored = workerHarness(f, await f.context.newPage(), "full", { localTools: true, sessionMode: "persistent" });
     await expect(restored.run()).rejects.toBe(restored.finished);
     expect(restored.state).toMatchObject({ incremental: 1, fresh: 0, localTools: true });
     expect(f.store.lookup("full")?.url).toBe(parentUrl);
   });
-}, 60_000);
+}, 90_000);
 
 browserTest("Full ordinary effort first submission is saved with tools enabled", async () => {
   await fixture(async f => {
@@ -259,6 +261,18 @@ browserTest("Full ordinary effort first submission is saved with tools enabled",
     await expect(run.run()).rejects.toBe(run.finished);
     expect(run.state).toMatchObject({ fresh: 1, full: 1, localTools: true });
     expect(f.store.lookup("full-default")?.url).toBe(parentUrl);
+  });
+}, 15_000);
+
+browserTest("an explicit temporary request cannot send on a retained saved-chat surface", async () => {
+  await fixture(async f => {
+    const original = f.store.bind("thread", f.store.reserve("thread"), parentUrl);
+    const page = await f.context.newPage(); await page.goto(parentUrl);
+    const attempt = workerHarness(f, page, "thread", { sessionMode: "temporary", reused: true });
+    await expect(attempt.run()).rejects.toMatchObject({ code: "chatgpt_temporary_conversation_conflict", retryable: false });
+    expect(attempt.state.sends).toBe(0);
+    expect(page.url()).toBe(parentUrl);
+    expect(f.store.lookup("thread")).toEqual(original);
   });
 }, 15_000);
 

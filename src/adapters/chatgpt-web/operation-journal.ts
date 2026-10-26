@@ -2,8 +2,9 @@ import { nativeSubmissionDescendsFrom, nativeSubmissionDigest, parseNativeSubmis
 import type { NativeOperationScope, NativeResultReady, NativeReleaseReceipt, NativeCancelRequest, NativeCancelIntent, NativeCancelTerminal, NativePreparationCancellation } from "./native-execution";
 import { CHATGPT_RECOVERY_TIME_ALLOWANCE_MS } from "./retry-policy";
 import type { BrowserObservationCheckpoint } from "./observation-recovery";
+import type { ChatGptChartWidget } from "./rich-widget";
 import { createHash } from "node:crypto";
-import { closeSync, existsSync, fsyncSync, openSync, readFileSync, readdirSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { atomicWriteFile, getConfigDir, isWindowsPipeEndpoint } from "../../config";
 import type { AdapterEvent, ProviderNotice } from "../../types";
@@ -37,6 +38,7 @@ export interface OperationRecord {
   nativeScope?: NativeOperationScope;
   nativePreparationCancel?: NativePreparationCancellation;
   nativeFinal?: NativeResultReady;
+  richWidgets?: ChatGptChartWidget[];
   nativeCancelIntent?: NativeCancelIntent;
   nativeCancelTerminal?: NativeCancelTerminal;
   nativeRelease?: NativeReleaseReceipt;
@@ -52,7 +54,7 @@ export interface OperationRecord {
   physicalSettled?: boolean;
   observation?: BrowserObservationCheckpoint;
   recoveryBudget?: OperationRecoveryBudget;
-  recoveryNotices?: Partial<Record<"reconnecting" | "resumed", ProviderNotice>>;
+  recoveryNotices?: Record<string, ProviderNotice>;
   recoveryAttempts?: Array<{ at: number; submission: OperationRecord["submission"]; observation?: BrowserObservationCheckpoint }>;
   observationRound?: { roundKey: string; deliveredToolResults: Record<string, string> };
   noticeSeq?: number;
@@ -187,14 +189,26 @@ export function nativeOperationReleased(record: OperationRecord): boolean {
   try { assertNativeRelease(record, record.nativeRelease!); return true; } catch { return false; }
 }
 
+function canArchiveOperation(record: OperationRecord): boolean {
+  const terminal = record.generation === "final" && record.final
+    || record.nativeRelease?.outcome === "cancelled" || record.nativePreparationCancel
+    || record.error?.code === "client_cancelled";
+  return !!terminal && record.physicalSettled === true && nativeOperationReleased(record);
+}
+
 /** Private checkpoints, not another permission authority. One existing role runtime owns writes. */
 export class OperationJournal {
   readonly directory: string;
   readonly metrics = { writes: 0, bytes: 0, maxBytes: 0 };
-  constructor(runtimeDirectory: string, kind = "operations") {
+  constructor(runtimeDirectory: string, private readonly kind = "operations") {
     this.directory = join(runtimeDirectory, kind);
   }
-  path(key: string): string { return join(this.directory, `${operationDigest(key)}.json`); }
+  path(key: string): string {
+    const name = `${operationDigest(key)}.json`;
+    const active = join(this.directory, name);
+    const archived = join(this.directory, "archive", name);
+    return existsSync(active) || !existsSync(archived) ? active : archived;
+  }
   read<T>(key: string): T | undefined {
     const path = this.path(key);
     if (!existsSync(path)) return undefined;
@@ -204,6 +218,10 @@ export class OperationJournal {
     if (!existsSync(this.directory)) return;
     for (const name of readdirSync(this.directory)) {
       if (name.endsWith(".json")) yield this.readCheckpoint<T>(join(this.directory, name));
+    }
+    const archive = join(this.directory, "archive");
+    if (existsSync(archive)) for (const name of readdirSync(archive)) {
+      if (name.endsWith(".json")) yield this.readCheckpoint<T>(join(archive, name));
     }
   }
   private readCheckpoint<T>(path: string): T {
@@ -232,23 +250,60 @@ export class OperationJournal {
     return undefined;
   }
   write(key: string, record: unknown): void {
-    if (!existsSync(this.path(key)) && existsSync(this.directory)
+    const path = this.path(key);
+    if (!existsSync(path) && existsSync(this.directory)
       && readdirSync(this.directory).filter(name => name.endsWith(".json")).length >= 4096) {
-      throw new Error("Operation checkpoint capacity exhausted; owner must reconcile retained executions");
+      // Older runtimes left terminal operations in active inventory. Reclaim only their proven
+      // releases, once capacity is reached; tool channels require an actual live retirement.
+      if (this.kind === "operations") for (const name of readdirSync(this.directory)) {
+        if (!name.endsWith(".json")) continue;
+        const previous = this.readCheckpoint<OperationRecord>(join(this.directory, name));
+        if (previous?.version === 1 && typeof previous.executionKey === "string"
+          && `${operationDigest(previous.executionKey)}.json` === name && canArchiveOperation(previous)) {
+          this.archive(previous.executionKey);
+        }
+      }
+      if (readdirSync(this.directory).filter(name => name.endsWith(".json")).length >= 4096) {
+        throw new Error("Operation checkpoint capacity exhausted; owner must reconcile retained executions");
+      }
     }
     const payload = JSON.stringify(record);
     const data = JSON.stringify({ version: 1, digest: operationDigest(payload), payload });
     const bytes = Buffer.byteLength(data);
     if (bytes > 16 * 1024 * 1024) throw new Error("Operation checkpoint exceeds 16 MiB; execution retained, dispatch blocked");
-    atomicWriteFile(this.path(key), data, { durable: true });
+    atomicWriteFile(path, data, { durable: true });
     if (process.platform !== "win32") {
       // atomicWriteFile syncs the temporary file, but rename durability also needs its directory.
-      const fd = openSync(this.directory, "r");
+      const fd = openSync(dirname(path), "r");
       try { fsyncSync(fd); } finally { closeSync(fd); }
     }
     this.metrics.writes++;
     this.metrics.bytes += bytes;
     this.metrics.maxBytes = Math.max(this.metrics.maxBytes, bytes);
+  }
+
+  /** Retain the exact replay identity while removing a proven terminal owner from active admission. */
+  archive(key: string): void {
+    const name = `${operationDigest(key)}.json`;
+    const active = join(this.directory, name);
+    if (!existsSync(active)) return;
+    const directory = join(this.directory, "archive");
+    try {
+      mkdirSync(directory, { recursive: true, mode: 0o700 });
+      const destination = join(directory, name);
+      if (existsSync(destination)) throw new Error("Duplicate archived operation identity");
+      // Same-filesystem rename keeps either the complete active checkpoint or its complete
+      // archived form readable. Archival never deletes an execution/receipt tombstone.
+      renameSync(active, destination);
+      if (process.platform !== "win32") for (const parent of [directory, this.directory]) {
+        const fd = openSync(parent, "r");
+        try { fsyncSync(fd); } finally { closeSync(fd); }
+      }
+    } catch {
+      // The durable checkpoint already exists. An optional archive failure cannot invalidate a
+      // completed answer or grant dispatch; leave its current location for the next attempt.
+      console.error("[chatgpt-web] terminal checkpoint archival deferred; replay identity retained");
+    }
   }
 }
 
@@ -270,17 +325,26 @@ export class DurableOperation {
   private readonly nativeResultWaiters = new Set<(ready: NativeResultReady) => void>();
   private readonly noticeObservers = new Set<(notice: ProviderNotice) => void>();
   notice(kind: ProviderNotice["kind"], observedMessage?: string): ProviderNotice {
-    if (kind === "reconnecting" || kind === "resumed") {
-      const previous = this.record.recoveryNotices?.[kind] ?? this.record.notices?.find(notice => notice.kind === kind);
+    const message = observedMessage ?? noticeMessages[kind];
+    const epoch = this.record.recoveryBudget?.clock?.epoch ?? 0;
+    const recoveryKey = kind === "reconnecting" || kind === "resumed"
+      ? `${epoch}:${kind}:${operationDigest(message)}` : undefined;
+    if (recoveryKey) {
+      // Reconnecting an observer reuses the exact notice; another recovery stage or episode
+      // must remain visible even when it shares the same public kind.
+      const legacy = epoch === 0 ? this.record.recoveryNotices?.[kind]
+        ?? this.record.notices?.find(notice => notice.kind === kind && notice.message === message) : undefined;
+      const previous = this.record.recoveryNotices?.[recoveryKey]
+        ?? (legacy?.message === message ? legacy : undefined);
       if (previous) return previous;
     }
     const seq = (this.record.noticeSeq ?? 0) + 1;
     const notice: ProviderNotice = { version: 1, id: `notice_${operationDigest(this.record.operationId).slice(0, 32)}_${seq}`,
       execution_id: operationDigest(this.record.executionKey), seq, kind, observed_at: new Date().toISOString(),
-      message: observedMessage ?? noticeMessages[kind], source: "chatgpt-web", evidence: "observed" };
+      message, source: "chatgpt-web", evidence: "observed" };
     this.record.noticeSeq = seq;
-    if (kind === "reconnecting" || kind === "resumed") {
-      this.record.recoveryNotices = { ...this.record.recoveryNotices, [kind]: notice };
+    if (recoveryKey) {
+      this.record.recoveryNotices = { ...this.record.recoveryNotices, [recoveryKey]: notice };
     }
     this.record.notices = [...(this.record.notices ?? []), notice].slice(-32);
     this.checkpoint();
@@ -435,6 +499,9 @@ export class DurableOperation {
     this.record.seq++;
     this.record.updatedAt = Date.now();
     this.journal.write(this.record.executionKey, this.record);
+    if (!this.nativeSubmissionWriteFailed && canArchiveOperation(this.record)) {
+      this.journal.archive(this.record.executionKey);
+    }
   }
   freezeRecoveryBudget(timeoutMs?: number): void {
     if (this.record.recoveryBudget) {

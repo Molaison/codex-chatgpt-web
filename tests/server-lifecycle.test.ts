@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chatGptWebTraceId } from "../src/adapters/chatgpt-web";
 import { runStructuredCompactionOnce } from "../src/adapters/chatgpt-web/compaction-handoff";
+import { ExplicitNativeCancellation } from "../src/adapters/chatgpt-web/native-execution";
 import { ChatGptTextFeed, ChatGptTraceFeed, chatGptTurnSessions } from "../src/adapters/chatgpt-web/turn-execution";
 import { callTurnBroker, closeTurnBrokers, RemoteTurnBroker, TurnBroker } from "../src/adapters/chatgpt-web/turn-broker";
 import { defaultBrokerEndpoint, defaultConfig, providerConfig } from "../src/config";
@@ -691,7 +692,9 @@ test("Interrupt cancels a detached structured compaction by exact native turn id
       status: "ok",
       cancelled_compaction_runs: 1,
     });
-    await expect(run).rejects.toThrow("Codex turn interrupted");
+    const cancellation = await run.catch(error => error);
+    expect(cancellation).toBeInstanceOf(ExplicitNativeCancellation);
+    expect(cancellation).toMatchObject({ name: "AbortError", request: { source: "native_interrupt", threadId, turnId } });
     expect(aborted).toBeTrue();
   } finally {
     await server.stop(true);

@@ -26,10 +26,10 @@ test.each([
   const progress = tools ? new ChatGptExternalTurnProgress() : undefined;
   const recoveryCallbacks: unknown[] = [];
   const actions: string[] = [];
+  const sendLifecycle: string[] = [];
   const sendBudgets: number[] = [];
   let stage = "";
   let released = false;
-  let activated = 0;
   let freshChatPreparations = 0;
   let rejectionAbortedWait = false;
   const frame = {};
@@ -86,6 +86,7 @@ test.each([
         page.emit("requestfinished", request);
       }
       recoveryCallbacks.push(args[7]);
+      sendLifecycle.push(`send:${stage}`);
       actions.push("send");
       return "user_turn";
     },
@@ -134,7 +135,7 @@ test.each([
       modelId: "gpt-5.6-sol",
       modelFamily: gpt6Pro ? "6" : "5.6",
       reasoning: effort,
-      onSendActivated: () => { activated += 1; },
+      onSendActivated: async () => { await Promise.resolve(); sendLifecycle.push(`activated:${stage}`); },
       capabilities,
       compaction: !tools,
       externalProgress: progress,
@@ -149,6 +150,10 @@ test.each([
       await expect(run).rejects.toMatchObject({ code: "context_length_exceeded", retryable: false });
       expect(rejectionAbortedWait).toBeTrue();
       expect(sendBudgets).toHaveLength(2);
+      expect(sendLifecycle).toEqual([
+        "activated:multipart_stage_1_send", "send:multipart_stage_1_send",
+        "activated:multipart_stage_2_send", "send:multipart_stage_2_send",
+      ]);
       expect(actions.filter(action => action === "ack")).toHaveLength(1);
       expect(released).toBeTrue();
       expect(page.listenerCount("request")).toBe(0);
@@ -174,7 +179,14 @@ test.each([
     ]);
     expect(sendBudgets).toEqual(Array(multipart ? 6 : 1).fill(180_000));
     expect(released).toBe(true);
-    expect(activated).toBe(1);
+    // Each physical stage must persist its pre-Send fence before activation;
+    // final-only tools do not collapse six physical Sends into one checkpoint.
+    expect(sendLifecycle).toEqual([
+      ...(multipart ? Array.from({ length: 5 }, (_, index) => [
+        `activated:multipart_stage_${index + 1}_send`, `send:multipart_stage_${index + 1}_send`,
+      ]).flat() : []),
+      "activated:send", "send:send",
+    ]);
     expect(page.listenerCount("request")).toBe(0);
     expect(page.listenerCount("response")).toBe(0);
   } finally {

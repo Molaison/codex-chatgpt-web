@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 // Isolated broker/socket contract; Native results are synthetic, not real Codex/Web E2E.
 import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, openSync, closeSync, rmSync } from "node:fs";
@@ -11,8 +12,8 @@ const terminal = (exit = 0): BrokerToolResult => ({ content: [{ type: "text", te
 const running = (id = 42): BrokerToolResult => ({ content: [{ type: "text", text: `Wall time: 0.001 seconds\nProcess running with session ID ${id}\nOutput:\n` }] });
 const tools = ["exec_command", "write_stdin", "custom_sync", "apply_patch"].map(name => ({ name, description: "isolated contract fixture", parameters: { type: "object" }, ...(name === "apply_patch" ? { freeform: true } : {}) }));
 async function setup(ttl?: number, extraTools: CodexTool[] = []) {
-  mkdirSync(process.env.Q39_TEST_ROOT!, { recursive: true });
-  const root = mkdtempSync(join(process.env.Q39_TEST_ROOT!, "43-receipts-"));
+  mkdirSync((process.env.Q39_TEST_ROOT ?? tmpdir()), { recursive: true });
+  const root = mkdtempSync(join((process.env.Q39_TEST_ROOT ?? tmpdir()), "43-receipts-"));
   const fd = openSync(root, "r"), socket = `/proc/${process.pid}/fd/${fd}/b.sock`;
   const broker = TurnBroker.forSocket(socket); await broker.listen();
   const environment = { cwd: root, roots: [root], writableRoots: [root], sandboxPolicy: { type: "workspaceWrite" as const, writableRoots: [root], networkAccess: false }, tools: [...tools, ...extraTools] };

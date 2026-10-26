@@ -51,13 +51,14 @@ test("the first sweep after a suspension refreshes stale leases instead of reapi
     id: "t1", traceId: "trace-1", helperPid: 42, status: "running",
     bootstrapReady: true, lastHeartbeatAt: 1_000,
   };
-  const host = {
+  const host = Object.assign(Object.create(BrowserHost.prototype), {
     lastTurnSweepAt: 1_000,
     turnTabs: new Map([["t1", tab]]),
     logger: { warn: (event, detail) => warnings.push({ event, detail }), info: () => {} },
     removeTurnTab: t => reaped.push(t.traceId),
     refreshTurnLeases: BrowserHost.prototype.refreshTurnLeases,
-  };
+    prepareStandbyView: async () => {},
+  });
 
   // Fifteen minutes pass without a sweep — the launcher was asleep, and so was the helper.
   BrowserHost.prototype.reapExpiredTurnTabs.call(host, 1_000 + 15 * 60_000);
@@ -71,21 +72,23 @@ test("the first sweep after a suspension refreshes stale leases instead of reapi
   assert.deepEqual(reaped, []);
 });
 
-test("a helper that is genuinely gone is still reaped on the ordinary cadence", () => {
+test("a helper that is genuinely gone is still reaped on the ordinary cadence", async () => {
   const reaped = [];
   const tab = {
     id: "t1", traceId: "trace-1", helperPid: 42, status: "running",
     bootstrapReady: true, lastHeartbeatAt: 1_000,
   };
-  const host = {
+  const host = Object.assign(Object.create(BrowserHost.prototype), {
     lastTurnSweepAt: 56_000,
     turnTabs: new Map([["t1", tab]]),
     logger: { warn: () => {}, info: () => {} },
     removeTurnTab: t => reaped.push(t.traceId),
     refreshTurnLeases: BrowserHost.prototype.refreshTurnLeases,
-  };
+    prepareStandbyView: async () => {},
+    cancelTurn: async () => {},
+  });
 
-  BrowserHost.prototype.reapExpiredTurnTabs.call(host, 61_000);
+  await BrowserHost.prototype.reapExpiredTurnTabs.call(host, 61_000);
 
   assert.deepEqual(reaped, ["trace-1"]);
 });

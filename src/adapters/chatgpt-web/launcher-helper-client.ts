@@ -9,7 +9,7 @@ import { notifyLauncherTurn, readLauncherBrowserHostDescriptor } from "../../lau
 import { ChatGptCompactionHandoffAccepted, ChatGptWebAdapterError, parseChatGptSavedConversationDiagnostics, type ChatGptSavedConversationDiagnostics } from "./adapter-error";
 import type { CompiledChatGptWebPrompt } from "./prompt";
 import type { BrowserTurn, ResolvedBrowserConfig } from "./browser-worker";
-import type { ChatGptChartWidget } from "./rich-widget";
+import { isChatGptChartWidget, type ChatGptChartWidget } from "./rich-widget";
 import {
   parseChatGptLunaCheckpoint,
   type ChatGptLunaCheckpoint,
@@ -32,6 +32,8 @@ interface PendingTurn {
   preparationCancelled?: boolean;
   nativeReady?: NativeResultReady;
   nativeReleased?: NativeReleaseReceipt;
+  observation?: BrowserObservationCheckpoint;
+  observationUpdate?: Promise<void>;
 }
 
 type HelperMessage =
@@ -139,8 +141,7 @@ function parseHelperMessage(line: string): HelperMessage {
     }
     if (event === "rich_widgets") {
       if (!Array.isArray(message.widgets) || message.widgets.length > 4
-        || message.widgets.some(widget => !widget || widget.kind !== "cartesian_chart" || widget.version !== 1
-          || !Array.isArray(widget.points) || widget.points.length > 300)) {
+        || message.widgets.some(widget => !isChatGptChartWidget(widget))) {
         throw new Error("Launcher browser helper rich widgets are invalid");
       }
       return { type: "event", id: message.id, event, widgets: message.widgets as ChatGptChartWidget[] };
@@ -403,7 +404,6 @@ export class LauncherBrowserHelperClient {
             browserDiagnosticsPath: this.config.browserDiagnosticsPath,
             turnTimeoutMs: this.config.turnTimeoutMs,
             autoApproveToolCalls: this.config.autoApproveToolCalls,
-            useSavedChats: this.config.useSavedChats,
             standardConcurrencyLimit: this.config.standardConcurrencyLimit,
             proConcurrencyLimit: this.config.proConcurrencyLimit,
             accountId: this.config.accountId,
@@ -426,6 +426,7 @@ export class LauncherBrowserHelperClient {
             nativeSubmissionIdentity: turn.nativeSubmissionIdentity,
             nativeSubmissionRoundKey: turn.nativeSubmissionRoundKey,
             nativeOperationScope: turn.nativeOperationScope,
+            nativeObservationSubmission: turn.nativeObservationSubmission,
             ...(turn.project ? { project: turn.project } : {}),
             ...(turn.sessionMode ? { sessionMode: turn.sessionMode } : {}),
             ...(turn.deferTextUntilComplete ? { deferTextUntilComplete: true } : {}),
@@ -571,6 +572,7 @@ export class LauncherBrowserHelperClient {
         const update = (pending.nativeUpdates ?? Promise.resolve()).then(async () => {
           if (!pending.turn.nativeSubmissionIdentity) throw submissionIdentityUnproven("unexpected native execution state");
           if (frame.event === "native_result_ready") {
+            if (pending.localFailure) throw pending.localFailure;
             if (!pending.turn.onNativeResultReady) throw submissionIdentityUnproven("no durable original result owner");
             await pending.turn.onNativeResultReady(frame.payload as NativeResultReady);
             pending.nativeReady=frame.payload as NativeResultReady;
@@ -623,7 +625,11 @@ export class LauncherBrowserHelperClient {
           this.abortWithLocalFailure(message.id, observationUnavailable("helper checkpoint identity mismatch"), pending);
           return;
         }
-        void this.flushNativeUpdates(pending).then(() => pending.turn.onObservationReady!(message.checkpoint)).then(() => {
+        pending.observationUpdate = this.flushNativeUpdates(pending).then(async () => {
+          await pending.turn.onObservationReady!(message.checkpoint);
+          pending.observation = message.checkpoint;
+        });
+        void pending.observationUpdate.then(() => {
           if (this.pending.get(message.id) !== pending || pending.localFailure) return;
           return this.send({ type: "observation_ready_ack", id: message.id, ...(message.digest?{digest:message.digest}:{}) });
         }).catch(error => this.abortWithLocalFailure(message.id, error instanceof Error ? error : new Error(String(error)), pending));
@@ -763,6 +769,7 @@ export class LauncherBrowserHelperClient {
                 ...(prepared.turnToken ? { turnToken: prepared.turnToken } : {}),
                 ...(prepared.skillFiles ? { skillFiles: prepared.skillFiles } : {}),
                 ...(prepared.multipart ? { multipart: prepared.multipart } : {}),
+                ...(prepared.contextTokenBreakdown ? { contextTokenBreakdown: prepared.contextTokenBreakdown } : {}),
                 ...(prepared.trimmedCompactionMessages !== undefined
                   ? { trimmedCompactionMessages: prepared.trimmedCompactionMessages }
                   : {}),
@@ -787,7 +794,12 @@ export class LauncherBrowserHelperClient {
       }
       else if (message.event === "commentary" && message.text) pending.turn.onCommentary?.(message.text, message.continuation === true);
       else if (message.event === "text" && message.text) pending.turn.onTextDelta(message.text);
-      else if (message.event === "rich_widgets") pending.turn.onRichWidgets?.(message.widgets);
+      else if (message.event === "rich_widgets") {
+        try { pending.turn.onRichWidgets?.(message.widgets); }
+        catch (error) {
+          this.abortWithLocalFailure(message.id, error instanceof Error ? error : new Error(String(error)), pending);
+        }
+      }
       return;
     }
     if (message.type === "result") {
@@ -812,10 +824,16 @@ export class LauncherBrowserHelperClient {
         : message.name === "AbortError"
           ? new DOMException(message.message, "AbortError")
           : new Error(message.message);
-      this.finish(message.id);
-      pending.reject(pending.localFailure ?? (pending.turn.nativeSubmissionIdentity && (pending.sendActivated || pending.nativeUpdates)
-        && !pending.nativeReleased && !retainsBrowserExecution(error)
-        ? submissionIdentityUnproven("helper ended before original physical release was proved") : error));
+      // An ACK timeout can reach this frame while the parent's durable checkpoint
+      // is still being saved. Recovery must observe that result before deciding
+      // whether the original execution can be resumed or remains retained.
+      void Promise.allSettled([pending.submission, pending.observationUpdate, this.flushNativeUpdates(pending)]).then(() => {
+        if (this.pending.get(message.id) !== pending) return;
+        this.finish(message.id);
+        pending.reject(pending.localFailure ?? (pending.turn.nativeSubmissionIdentity && (pending.sendActivated || pending.nativeUpdates)
+          && !pending.nativeReleased && !retainsBrowserExecution(error)
+          ? submissionIdentityUnproven("helper ended before original physical release was proved") : error));
+      });
     }
   }
 
@@ -910,9 +928,13 @@ export class LauncherBrowserHelperClient {
     for (const id of [...this.pending.keys()]) {
       const pending = this.pending.get(id);
       if (!pending) continue;
-      if (pending.turn.observation || pending.turn.nativeSubmissionIdentity && (pending.sendActivated || pending.nativeUpdates)) {
-        this.finishWithError(id, retainsBrowserExecution(pending.localFailure) ? pending.localFailure!
-          : submissionIdentityUnproven("helper exited while original browser ownership is unresolved"));
+      if (pending.turn.observation || pending.observation || pending.observationUpdate
+        || pending.turn.nativeSubmissionIdentity && (pending.sendActivated || pending.nativeUpdates)) {
+        void Promise.allSettled([pending.observationUpdate, this.flushNativeUpdates(pending)]).then(() => {
+          if (this.pending.get(id) !== pending) return;
+          this.finishWithError(id, retainsBrowserExecution(pending.localFailure) ? pending.localFailure!
+            : submissionIdentityUnproven("helper exited while original browser ownership is unresolved"));
+        });
         continue;
       }
       void notifyLauncherTurn(this.config.browserHostDescriptorPath!, {

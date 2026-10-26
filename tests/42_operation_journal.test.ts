@@ -119,6 +119,13 @@ async function localBroker() {
     async close() { await broker.close(); rmSync(root, { recursive: true, force: true }); } };
 }
 
+async function expectOwnerWaitPending(wait: Promise<unknown>): Promise<void> {
+  expect(await Promise.race([
+    wait.then(() => "delivered", () => "rejected"),
+    Bun.sleep(30).then(() => "pending"),
+  ])).toBe("pending");
+}
+
 test("stable invocationId survives new transport ids, canonical objects, and rejects conflicting signatures", async () => {
   const owner = await localBroker();
   try {
@@ -145,6 +152,8 @@ test("stable invocationId survives new transport ids, canonical objects, and rej
 
 test("MCP timeout fences a fresh RPC side effect, permits known-handle empty poll and same receipt query", async () => {
   const owner = await localBroker();
+  const ownerWaitAbort = new AbortController();
+  let ownerWait: ReturnType<TurnBroker["nextToolBatch"]> | undefined;
   try {
     const invoke = (invocationId: string, wireName: string, args: Record<string, unknown>, timeout = 5000) =>
       callTurnBroker<BrokerToolResult>(owner.socket, { method: "invoke", bindingId: owner.bindingId,
@@ -167,12 +176,14 @@ test("MCP timeout fences a fresh RPC side effect, permits known-handle empty pol
     }
     expect(fenced).toBe(true);
     await expect(invoke("fresh-rpc-id", "exec_command", { cmd: "synthetic unknown effect" })).rejects.toThrow("unknown outcome");
-    await expect(owner.broker.nextToolBatch(owner.token)).rejects.toThrow("retained");
+    ownerWait = owner.broker.nextToolBatch(owner.token, ownerWaitAbort.signal);
+    await expectOwnerWaitPending(ownerWait);
     for (const args of [{ session_id: 42, chars: "y\n" }, { session_id: 42, chars: "\u0003" },
       { session_id: 999, chars: "" }]) {
       await expect(invoke(`unsafe-poll-${JSON.stringify(args)}`, "write_stdin", args)).rejects.toThrow("retained");
     }
     expect(await invoke("handle-source", "exec_command", { cmd: "synthetic native handle" })).toEqual(handleResult);
+    expect(Object.keys(journal.read<any>(operationDigest(owner.token)).calls)).toHaveLength(2);
 
     const poll = invoke("known-handle-empty-poll", "write_stdin", { session_id: 42, chars: "", yield_time_ms: 30000 });
     // A retained native call is not re-exposed while the independent read-only poll is queued.
@@ -181,7 +192,7 @@ test("MCP timeout fences a fresh RPC side effect, permits known-handle empty pol
       if (Object.keys(channel.calls).length === 3) break;
       await Bun.sleep(5);
     }
-    const [safe] = await owner.broker.nextToolBatch(owner.token);
+    const [safe] = await ownerWait;
     expect(safe!.wireName).toBe("write_stdin"); expect(safe!.callId).not.toBe(original!.callId);
     owner.broker.completeTool(owner.token, safe!.callId, handleResult);
     await poll;
@@ -191,7 +202,7 @@ test("MCP timeout fences a fresh RPC side effect, permits known-handle empty pol
     console.log("EXECUTION42_UNKNOWN_FENCE", JSON.stringify({ nativeCalls: 3, originalSideEffects: 1,
       freshRpcBlocked: true, nonemptyStdinBlocked: true, unknownHandleBlocked: true,
       knownHandleEmptyPoll: true, sameReceiptQuery: true, originalTurn: "original-turn-42" }));
-  } finally { await owner.close(); }
+  } finally { ownerWaitAbort.abort(); await ownerWait?.catch(() => {}); await owner.close(); }
 }, 20000);
 
 test("TTL retires native ownership without erasing unknown or accepted result receipts", async () => {
@@ -221,6 +232,8 @@ test("TTL retires native ownership without erasing unknown or accepted result re
 
 test("timeout then late native completion stays fenced until the original receipt is queried, not merely completed", async () => {
   const owner = await localBroker();
+  const ownerWaitAbort = new AbortController();
+  let ownerWait: ReturnType<TurnBroker["nextToolBatch"]> | undefined;
   try {
     const request = { method: "invoke" as const, bindingId: owner.bindingId,
       invocationId: "timeout-before-late-result", wireName: "exec_command", arguments: { cmd: "synthetic one-time effect" } };
@@ -240,20 +253,21 @@ test("timeout then late native completion stays fenced until the original receip
     expect(beforeQuery.delivery).toBe("unknown"); expect(beforeQuery.reconciliation).toBeUndefined();
     const fresh = { ...request, invocationId: "automatic-fresh-rpc-after-late-result" };
     await expect(callTurnBroker(owner.socket, fresh)).rejects.toThrow("unknown outcome");
-    await expect(owner.broker.nextToolBatch(owner.token)).rejects.toThrow("retained");
+    ownerWait = owner.broker.nextToolBatch(owner.token, ownerWaitAbort.signal);
+    await expectOwnerWaitPending(ownerWait);
     expect(Object.keys(journal.read<any>(operationDigest(owner.token)).calls)).toHaveLength(1);
     expect(await callTurnBroker<BrokerToolResult>(owner.socket, request)).toEqual(result);
     const afterQuery = journal.read<any>(operationDigest(owner.token)).calls[original!.callId];
     expect(afterQuery.reconciliation).toBe("receipt_query"); expect(afterQuery.delivery).toBe("unknown");
     // A genuinely new intent is legal after reconciliation, even with identical arguments.
     const nextIntent = callTurnBroker(owner.socket, { ...request, invocationId: "explicit-new-intent-after-query" });
-    const [next] = await owner.broker.nextToolBatch(owner.token);
+    const [next] = await ownerWait;
     expect(next!.callId).not.toBe(original!.callId);
     owner.broker.completeTool(owner.token, next!.callId, result); await nextIntent;
     console.log("EXECUTION42_LATE_RESULT_FENCE", JSON.stringify({ sequence: ["rpc_timeout", "native_completed", "native_ack_replay",
       "fresh_rpc_blocked", "same_receipt_query", "new_intent_allowed"], sideEffectsBeforeQuery: 1,
       nativeCompletedIsNotDelivered: true, delivery: "unknown", reconciliation: afterQuery.reconciliation }));
-  } finally { await owner.close(); }
+  } finally { ownerWaitAbort.abort(); await ownerWait?.catch(() => {}); await owner.close(); }
 }, 10000);
 
 test("public broker lifecycle correlates private call receipts without logging call capabilities or content", async () => {

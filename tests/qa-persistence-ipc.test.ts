@@ -9,8 +9,8 @@ import { LAUNCHER_BROWSER_HOST_KIND, LAUNCHER_BROWSER_IDLE_URL } from "../src/la
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
-for (const useSavedChats of [true, false]) {
-  test("real helper IPC preserves portable account/storage and saved-chat preference=" + useSavedChats, async () => {
+for (const sessionMode of ["persistent", "temporary"] as const) {
+  test("real helper IPC preserves portable account/storage and turn session mode=" + sessionMode, async () => {
     const root = mkdtempSync(join(tmpdir(), "qa-persistence-ipc-")); roots.push(root);
     const store = join(root, "moved-account-home", "durable-chat-mappings");
     const accountId = "portable-account";
@@ -24,14 +24,12 @@ for (const useSavedChats of [true, false]) {
       "ChatGptBrowserWorker.forProvider = function(provider) {",
       "  if (provider.chatgptWeb.accountId !== " + JSON.stringify(accountId) + ") throw new Error('Account identity lost in IPC');",
       "  if (provider.chatgptWeb.conversationStoreDirectory !== " + JSON.stringify(store) + ") throw new Error('Store directory lost in IPC');",
-      "  if (provider.chatgptWeb.useSavedChats !== " + JSON.stringify(useSavedChats) + ") throw new Error('Saved/temporary preference lost in IPC');",
       "  return forProvider.call(this, provider);",
       "};",
       "ChatGptBrowserWorker.prototype.run = async function(turn) {",
       "  if (this.config.accountId !== " + JSON.stringify(accountId) + ") throw new Error('Wrong resolved account');",
-      "  if (this.config.useSavedChats !== " + JSON.stringify(useSavedChats) + ") throw new Error('Wrong resolved preference');",
-      "  if (this.config.useSavedChats && this.config.conversationStoreDirectory !== " + JSON.stringify(store) + ") throw new Error('Helper replaced account directory');",
-      "  if (turn.sessionMode !== 'temporary') throw new Error('Session mode lost in IPC');",
+      "  if (this.config.conversationStoreDirectory !== " + JSON.stringify(store) + ") throw new Error('Helper replaced account directory');",
+      "  if (turn.sessionMode !== " + JSON.stringify(sessionMode) + ") throw new Error('Session mode lost in IPC');",
       "  if (!turn.retainConversation || turn.conversationKey !== 'c'.repeat(64)) throw new Error('Conversation identity lost in IPC');",
       "  if (turn.project?.id !== 'g-p-' + 'a'.repeat(32) || turn.project?.name !== 'random_knowledge') throw new Error('Project route lost in IPC');",
       "  const reused = turn.traceId === 'fork-resumed';",
@@ -53,7 +51,7 @@ for (const useSavedChats of [true, false]) {
       createdAt: new Date().toISOString(),
     }), { mode: 0o600 });
     const config: ResolvedBrowserConfig = {
-      accountId, conversationStoreDirectory: store, useSavedChats,
+      accountId, conversationStoreDirectory: store,
       appName: "Codex Native2", browserHost: "launcher", browserHostDescriptorPath: descriptorPath,
       browserHelperScriptPath: helper, storageStatePath: join(root, "unused-state.json"),
       chromeExecutablePath: join(root, "unused-chrome"), headed: true, autoApproveToolCalls: false,
@@ -66,7 +64,7 @@ for (const useSavedChats of [true, false]) {
       for (const traceId of ["fork-fresh", "fork-resumed"]) {
         const result = await client.run({
           traceId, modelId: "gpt-5.6-sol", reasoning: "low", retainConversation: true, conversationKey: "c".repeat(64),
-          sessionMode: "temporary",
+          sessionMode,
           project: { id: "g-p-" + "a".repeat(32), name: "random_knowledge" },
           capabilities: { localToolsEnabled: false, solAvailable: true, extraHighAvailable: false, proAvailable: false },
           prepare: async () => { compiled.push("history"); return { text: "Inherited history plus first child question", images: [], release: () => { released++; } }; },

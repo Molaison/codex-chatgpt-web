@@ -99,8 +99,8 @@ turn; it never chooses another model, starts another transport, or returns a fab
 The launcher keeps ChatGPT login, identity-provider navigation, and model turns in one private
 Electron partition. Allowed login popups are adopted into an in-launcher `WebContentsView` that
 shares that partition; unrelated external links remain outside it. A visible composer alone is not
-authentication evidence: the launcher also requires a valid server session and an exact Temporary
-Chat URL before setup can continue. No cookies, local storage, or browser profile are copied from an
+authentication evidence: the launcher also requires a valid server session and an ordinary new-chat
+URL before setup can continue. No cookies, local storage, or browser profile are copied from an
 external browser.
 
 ### Cross-turn data leakage
@@ -116,9 +116,9 @@ one-shot MCP control capability in the exact retained source chat. If that chat 
 fresh tool-free chat receives the canonical Codex history; the bridge never parses ordinary
 assistant prose as a structured handoff.
 
-Task conversations are saved in ChatGPT history by default. **Save chats in ChatGPT** can be turned
-off to use Temporary Chat; an existing off setting is preserved when updating. Saved chats may use
-ChatGPT memory and custom instructions. Connector verification follows the same selected chat mode.
+Task conversations are always saved in ChatGPT history and may use ChatGPT memory and custom
+instructions. The retired saved-chat preference is discarded when loading older configuration.
+Connector verification and account inspection also use ordinary chats.
 
 ## Network exposure
 

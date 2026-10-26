@@ -2461,6 +2461,28 @@ code {
   height: 100%;
 }
 
+.health-maintenance-status {
+  position: absolute;
+  inset: auto 12px 8px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-background-elevated);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  pointer-events: none;
+}
+
+.health-maintenance-status time {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+}
+
 .error-toast {
   position: fixed;
   z-index: 500;

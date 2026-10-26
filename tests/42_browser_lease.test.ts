@@ -98,7 +98,13 @@ test("worker waits for durable hook and refuses a late send callback after its s
     const checked = running.catch((error: unknown) => error);
     await entered.promise; expect(sends).toBe(0);
     const tab: any = [...host.turnTabs.values()][0]; tab.surfaceId = randomBytes(24).toString("base64url");
-    gate.resolve(); expect(await checked).toMatchObject({ code: "browser_writer_conflict", status: 409, retryable: false }); expect(sends).toBe(0); expect(tab.status).toBe("running");
+    gate.resolve();
+    const error = await checked;
+    // The replacement surface rejects the old release as well as the late Send.
+    // Its missing physical ACK must keep the original execution retained.
+    expect(error).toMatchObject({ code: "chatgpt_browser_release_unconfirmed", status: 503, retryable: false });
+    expect(error.cause).toBeInstanceOf(LauncherBrowserWriterConflictError);
+    expect(sends).toBe(0); expect(tab.status).toBe("running"); expect(host.turnTabs.size).toBe(1);
   });
 });
 test("retained next turn registers its new observation while the prior checkpoint stays fenced", async () => {
@@ -133,7 +139,9 @@ test("retained next turn registers its new observation while the prior checkpoin
 });
 test("multipart and final send callbacks both await the existing durable hook", () => {
   const source = readFileSync(new URL("../src/adapters/chatgpt-web/browser-worker.ts", import.meta.url), "utf8");
-  const stage = source.slice(source.indexOf("{ onSubmitted: recordStageUsage, onSendActivated: async () => {"), source.indexOf("const acknowledgedResponse ="));
+  const stageStart = source.indexOf("onSubmitted: recordStageUsage, onSendActivated: async () => {");
+  expect(stageStart).toBeGreaterThan(0);
+  const stage = source.slice(stageStart, source.indexOf("const acknowledgedResponse =", stageStart));
   expect(stage).toContain("await turn.onSendActivated?.()");
   const send = source.slice(source.indexOf("  private async sendAttachedPrompt("), source.indexOf("  private async waitForMultipartAcknowledgement("));
   expect(send.indexOf("await submissionLifecycle?.onSendActivated?.()")).toBeLessThan(send.indexOf("sendButton.click("));

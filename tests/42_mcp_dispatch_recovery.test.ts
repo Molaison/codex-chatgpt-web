@@ -13,7 +13,7 @@ import * as brokerCalls from "../src/adapters/chatgpt-web/turn-broker";
 
 const cleanup: Array<() => void | Promise<unknown>> = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
-const token = "fixture_turn_01234567890123456789";
+const token = `turn_${"f".repeat(32)}`;
 const headers = { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25" };
 function directory() {
   const root = mkdtempSync(join(tmpdir(), "r42d-"));
@@ -125,9 +125,19 @@ test("all six Full tools settle proven pre-connect failure without changing erro
 
   // Restoring the missing target cannot turn a duplicate failed RPC into a new execution.
   let acceptedConnections = 0;
-  const lateBroker = createServer(socket => { acceptedConnections++; socket.destroy(); });
+  const lateBroker = createServer(socket => {
+    acceptedConnections++;
+    socket.once("data", bytes => {
+      const request = JSON.parse(bytes.toString());
+      if (request.method !== "owner_release_status") { socket.destroy(); return; }
+      socket.end(JSON.stringify({ id: request.id, result: { contract: "broker-durable-release-v1",
+        durable_live_turns: 0, durable_unknown_calls: 0, durable_native_continuations: 0,
+        durable_active_mcp_requests: 0, durable_inventory_errors: 0 } }) + "\n");
+    });
+  });
   await new Promise<void>(ready => lateBroker.listen(brokerSocketPath, ready));
-  cleanup.push(() => new Promise<void>(done => lateBroker.close(() => done())));
+  // The HTTP release gate still needs its broker inventory while closing.
+  cleanup.splice(cleanup.length - 1, 0, () => new Promise<void>(done => lateBroker.close(() => done())));
   const duplicate = await post(message(0));
   expect(await duplicate.text()).toBe(firstBody);
   expect(acceptedConnections).toBe(0);
@@ -243,4 +253,14 @@ test.each(["transport", "http500", "cancelled-rpc", "malformed"])("proof cannot 
       : kind === "malformed" ? new Response("RPC cancelled", { status: 408 }) : errorResponse();
   await book.complete(message(), response, kind === "transport");
   expect(book.uncertain).toBe(1); expect(book.canClose).toBeFalse();
+});
+
+test("broker claim proof cannot settle an RPC error without local rejection proof", async () => {
+  const { proof } = await missingClaim();
+  const book = new McpAdmissionBook(); book.begin(message());
+  expect(book.noteClaimNotDispatched(7, proof)).toBeTrue();
+  await book.complete(message(), Response.json({ jsonrpc: "2.0", id: 7,
+    error: { code: -32603, message: "unclassified broker or handler failure" } }));
+  expect(book.uncertain).toBe(1); expect(book.canClose).toBeFalse();
+  expect(book.noteLocalNotDispatched(7)).toBeFalse();
 });

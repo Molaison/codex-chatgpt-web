@@ -3,7 +3,7 @@ import { chmodSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { defaultConfig } from "../src/config";
 import { responseRequest } from "../src/server";
-import { parseResponsesRequest } from "../src/responses/parser";
+import { parseRequest } from "../src/responses/parser";
 import { assertRetainedForwardRequest, readRetainedForwardPolicy, retainedForwardIntentDigest,
   RETAINED_FORWARD_POLICY_ENV } from "../src/adapters/chatgpt-web/retained-forward-lane";
 import { createChatGptWebAdapter } from "../src/adapters/chatgpt-web";
@@ -61,10 +61,13 @@ for (const stream of [true, false]) {
       try { await withForwardPolicy(f, async () => {
         const config = { ...defaultConfig("browser-only"), browserHost: "launcher" as const,
           accountId: f.policy.accountId, browserHostDescriptorPath: f.policy.descriptorPath };
-        // The existing HTTP trace preflight throws before constructing any Response/SSE.
-        // Its typed rejection is deliberately not converted into a synthetic adapter event.
-        await expect(responseRequest(req(f.body), config, () => { factories++; throw new Error("adapter must not exist"); }))
-          .rejects.toThrow();
+        const response = responseRequest(req(f.body), config, () => { factories++; throw new Error("adapter must not exist"); });
+        if (fault === "previous-response") {
+          // Saved-chat ownership rejects an unknown alias before trace admission.
+          expect((await response).status).toBe(409);
+        } else {
+          await expect(response).rejects.toThrow("retained-forward");
+        }
         expect(factories).toBe(0);
         expect(existsSync(join(f.root, "runtime/operations"))).toBe(false);
       }); } finally { f.cleanup(); }
@@ -85,7 +88,7 @@ test("exact fresh wire reaches HTTP adapter once; direct adapter calls also enfo
       } } as any;
     }, { rememberState: false });
     await response.text(); expect(factories).toBe(1);
-    const parsed = parseResponsesRequest(f.body); parsed._chatgptLocalTools = false;
+    const parsed = parseRequest(f.body); parsed._chatgptLocalTools = false;
     assertRetainedForwardRequest(provider(f), parsed);
     parsed._rawBody = { ...f.body, instructions: "changed" };
     let events = 0;

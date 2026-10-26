@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import { NativeMetadataAcknowledgement } from "../src/adapters/chatgpt-web/native-metadata-ack";
 import { ExplicitNativeCancellation, nativeExecutionDigest, type NativeCancelTerminal, type NativeResultReady } from "../src/adapters/chatgpt-web/native-execution";
 import { ChatGptTurnSessions, ChatGptTextFeed, ChatGptTraceFeed } from "../src/adapters/chatgpt-web/turn-execution";
@@ -16,8 +17,8 @@ import { LauncherBrowserHelperClient } from "../src/adapters/chatgpt-web/launche
 import { LAUNCHER_BROWSER_HOST_KIND, LAUNCHER_BROWSER_IDLE_URL } from "../src/launcher-browser-host";
 
 function owner() {
-  mkdirSync(process.env.Q39_TEST_ROOT!, {recursive:true});
-  const root = mkdtempSync(join(process.env.Q39_TEST_ROOT!, "native-submission-"));
+  mkdirSync((process.env.Q39_TEST_ROOT ?? tmpdir()), {recursive:true});
+  const root = mkdtempSync(join((process.env.Q39_TEST_ROOT ?? tmpdir()), "native-submission-"));
   const record: OperationRecord = {version:1, operationId:"original-op", executionKey:"original", traceId:"trace", requestIds:[],
     submission:"prepared", generation:"not_started", delivery:"attached", recovery:"none", seq:0, attempt:1, startedAt:Date.now(), updatedAt:Date.now(), rounds:{}};
   const journal = new OperationJournal(root), operation = new DurableOperation(journal, record);
@@ -159,7 +160,7 @@ test("paired real helper IPC persists each native revision before its exact ACK"
   `);
   writeFileSync(descriptor,JSON.stringify({version:3,kind:LAUNCHER_BROWSER_HOST_KIND,profile:"production",pid:process.pid,
     endpoint:"http://127.0.0.1:39110",control:{endpoint:"http://127.0.0.1:39111",token:"t".repeat(64)},helper:{executable:process.execPath,script:helper},partition:"persist:codex-web-gpt-chatgpt",idleUrl:LAUNCHER_BROWSER_IDLE_URL,surfaceId:"s".repeat(32),surfaceTargets:{["s".repeat(32)]:"target"},createdAt:new Date().toISOString()}),{mode:0o600});
-  const client=new LauncherBrowserHelperClient(resolveBrowserConfig({adapter:"chatgpt-web",baseUrl:"browser://native-fixture",chatgptWeb:{accountId:"account2",browserHost:"launcher",browserHostDescriptorPath:descriptor,browserHelperScriptPath:helper,useSavedChats:false}}));
+  const client=new LauncherBrowserHelperClient(resolveBrowserConfig({adapter:"chatgpt-web",baseUrl:"browser://native-fixture",chatgptWeb:{accountId:"account2",browserHost:"launcher",browserHostDescriptorPath:descriptor,browserHelperScriptPath:helper}}));
   const originalSend=(client as any).send.bind(client);let staleInjected=false;
   (client as any).send=async(message:any)=>{
     if(message.type==="native_submission_ack"&&message.revision===2&&!staleInjected){
@@ -495,7 +496,7 @@ test("actual paired helper exits its failed result-ready ACK wait on retained ab
   `);
   writeFileSync(descriptor,JSON.stringify({version:3,kind:LAUNCHER_BROWSER_HOST_KIND,profile:"production",pid:process.pid,
     endpoint:"http://127.0.0.1:39110",control:{endpoint:"http://127.0.0.1:39111",token:"t".repeat(64)},helper:{executable:process.execPath,script:helper},partition:"persist:codex-web-gpt-chatgpt",idleUrl:LAUNCHER_BROWSER_IDLE_URL,surfaceId:"s".repeat(32),surfaceTargets:{["s".repeat(32)]:"target"},createdAt:new Date().toISOString()}),{mode:0o600});
-  const client=new LauncherBrowserHelperClient(resolveBrowserConfig({adapter:"chatgpt-web",baseUrl:"browser://native-fixture",chatgptWeb:{accountId:"account2",browserHost:"launcher",browserHostDescriptorPath:descriptor,browserHelperScriptPath:helper,useSavedChats:false}}));
+  const client=new LauncherBrowserHelperClient(resolveBrowserConfig({adapter:"chatgpt-web",baseUrl:"browser://native-fixture",chatgptWeb:{accountId:"account2",browserHost:"launcher",browserHostDescriptorPath:descriptor,browserHelperScriptPath:helper}}));
   let callbacks=0;
   try {
     const began=Date.now();
@@ -536,7 +537,7 @@ test("actual paired helper enters explicit cleanup during observation ACK and ig
   `);
   writeFileSync(descriptor,JSON.stringify({version:3,kind:LAUNCHER_BROWSER_HOST_KIND,profile:"production",pid:process.pid,
     endpoint:"http://127.0.0.1:39110",control:{endpoint:"http://127.0.0.1:39111",token:"t".repeat(64)},helper:{executable:process.execPath,script:helper},partition:"persist:codex-web-gpt-chatgpt",idleUrl:LAUNCHER_BROWSER_IDLE_URL,surfaceId:"s".repeat(32),surfaceTargets:{["s".repeat(32)]:"target"},createdAt:new Date().toISOString()}),{mode:0o600});
-  const client=new LauncherBrowserHelperClient(resolveBrowserConfig({adapter:"chatgpt-web",baseUrl:"browser://native-fixture",chatgptWeb:{accountId:"account2",appName:"Codex",browserHost:"launcher",browserHostDescriptorPath:descriptor,browserHelperScriptPath:helper,useSavedChats:false}}));
+  const client=new LauncherBrowserHelperClient(resolveBrowserConfig({adapter:"chatgpt-web",baseUrl:"browser://native-fixture",chatgptWeb:{accountId:"account2",appName:"Codex",browserHost:"launcher",browserHostDescriptorPath:descriptor,browserHelperScriptPath:helper}}));
   const controller=new AbortController(),frames:any[]=[];let releaseCallback!:()=>void,callbackStarted!:()=>void;
   const started=new Promise<void>(resolve=>{callbackStarted=resolve;}),gate=new Promise<void>(resolve=>{releaseCallback=resolve;});
   const originalSend=(client as any).send.bind(client);(client as any).send=async(message:any)=>{frames.push(message);return originalSend(message);};

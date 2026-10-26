@@ -4,6 +4,7 @@ import { CHATGPT_WEB_MODEL_INSTRUCTIONS } from "./chatgpt-web-model-instructions
 import {
   availableChatGptWebModelRoutes,
   chatGptWebRouteEfforts,
+  chatGptWebDefaultEffort,
   CHATGPT_WEB_MODEL_PREFIX,
   resolveChatGptWebContextLimits,
   type ChatGptWebModelRoute,
@@ -109,8 +110,11 @@ export function buildChatGptWebModel(
 
 function routedChatGptWebModel(template: JsonObject, route: ChatGptWebModelRoute, config: AppConfig): JsonObject {
   const modelFamily = route.interactionMode === "automatic" ? route.modelFamily : undefined;
-  let limits = resolveChatGptWebContextLimits(route.backendModel, route.adapterEffort, config, modelFamily);
   const efforts = chatGptWebRouteEfforts(route, config);
+  const defaultEffort = chatGptWebDefaultEffort(route, config);
+  const initialEffort = route.supportedCodexEfforts ? defaultEffort : route.adapterEffort;
+  if (initialEffort === "ultra") throw new Error("Ultra is not a browser effort");
+  let limits = resolveChatGptWebContextLimits(route.backendModel, initialEffort, config, modelFamily);
   for (const effort of efforts) {
     const adapterEffort = route.supportedCodexEfforts ? effort : route.adapterEffort;
     if (adapterEffort === "ultra") throw new Error("Ultra is not a browser effort");
@@ -159,8 +163,8 @@ function routedChatGptWebModel(template: JsonObject, route: ChatGptWebModelRoute
       supports_parallel_tool_calls: false, experimental_supported_tools: [],
     } : {}),
     upgrade: null,
-    default_reasoning_level: efforts.includes(route.codexEffort) ? route.codexEffort : efforts[0],
-    ...(route.toolAccess ? { multi_agent_reasoning_effort: efforts.includes(route.codexEffort) ? route.codexEffort : efforts[0] } : {}),
+    default_reasoning_level: defaultEffort,
+    ...(route.toolAccess ? { multi_agent_reasoning_effort: defaultEffort } : {}),
     ...(legacyPro ? { multi_agent_reasoning_effort: "max" } : {}),
     supported_reasoning_levels: catalogueEfforts.map(effort => reasoningLevel(template, effort,
       route.toolAccess && effort === "max" ? "Pro" : effort.endsWith("-temporary") ? `${route.displayName} — ${effort.slice(0, -10)} (Temporary chat)`

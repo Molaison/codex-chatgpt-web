@@ -21,16 +21,20 @@ test("prediction setting starts on and remains off after reopening the state sto
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-test("saved chats default on for new or missing settings and preserve an explicit opt-out", () => {
+test("retired saved-chat settings are discarded while other launcher settings survive", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "codex-saved-chat-state-"));
   const file = path.join(root, "state.json");
   try {
-    assert.equal(createStateStore(file).read().useSavedChats, true);
-    fs.writeFileSync(file, JSON.stringify({ version: 1 }));
-    const store = createStateStore(file);
-    assert.equal(store.read().useSavedChats, true);
-    store.update({ useSavedChats: false });
-    assert.equal(createStateStore(file).read().useSavedChats, false);
+    const original = { ...createStateStore(file).read(), language: "ja", composerPredictionsEnabled: false,
+      experimentalFreshConversationPerTurn: true, autoStart: false };
+    assert.equal(Object.hasOwn(original, "useSavedChats"), false);
+    for (const useSavedChats of [undefined, false, true, "retired-value"]) {
+      fs.writeFileSync(file, JSON.stringify({ ...original, useSavedChats }));
+      const store = createStateStore(file);
+      assert.deepEqual(store.read(), original);
+      store.update({});
+      assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), original);
+    }
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -54,7 +58,6 @@ test("launcher state persists onboarding, language, and autostart atomically", (
       composerPredictionsEnabled: true,
       experimentalSkillAttachments: false,
       experimentalFreshConversationPerTurn: false,
-      useSavedChats: true,
       zeroRiskProEnabled: false,
       browserSmokePassed: false,
       browserSmokeVersion: null,
@@ -85,7 +88,6 @@ test("launcher state persists onboarding, language, and autostart atomically", (
       composerPredictionsEnabled: true,
       experimentalSkillAttachments: false,
       experimentalFreshConversationPerTurn: false,
-      useSavedChats: true,
       zeroRiskProEnabled: false,
       browserSmokePassed: true,
       browserSmokeVersion: "0.2.0",
@@ -167,7 +169,6 @@ test("persisted sidebar corruption is repaired without changing the rest of laun
       composerPredictionsEnabled: true,
       experimentalSkillAttachments: false,
       experimentalFreshConversationPerTurn: false,
-      useSavedChats: true,
       zeroRiskProEnabled: false,
       browserSmokePassed: false,
       browserSmokeVersion: null,

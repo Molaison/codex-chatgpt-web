@@ -66,13 +66,18 @@ test("a native text handle still permits only an empty known-handle poll after o
     const [pending] = await broker.nextToolBatch(token); await lost; await Bun.sleep(30);
     await expect(invoke("new-side-effect", "exec_command", { cmd: "synthetic uncertain command" })).rejects.toThrow("unknown outcome");
     await expect(invoke("input-is-not-poll", "write_stdin", { session_id: 42, chars: "y\n" })).rejects.toThrow("retained");
-    const poll = invoke("original-handle-poll", "write_stdin", { session_id: 42, chars: "", yield_time_ms: 1000 });
+    await expect(invoke("overlong-poll", "write_stdin", { session_id: 42, chars: "", yield_time_ms: 60_001 })).rejects.toThrow("retained");
+    const poll = invoke("original-handle-poll", "write_stdin", { session_id: 42, chars: "", yield_time_ms: 60_000 });
+    const batch = Promise.race([broker.nextToolBatch(token), poll.then(() => {
+      throw new Error("The poll returned before its original owner dispatched it");
+    })]);
     const journal = new OperationJournal(root, "tool-operations");
     for (let i = 0; i < 100; i++) {
       if (Object.keys(journal.read<any>(operationDigest(token)).calls).length === 3) break;
       await Bun.sleep(5);
     }
-    const [allowed] = await broker.nextToolBatch(token); expect(allowed!.wireName).toBe("write_stdin");
+    const [allowed] = await batch; expect(allowed!.wireName).toBe("write_stdin");
+    expect(allowed!.arguments?.yield_time_ms).toBe(60_000);
     broker.completeTool(token, allowed!.callId, terminal); expect(await poll).toEqual(terminal);
     broker.completeTool(token, pending!.callId, terminal);
   } finally { await broker.close(); rmSync(root, { recursive: true, force: true }); }

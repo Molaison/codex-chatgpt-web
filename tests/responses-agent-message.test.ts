@@ -58,8 +58,8 @@ test("inline Web context emits a distinct agent_message envelope", () => {
     role: "user",
     content: "Continue from the agent report.",
   });
-  expect(compiled.text).toContain("agent_message messages are inter-agent inputs");
-  expect(compiled.text).toContain("Exclude agent_message inputs");
+  expect(compiled.text).toContain("agent_message records retain their author and recipient");
+  expect(compiled.text).toContain("agent and tool records are not human-authored user text");
 });
 
 test("multipart Web context emits the same agent_message envelope", () => {

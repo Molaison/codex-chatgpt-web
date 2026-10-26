@@ -347,7 +347,7 @@ export async function inspectLauncherBrowserHost(
     });
     const body = await response.json().catch(() => ({})) as Record<string, unknown>;
     if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : `HTTP ${response.status}`);
-    if (body.authenticated !== true || body.temporary !== true || typeof body.url !== "string") {
+    if (body.authenticated !== true || body.newChat !== true || typeof body.url !== "string") {
       throw new Error("Launcher returned invalid ChatGPT session evidence");
     }
     if (options.detectCapabilities
@@ -545,15 +545,27 @@ export type LauncherNativeSubmissionWatchRequest = LauncherNativeSubmissionWatch
       notDispatchedReceipt?: NativeWatchNotDispatchedReceipt }
 );
 
+export interface LauncherObservedNativeCompletion {
+  phase: "observe-complete";
+  traceId: string;
+  helperPid: number;
+  surfaceId: string;
+  observation: import("./adapters/chatgpt-web/observation-recovery").BrowserObservationCheckpoint;
+  receipt: NativeWatchDurableReceipt;
+  resultReady: NativeWatchResultReadyMetadata;
+}
+
 export type LauncherTurnActivity =
+  | LauncherObservedNativeCompletion
   | LauncherNativeReleaseReadRequest
   | LauncherNativeSubmissionWatchRequest
   | {
-      phase: "observe-ready" | "observe";
+      phase: "observe-ready" | "observe" | "observe-end";
       traceId: string;
       helperPid: number;
       surfaceId: string;
       observation: import("./adapters/chatgpt-web/observation-recovery").BrowserObservationCheckpoint;
+      toolFence?: { digest: string; bindingHash?: string };
     }
   | {
       phase: "approval";
@@ -894,13 +906,19 @@ export async function notifyLauncherTurn(
       throw new Error(`HTTP ${response.status}${detail ? `: ${detail}` : ""}`);
     }
     const body = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (activity.phase === "observe-end" && (body.ok !== true || body.observedEnd !== true)) {
+      throw new Error("Launcher did not confirm the original observed completion");
+    }
     let release: NativeHostReleaseReceipt | null | undefined;
-    if (activity.phase === "native-release-read" || activity.phase === "end" && activity.nativeRelease) {
+    if (activity.phase === "native-release-read" || activity.phase === "observe-complete"
+      || activity.phase === "end" && activity.nativeRelease) {
       const r = body.nativeRelease as NativeHostReleaseReceipt | null | undefined;
       const sealedCancel = activity.phase === "native-release-read" && "intentDigest" in activity.authorization
         ? activity.authorization : undefined;
-      const expected = activity.phase === "end" ? activity.nativeRelease! : activity;
-      if (body.ok !== true || r === undefined || (r === null && activity.phase === "end")
+      const expected = activity.phase === "end" ? activity.nativeRelease!
+        : activity.phase === "observe-complete" ? { sendId: activity.receipt.record.sendId,
+          binding: activity.receipt.record.binding, sessionEpoch: activity.receipt.record.hostWatch.sessionEpoch } : activity;
+      if (body.ok !== true || r === undefined || (r === null && (activity.phase === "end" || activity.phase === "observe-complete"))
         || (sealedCancel && (!r || r.outcome !== "cancelled" || r.terminalDigest !== sealedCancel.terminalDigest))
         || (r !== null && (!r || Object.keys(r).length !== 10 || r.version !== 1
           || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(r.releaseId)
@@ -911,11 +929,14 @@ export async function notifyLauncherTurn(
           || !["helperPid", "surfaceId", "targetId"].every(k =>
             r.lease?.[k as keyof typeof r.lease] === expected.binding.lease[k as keyof typeof r.lease])
           || !["completed", "cancelled"].includes(r.outcome) || !/^[a-f0-9]{64}$/.test(r.terminalDigest)
-          || (activity.phase === "end" && (r.outcome !== activity.status || r.terminalDigest !== activity.nativeRelease!.terminalDigest))))) {
+          || (activity.phase === "end" && (r.outcome !== activity.status || r.terminalDigest !== activity.nativeRelease!.terminalDigest))
+          || (activity.phase === "observe-complete" && (r.outcome !== "completed"
+            || r.terminalDigest !== activity.resultReady.completedDigest
+            || r.sessionEpoch !== activity.receipt.record.hostWatch.sessionEpoch))))) {
         throw new Error("Launcher returned invalid original release metadata");
       }
       release = r;
-      if (activity.phase === "native-release-read") return { nativeRelease: release };
+      if (activity.phase === "native-release-read" || activity.phase === "observe-complete") return { nativeRelease: release };
     }
     if (activity.phase === "native-submission-watch") {
       const watch = body.nativeSubmissionWatch as LauncherNativeSubmissionWatch | undefined;

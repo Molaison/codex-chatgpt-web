@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { localChatGptWebModelCatalog } from "../src/model-catalog";
 import { routeChatGptWebRequest } from "../src/server";
 import { requireChatGptWebModelRoute, availableChatGptWebModelRoutes } from "../src/chatgpt-web-models";
-const config: any = { mode: "full", solAvailable: true, extraHighAvailable: true, proAvailable: true, subagentProtocol: "compatibility-v1" };
+const config: any = { mode: "full", browserHost: "launcher", mcpProvider: "external-http", solAvailable: true,
+  extraHighAvailable: true, proAvailable: true, subagentProtocol: "compatibility-v1" };
 test("original eight selectors, Pro in max, legacy sessions hidden and preserved", () => {
  const models: any[] = localChatGptWebModelCatalog(config).models as any[];
  const visible = models.filter(m => m.visibility === "list");

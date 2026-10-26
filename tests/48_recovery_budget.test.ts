@@ -1,9 +1,10 @@
+import { tmpdir } from "node:os";
 import {expect,test} from "bun:test";
 import {mkdtempSync,mkdirSync,rmSync} from "node:fs";
 import {join} from "node:path";
 import {DurableOperation,OperationJournal,type OperationRecord} from "../src/adapters/chatgpt-web/operation-journal";
 function fixture(){
-  mkdirSync(process.env.Q39_TEST_ROOT!,{recursive:true});const root=mkdtempSync(join(process.env.Q39_TEST_ROOT!,"budget-"));
+  mkdirSync((process.env.Q39_TEST_ROOT ?? tmpdir()),{recursive:true});const root=mkdtempSync(join((process.env.Q39_TEST_ROOT ?? tmpdir()),"budget-"));
   const journal=new OperationJournal(root);const record:OperationRecord={version:1,operationId:"op_budget",executionKey:"budget",traceId:"budget_trace",requestIds:[],
     submission:"prepared",generation:"not_started",delivery:"attached",recovery:"none",seq:0,attempt:1,updatedAt:1000,startedAt:1000,rounds:{}};
   return {root,journal,record,operation:new DurableOperation(journal,record)};

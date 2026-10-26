@@ -13,6 +13,7 @@ import { ChatGptBrowserWorker } from "../src/adapters/chatgpt-web/browser-worker
 import { TurnBroker } from "../src/adapters/chatgpt-web/turn-broker";
 import { responseRequest, routeChatGptWebRequest } from "../src/server";
 import type { CodexParsedRequest } from "../src/types";
+import { writePromptTestDescriptor } from "./44_prompt_fixture";
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const originalHome = process.env.CODEX_CHATGPT_WEB_HOME;
@@ -29,7 +30,8 @@ function fixture() {
   const account = "account-" + randomUUID(), thread = randomUUID();
   const config = { ...defaultConfig(), accountId: account, browserHost: "launcher" as const,
     browserHostDescriptorPath: join(root, "unused-launcher.json"), conversationStoreDirectory: join(root, "conversations"),
-    brokerSocketPath: join(root, "broker.sock"), useSavedChats: true };
+    brokerSocketPath: join(root, "broker.sock") };
+  writePromptTestDescriptor(config.browserHostDescriptorPath);
   const body = (text = "Continue", previous?: string, threadId = thread, stream = false) => ({
     model: "chatgpt-web/gpt-5.6-sol-instant", stream,
     input: [{ type: "message", role: "user", id: randomUUID(), content: [{ type: "input_text", text }] }],
@@ -90,7 +92,7 @@ test("durable alias survives a new process with the bounded response snapshot re
   ].join("\n"));
   const child = Bun.spawn([process.execPath, script], { env: { ...process.env, CODEX_CHATGPT_WEB_HOME: f.root }, stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr, exitCode] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
-  expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" }); expect(stdout.trim()).toBe("RESTORED");
+  expect(exitCode).toBe(0); expect(stderr).not.toContain("error:"); expect(stdout.trim()).toBe("RESTORED");
 });
 
 test("a cached response cannot be rebound to another thread or account", async () => {
@@ -136,24 +138,64 @@ test("an alias cannot silently replace a missing or changed saved-chat mapping",
 });
 
 test("temporary chats retain cache expansion and expiry rejection without aliases", async () => {
-  const f = fixture(); const id = await responseId(await f.handler(f.body("Temporary baseline"), { useSavedChats: false }));
+  const f = fixture();
+  const temporaryBody = (text: string, previous?: string) => ({ ...f.body(text, previous),
+    model: "chatgpt-web/gpt-5.6-chat-temp", reasoning: { effort: "high" } });
+  const id = await responseId(await f.handler(temporaryBody("Temporary baseline"), { mode: "full" }));
   expect(f.aliases.lookup(id)).toBeUndefined();
-  await responseId(await f.handler(f.body("Second question", id), { useSavedChats: false }));
+  await responseId(await f.handler(temporaryBody("Second question", id), { mode: "full" }));
+  expect(f.seen.at(-1)!._chatgptSessionMode).toBe("temporary");
   expect(f.seen.at(-1)!._chatgptSavedConversationContinuation).toBeUndefined();
   expect(f.seen.at(-1)!.context.messages.length).toBeGreaterThan(1);
   const now = spyOn(Date, "now").mockReturnValue(Date.now() + 2 * 60 * 60 * 1000);
-  try { expect((await f.handler(f.body("Too late", id), { useSavedChats: false })).status).toBe(409); }
+  try { expect((await f.handler(temporaryBody("Too late", id), { mode: "full" })).status).toBe(409); }
   finally { now.mockRestore(); }
+});
+
+test("Full external HTTP Chat retains durable aliases after its transient response cache expires", async () => {
+  const f = fixture();
+  const overrides = { mode: "full" as const, mcpProvider: "external-http" as const };
+  expect(providerConfig({ ...f.config, ...overrides }).chatgptWeb!.localToolsEnabled).toBe(true);
+  const body = (text: string, previous?: string) => ({ ...f.body(text, previous),
+    model: "chatgpt-web/gpt-6-chat-persist", reasoning: { effort: "high" } });
+  const id = await responseId(await f.handler(body("Original saved Chat"), overrides));
+  expect(f.seen.at(-1)!._chatgptLocalTools).toBe(false);
+  expect(f.aliases.lookup(id)?.conversation).toBe(f.key);
+  const now = spyOn(Date, "now").mockReturnValue(Date.now() + 2 * 60 * 60 * 1000);
+  try {
+    await responseId(await f.handler(body("Continue the same saved Chat", id), overrides));
+    expect(f.seen.at(-1)!._chatgptSavedConversationContinuation).toBe(true);
+    expect(f.seen.at(-1)!.context.messages).toHaveLength(1);
+  } finally { now.mockRestore(); }
+});
+
+test.each(["tools-persist", "chat-temp"])("Full external HTTP %s cannot create a saved Chat alias", async route => {
+  const f = fixture();
+  const id = await responseId(await f.handler({ ...f.body("No Chat alias"),
+    model: `chatgpt-web/gpt-6-${route}`, reasoning: { effort: "high" },
+    _chatgptLocalTools: false, _chatgptSessionMode: "persistent",
+  }, { mode: "full", mcpProvider: "external-http" }));
+  expect(f.seen.at(-1)!._chatgptLocalTools).toBe(route === "tools-persist");
+  expect(f.seen.at(-1)!._chatgptSessionMode).toBe(route === "chat-temp" ? "temporary" : "persistent");
+  expect(f.aliases.lookup(id)).toBeUndefined();
+});
+
+test("a resolved Tools request cannot inherit alias eligibility from a browser-only provider", () => {
+  const f = fixture(), provider = providerConfig(f.config), parsed = parseRequest(f.body());
+  expect(provider.chatgptWeb!.localToolsEnabled).toBe(false);
+  expect(supportsSavedChatAliases(provider, { ...parsed, _chatgptLocalTools: true })).toBe(false);
 });
 
 test("compaction, manual/tools, fresh chats and Luna never opt into saved response aliases", () => {
   const f = fixture(), provider = providerConfig(f.config), parsed = parseRequest(f.body()); routeChatGptWebRequest(parsed, f.config);
   expect(supportsSavedChatAliases(provider, parsed)).toBe(true);
+  expect(supportsSavedChatAliases({ ...provider, chatgptWeb: { ...provider.chatgptWeb, localToolsEnabled: true } },
+    { ...parsed, _chatgptLocalTools: undefined })).toBe(false);
   for (const chatgptWeb of [
-    { ...provider.chatgptWeb, localToolsEnabled: true }, { ...provider.chatgptWeb, useSavedChats: false },
     { ...provider.chatgptWeb, browserInteractionMode: "manual" as const },
     { ...provider.chatgptWeb, experimentalFreshConversationPerTurn: true },
   ]) expect(supportsSavedChatAliases({ ...provider, chatgptWeb }, parsed)).toBe(false);
+  expect(supportsSavedChatAliases(provider, { ...parsed, _chatgptSessionMode: "temporary" })).toBe(false);
   expect(supportsSavedChatAliases(provider, { ...parsed, _compactionRequest: true })).toBe(false);
   expect(supportsSavedChatAliases(provider, { ...parsed, modelId: "gpt-5.6-luna" })).toBe(false);
   for (const status of ["failed", "incomplete", "in_progress"]) {

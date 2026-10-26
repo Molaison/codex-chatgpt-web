@@ -3,17 +3,128 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { ChatGptCompactionHandoffAccepted, ChatGptWebAdapterError } from "../src/adapters/chatgpt-web/adapter-error";
 import { LauncherBrowserHelperClient } from "../src/adapters/chatgpt-web/launcher-helper-client";
 import type { BrowserTurn, ResolvedBrowserConfig } from "../src/adapters/chatgpt-web/browser-worker";
 import { LAUNCHER_BROWSER_HOST_KIND, LAUNCHER_BROWSER_IDLE_URL } from "../src/launcher-browser-host";
+import * as launcherHost from "../src/launcher-browser-host";
+import { nativeExecutionDigest } from "../src/adapters/chatgpt-web/native-execution";
+import { isChatGptChartWidget, parseChatGptChartWidgets } from "../src/adapters/chatgpt-web/rich-widget";
 
 const roots: string[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-test.each([false, true])("connector verification preserves chat mode through the real helper process (%s)", async useSavedChats => {
+test.each([
+  ["exit", false], ["exit", true], ["error", false], ["error", true], ["cancel", false], ["cancel", true],
+] as const)("helper %s waits for initial Full observation persistence (already saved=%s)", async (terminal, persistedBeforeExit) => {
+  const root = mkdtempSync(join(tmpdir(), "full-observation-helper-")); roots.push(root);
+  const config: ResolvedBrowserConfig = { appName: "fixture-app", accountId: "fixture-account", browserHost: "launcher",
+    browserHostDescriptorPath: join(root, "unused-launcher.json"), storageStatePath: join(root, "unused-state.json"),
+    chromeExecutablePath: "unused", headed: false, autoApproveToolCalls: false, turnTimeoutMs: 10_000 };
+  const identity = { operationId: "op", executionKey: "execution", roundKey: "round", threadId: "thread", turnId: "turn" };
+  const checkpoint = { version: 1, identity, traceId: "full-observation", modelId: "gpt-5.6-sol",
+    accountId: config.accountId, appName: config.appName,
+    host: { pid: process.pid, instanceId: "h".repeat(32), profile: "production", partition: "persist:codex-web-gpt-chatgpt" },
+    lease: { helperPid: process.pid + 1, surfaceId: "s".repeat(32), targetId: "original-target" },
+    conversation: { key: "conversation", claim: "claim", url: "https://chatgpt.com/c/original" },
+    toolChannel: { tokenHash: "a".repeat(64) },
+    submission: { receipt: "[codex-submission:11111111-1111-1111-1111-111111111111]",
+      initialTurnIdentities: [], acceptedUserIdentity: "user", assistantIdentity: "assistant", acceptedTurnIdentities: ["user", "assistant"] } };
+  let persist!: () => void, rejectTurn!: (error: Error) => void, saved = false, finished = false;
+  const persistence = new Promise<void>(resolve => { persist = resolve; });
+  const outcome = new Promise<Error>(resolve => { rejectTurn = error => { finished = true; resolve(error); }; });
+  const turn: BrowserTurn = { traceId: checkpoint.traceId, modelId: checkpoint.modelId,
+    observationIdentity: identity, capabilities: { solAvailable: true, extraHighAvailable: false, proAvailable: false, localToolsEnabled: true },
+    prepare: async () => ({ text: "unused", images: [], release() {} }), onTextDelta() {},
+    onObservationReady: async () => { await persistence; saved = true; } };
+  const client = new LauncherBrowserHelperClient(config) as any;
+  const child = { pid: checkpoint.lease.helperPid };
+  client.child = child; client.send = async () => {};
+  client.pending.set(turn.traceId, { turn, resolve() {}, reject: rejectTurn });
+  const control = spyOn(launcherHost, "notifyLauncherTurn").mockResolvedValue({});
+  try {
+    client.handleLine(child, JSON.stringify({ type: "event", id: turn.traceId, event: "observation_ready", checkpoint }));
+    if (persistedBeforeExit) { persist(); await Bun.sleep(1); }
+    if (terminal === "exit") client.handleExit(child, new Error("fixture helper process exited"));
+    else client.handleLine(child, JSON.stringify({ type: "error", id: turn.traceId, message: "fixture terminal",
+      status: terminal === "cancel" ? 499 : 503, errorType: "server_error",
+      code: terminal === "cancel" ? "client_cancelled" : "chatgpt_network_unavailable", retryable: terminal !== "cancel" }));
+    await Bun.sleep(1);
+    if (!persistedBeforeExit) { expect(finished).toBeFalse(); persist(); }
+    expect(await outcome).toMatchObject({ code: terminal === "exit" ? "chatgpt_submission_identity_unproven"
+      : terminal === "cancel" ? "client_cancelled" : "chatgpt_network_unavailable" });
+    expect(saved).toBeTrue(); expect(control).not.toHaveBeenCalled();
+  } finally { persist(); control.mockRestore(); }
+});
+
+test("helper error waits for pending native submission persistence before exposing retained execution", async () => {
+  const client = new LauncherBrowserHelperClient({} as ResolvedBrowserConfig) as any;
+  const child = { pid: process.pid + 1 };
+  let persist!: () => void, rejectTurn!: (error: Error) => void, saved = false, finished = false;
+  const persistence = new Promise<void>(resolve => { persist = resolve; });
+  const outcome = new Promise<Error>(resolve => { rejectTurn = error => { finished = true; resolve(error); }; });
+  const turn = { traceId: "native-persistence", nativeSubmissionIdentity: true,
+    onNativeSubmission: async () => { await persistence; saved = true; } };
+  client.child = child; client.send = async () => {};
+  client.pending.set(turn.traceId, { turn, resolve() {}, reject: rejectTurn });
+  try {
+    client.handleLine(child, JSON.stringify({ type: "event", id: turn.traceId, event: "native_submission",
+      record: { version: 1, sendId: "11111111-1111-1111-1111-111111111111", revision: 1,
+        phase: "send_activated", initialTurnIdentities: [] } }));
+    client.handleLine(child, JSON.stringify({ type: "error", id: turn.traceId, message: "fixture ACK timeout" }));
+    await Bun.sleep(1); expect(finished).toBeFalse(); persist();
+    expect(await outcome).toMatchObject({ code: "chatgpt_submission_identity_unproven" });
+    expect(saved).toBeTrue();
+  } finally { persist(); }
+});
+
+test.each([
+  { version: 1, kind: "cartesian_chart", id: "chart-1", title: "Counts", mark: "bar", xField: "group", yField: "count", points: [{ x: "A", y: 2 }] },
+  { version: 1, kind: "pie_chart", id: "chart-1", title: "Counts", labelField: "group", valueField: "count", slices: [{ label: "A", value: 2 }] },
+  { version: 1, kind: "heatmap_chart", id: "chart-1", title: "Counts", xField: "group", yField: "month", valueField: "count", cells: [{ x: "A", y: "June", value: 2 }] },
+])("a failed widget checkpoint prevents result-ready persistence and retains the original execution (%s)", async widget => {
+  const client = new LauncherBrowserHelperClient({} as ResolvedBrowserConfig) as any;
+  const child = { pid: process.pid + 1 }, sent: unknown[] = [];
+  let rejectTurn!: (error: Error) => void, savedFinal = false;
+  const outcome = new Promise<Error>(resolve => { rejectTurn = resolve; });
+  const turn = { traceId: "widget-persistence", nativeSubmissionIdentity: true,
+    onRichWidgets() { throw new Error("fixture widget storage failed"); },
+    async onNativeResultReady() { savedFinal = true; } };
+  client.child = child; client.send = async (message: unknown) => { sent.push(message); };
+  client.pending.set(turn.traceId, { turn, sendActivated: true, resolve() {}, reject: rejectTurn });
+  const ready = { version: 1, scope: { operationId: "operation", executionKey: "execution", roundKey: "round",
+    turnId: "turn", traceId: turn.traceId }, sendId: "11111111-1111-1111-1111-111111111111",
+    completedDigest: "a".repeat(64), answer: "Original chart", answerSha256: createHash("sha256").update("Original chart").digest("hex"),
+    readyAt: Date.now() };
+  expect(() => client.handleLine(child, JSON.stringify({ type: "event", id: turn.traceId, event: "rich_widgets",
+    widgets: [widget] }))).not.toThrow();
+  client.handleLine(child, JSON.stringify({ type: "event", id: turn.traceId, event: "native_result_ready",
+    requestId: 1, payload: ready, digest: nativeExecutionDigest(ready) }));
+  client.handleLine(child, JSON.stringify({ type: "error", id: turn.traceId, message: "fixture observer stopped" }));
+  expect(await outcome).toMatchObject({ code: "chatgpt_submission_identity_unproven" });
+  expect(savedFinal).toBeFalse();
+  expect(sent).toEqual([{ type: "abort", id: turn.traceId, reason: "recovery_budget_retained" }]);
+});
+
+test("widget IPC accepts the producer's three projections and rejects executable or oversized data", () => {
+  const source = { data: { values: [{ x: "A", y: 2, row: "June" }] } };
+  const widgets = parseChatGptChartWidgets([
+    JSON.stringify({ ...source, mark: "bar", encoding: { x: { field: "x" }, y: { field: "y" } } }),
+    JSON.stringify({ ...source, mark: "arc", encoding: { color: { field: "x" }, theta: { field: "y" } } }),
+    JSON.stringify({ ...source, mark: "rect", encoding: { x: { field: "x" }, y: { field: "row" }, color: { field: "y" } } }),
+  ]);
+  expect(widgets.map(widget => widget.kind)).toEqual(["cartesian_chart", "pie_chart", "heatmap_chart"]);
+  expect(widgets.every(isChatGptChartWidget)).toBeTrue();
+  expect(isChatGptChartWidget({ ...widgets[0], transform: [{ calculate: "alert(1)" }] })).toBeFalse();
+  expect(isChatGptChartWidget({ ...widgets[0], points: Array(301).fill({ x: "A", y: 2 }) })).toBeFalse();
+  expect(isChatGptChartWidget({ ...widgets[1], slices: [{ label: "A", value: "2" }] })).toBeFalse();
+  expect(isChatGptChartWidget({ ...widgets[2], cells: [{ x: "A", y: "June", value: null }] })).toBeFalse();
+});
+
+test.each([false, true])("obsolete chat-mode preferences do not reach the helper worker (%s)", async useSavedChats => {
   const root = mkdtempSync(join(tmpdir(), "codex-verification-chat-mode-"));
   roots.push(root);
   const helper = join(root, "helper.ts");
@@ -21,7 +132,7 @@ test.each([false, true])("connector verification preserves chat mode through the
     import { ChatGptBrowserWorker } from ${JSON.stringify(new URL("../src/adapters/chatgpt-web/browser-worker.ts", import.meta.url).href)};
     // Keep the launcher request, helper protocol and worker configuration real; replace browser IO.
     ChatGptBrowserWorker.prototype.verifyConnector = async function() {
-      if (this.config.useSavedChats !== ${useSavedChats}) throw new Error("Verification chat mode lost in helper IPC");
+      if (Object.hasOwn(this.config, "useSavedChats")) throw new Error("Retired setting reached helper worker");
       return this.config.appName;
     };
     await import(${JSON.stringify(new URL("../src/adapters/chatgpt-web/browser-helper-main.ts", import.meta.url).href)});
@@ -42,7 +153,7 @@ test("daemon streams browser lifecycle through the real helper process", async (
     import { ChatGptBrowserWorker } from ${JSON.stringify(new URL("../src/adapters/chatgpt-web/browser-worker.ts", import.meta.url).href)};
     // Substitute only the browser. Both sides of the production IPC protocol run unchanged.
     ChatGptBrowserWorker.prototype.run = async function(turn) {
-      if (this.config.useSavedChats !== true) throw new Error("Saved chat preference lost in helper IPC");
+      if (Object.hasOwn(this.config, "useSavedChats")) throw new Error("Retired setting reached helper worker");
       if (turn.modelFamily !== "5.6") throw new Error("Pinned model family lost in helper IPC");
       await turn.onPreparedSelected(false);
       const prepared = await turn.prepare();
@@ -108,7 +219,6 @@ test("daemon streams browser lifecycle through the real helper process", async (
     turnTimeoutMs: 60_000,
     headed: true,
     autoApproveToolCalls: false,
-    useSavedChats: true,
   };
   const reasoning: Array<{ text: string; continuation: boolean }> = [];
   const deltas: string[] = [];
@@ -230,7 +340,7 @@ test("accepted compaction retires through the helper as completed without hiding
     appName: "Codex Native2", browserHost: "launcher", browserHostDescriptorPath: descriptorPath,
     browserHelperScriptPath: helper, browserDiagnosticsPath: join(root, "diagnostics"),
     storageStatePath: join(root, "unused-state.json"), chromeExecutablePath: join(root, "unused-chrome"),
-    turnTimeoutMs: 60_000, headed: true, autoApproveToolCalls: false, useSavedChats: false,
+    turnTimeoutMs: 60_000, headed: true, autoApproveToolCalls: false,
   });
   const logs: string[] = [];
   const logger = spyOn(console, "info").mockImplementation((...args) => { logs.push(args.join(" ")); });
@@ -283,7 +393,6 @@ test("launcher helper protocol preserves multipart context, broker identity and 
     turnTimeoutMs: 60_000,
     headed: true,
     autoApproveToolCalls: false,
-    useSavedChats: false,
   });
   const internal = client as unknown as {
     pending: Map<string, { resolve(value: string): void }>;
@@ -327,6 +436,7 @@ test("launcher helper protocol preserves multipart context, broker identity and 
       turnToken: "turn_0123456789abcdef0123456789abcdef",
       multipart: { parts: Array.from({ length: 6 }, (_, index) => JSON.stringify({ part: index + 1 })), commit: "commit" },
       trimmedCompactionMessages: 4,
+      contextTokenBreakdown: { developer: { records: 1, chars: 400, tokens: 100 } },
       release() {},
     }),
     onTextDelta() {},
@@ -345,6 +455,7 @@ test("launcher helper protocol preserves multipart context, broker identity and 
         turnToken: "turn_0123456789abcdef0123456789abcdef",
         multipart: { parts: Array.from({ length: 6 }, (_, index) => JSON.stringify({ part: index + 1 })), commit: "commit" },
         trimmedCompactionMessages: 4,
+        contextTokenBreakdown: { developer: { records: 1, chars: 400, tokens: 100 } },
     },
   });
 });
@@ -362,7 +473,6 @@ test("an abort dispatched during run submission cannot overtake the run frame", 
     turnTimeoutMs: 60_000,
     headed: true,
     autoApproveToolCalls: false,
-    useSavedChats: false,
   });
   const internal = client as unknown as {
     ensureChild(): Promise<void>;
@@ -409,7 +519,6 @@ test("structured helper errors preserve the ChatGPT adapter failure contract", a
     turnTimeoutMs: 60_000,
     headed: true,
     autoApproveToolCalls: false,
-    useSavedChats: false,
   });
   const internal = client as unknown as {
     child?: unknown;
@@ -460,7 +569,7 @@ test("structured helper errors preserve the ChatGPT adapter failure contract", a
 test("an older helper cannot silently drop selected skill files and releases the prepared turn", async () => {
   const client = new LauncherBrowserHelperClient({
     appName: "Codex Native2", browserHost: "launcher", browserHostDescriptorPath: "/durable/launcher.json",
-    storageStatePath: "/durable/unused.json", chromeExecutablePath: "/durable/chrome", headed: true, autoApproveToolCalls: false, useSavedChats: false,
+    storageStatePath: "/durable/unused.json", chromeExecutablePath: "/durable/chrome", headed: true, autoApproveToolCalls: false,
   });
   const internal = client as unknown as {
     child: unknown;

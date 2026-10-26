@@ -20,7 +20,7 @@ const deferred = () => {
   return { promise, resolve };
 };
 
-test("all candidate waits precede selected account admission; stale selected never falls through to another account", async () => {
+test("an unowned new session rejects stale admission and commits only its healthy fallback owner", async () => {
   const a = await fixture("synthetic-a"), b = await fixture("synthetic-b");
   const aReady = deferred(), bWaiting = deferred(), releaseB = deferred();
   const report = a.host.reportHealthMaintenance.bind(a.host);
@@ -32,16 +32,22 @@ test("all candidate waits precede selected account admission; stale selected nev
     const pending = pool.fetch(a.request("slow-other-candidate"));
     await Promise.all([aReady.promise, bWaiting.promise]);
     a.switchUser("changed-principal-before-selection"); releaseB.resolve();
-    const refused = await pending;
-    expect(refused.status).toBe(503);
-    expect(owners(a.config.databasePath)).toEqual({ owners: { n: 0 }, admissions: [] });
-    expect(a.dispatched() + b.dispatched()).toBe(0);
-    // A later fresh request may select another configured, healthy fixture.
-    const healthy = await pool.fetch(a.request("later-fresh-other-account")); await healthy.text();
-    expect(healthy.status).toBe(200); expect(a.dispatched()).toBe(0); expect(b.dispatched()).toBe(1);
+    const healthy = await pending;
+    expect(healthy.status).toBe(200);
+    const body = await healthy.json();
+    expect(a.dispatched()).toBe(0); expect(b.dispatched()).toBe(1);
     const stored = owners(a.config.databasePath);
     expect(stored.owners).toEqual({ n: 1 });
+    expect(stored.admissions).toHaveLength(1);
     expect(JSON.parse(stored.admissions[0]!.receipt_json).runtime.accountId).toBe(b.account.id);
+    // Once B owns the session, neither exact replay nor A becoming healthy can move it.
+    const replay = await pool.fetch(a.request("slow-other-candidate"));
+    expect(await replay.json()).toEqual(body); expect(b.dispatched()).toBe(1);
+    a.switchUser("synthetic-principal");
+    const next = await pool.fetch(a.request("slow-other-candidate", "same-owner-next-turn"));
+    expect(next.status).toBe(200); await next.text();
+    expect(a.dispatched()).toBe(0); expect(b.dispatched()).toBe(2);
+    expect(owners(a.config.databasePath)).toEqual(stored);
     expect(a.host.activeTraceId).toBe("original-test-writer");
   } finally { releaseB.resolve(); pool.close(); await a.close(); await b.close(); }
 });
