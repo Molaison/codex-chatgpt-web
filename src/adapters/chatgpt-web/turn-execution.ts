@@ -1,3 +1,6 @@
+import { retainsBrowserExecution } from "./submission-identity";
+import { hasNativeExecution, nativePreparationCancelledError, retainedOperationError, type DurableOperation } from "./operation-journal";
+import { ExplicitNativeCancellation } from "./native-execution";
 import { createHash } from "node:crypto";
 import type { ChatGptChartWidget } from "./rich-widget";
 import type { AdapterEvent, CodexParsedRequest } from "../../types";
@@ -11,6 +14,7 @@ import {
 } from "./environment";
 import { MAX_CHATGPT_BROWSER_TABS } from "./concurrency";
 import type { ChatGptExternalTurnProgress } from "./turn-progress";
+import { buildResponseJSON } from "../../bridge";
 
 function awaitWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) return promise;
@@ -152,6 +156,7 @@ export class ChatGptTextFeed {
 }
 
 interface ChatGptTurnRuntimeBase {
+  operation?: DurableOperation;
   browser: Promise<string>;
   /** Physical helper/Playwright settlement, including the launcher end/release acknowledgement. */
   physicalSettlement: Promise<void>;
@@ -224,6 +229,19 @@ export function chatGptInstructionLineage(parsed: CodexParsedRequest): ChatGptIn
   return { current, predecessors: new Set(revisions) };
 }
 
+/** Native retries append clear reasoning receipts, not a new response round. */
+function responseRoundInput(input: unknown[]): unknown[] {
+  let end = input.length;
+  while (end > 0) {
+    const item = input[end - 1];
+    if (!item || typeof item !== "object") break;
+    const receipt = item as { type?: unknown; content?: unknown; encrypted_content?: unknown };
+    if (receipt.type !== "reasoning" || receipt.content != null || receipt.encrypted_content != null) break;
+    end -= 1;
+  }
+  return input.slice(0, end);
+}
+
 /** JSON object order is not semantic; array positions and string contents remain exact. */
 function canonicalRoundInput(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalRoundInput);
@@ -234,6 +252,7 @@ function canonicalRoundInput(value: unknown): unknown {
 
 /** Exact canonical Responses request identity inside one long-lived browser execution. */
 export function chatGptTurnRoundKey(parsed: CodexParsedRequest): string {
+  if (parsed._chatgptObserverRoundKey) return parsed._chatgptObserverRoundKey;
   const identity = extractChatGptTurnIdentity(parsed);
   if (!identity.turnId) throw new Error("ChatGPT web requires native Codex turn_id metadata for round replay");
   const body = parsed._rawBody;
@@ -247,8 +266,64 @@ export function chatGptTurnRoundKey(parsed: CodexParsedRequest): string {
     purpose: parsed._compactionRequest ? "compaction" : "response",
     // Canonicalize only the observer-round journal identity. Physical execution and instruction
     // lineage have separate ownership contracts and must not change with this replay repair.
-    input: canonicalRoundInput((body as { input: unknown[] }).input),
+    input: canonicalRoundInput(parsed._compactionRequest
+      ? (body as { input: unknown[] }).input
+      : responseRoundInput((body as { input: unknown[] }).input)),
   });
+}
+
+/** A Native reconnect can append the exact partial item it already received.
+ * Match its emitted ID and exact received prefix against this operation's journal;
+ * never infer replay from repeated prose or ignore a new tool result/user input.
+ */
+export function chatGptPartialReceiptRound(
+  parsed: CodexParsedRequest,
+  traceId: string,
+  rounds: Record<string, { events: AdapterEvent[] }>,
+): string | undefined {
+  if (parsed._compactionRequest) return;
+  const body = parsed._rawBody as { input?: unknown[] } | undefined;
+  if (!Array.isArray(body?.input)) return;
+  // Keep trailing clear reasoning here: it too is a received item that the
+  // completed response must replace in continuation state, even without text.
+  const input = body.input;
+  const receipts: Array<Record<string, unknown>> = [];
+  for (let end = input.length - 1; end >= 0; end--) {
+    const item = input[end] as Record<string, unknown> | undefined;
+    const clearReasoning = item?.type === "reasoning" && item.content == null && item.encrypted_content == null;
+    if (!item || typeof item.id !== "string"
+      || !(clearReasoning || item.type === "message" && item.role === "assistant")) break;
+    receipts.unshift(item);
+    const candidate = { ...parsed, _chatgptObserverRoundKey: undefined,
+      _rawBody: { ...body, input: input.slice(0, end) } };
+    const key = chatGptTurnRoundKey(candidate);
+    const round = rounds[key];
+    if (!round) continue;
+    const replayIdentity = createHash("sha256").update(JSON.stringify([traceId, key])).digest("hex").slice(0, 32);
+    const output = buildResponseJSON(round.events, parsed.modelId, { replayIdentity,
+      hideThinkingSummary: parsed.options.hideThinkingSummary }).output as Array<Record<string, unknown>>;
+    let previous = -1;
+    const exact = receipts.every(receipt => {
+      const index = output.findIndex(expected => expected.id === receipt.id);
+      if (index <= previous) return false;
+      previous = index;
+      const expected = output[index];
+      if (receipt.type === "reasoning") {
+        return expected?.type === "reasoning" && receipt.content == null && receipt.encrypted_content == null
+          && (receipt.summary === undefined || JSON.stringify(canonicalRoundInput(receipt.summary))
+            === JSON.stringify(canonicalRoundInput(expected.summary)));
+      }
+      if (!expected || expected.type !== "message" || expected.role !== "assistant" || expected.phase !== receipt.phase
+        || !Array.isArray(expected.content) || !Array.isArray(receipt.content)) return false;
+      const parts = receipt.content as Array<{ type?: unknown; text?: unknown }>;
+      const expectedParts = expected.content as Array<{ type?: unknown; text?: unknown }>;
+      if (parts.length !== 1 || expectedParts.length !== 1 || parts[0]?.type !== "output_text"
+        || expectedParts[0]?.type !== "output_text" || typeof parts[0].text !== "string"
+        || typeof expectedParts[0].text !== "string") return false;
+      return expectedParts[0].text.startsWith(parts[0].text);
+    });
+    if (exact) return key;
+  }
 }
 
 /** Stable identity for limiting automatic retries of one native Codex turn. */
@@ -324,22 +399,95 @@ export class ChatGptTurnSession {
     readonly instruction?: string,
   ) {
     this.attachedConversationKey = runtime.conversationKey;
-    this.physicalSettlement = runtime.physicalSettlement.then(
-      () => { this.settledPhysical = true; },
+    const saved = runtime.operation?.record;
+    if (saved) {
+      for (const [key, round] of Object.entries(saved.rounds)) this.rounds.set(key, {
+        ...round, events: [...round.events], reasoning: [...round.reasoning],
+        failure: round.failure ? new Error(round.failure) : undefined,
+      });
+      this.finalPrelude = saved.final?.events ?? [];
+      this.finalReasoning = saved.final?.reasoning ?? [];
+    }
+    // Helper/observer termination is not a Native release. Keep the durable release gate
+    // alive even after the helper dies so an exact metadata-only reconciliation can open it.
+    const nativeRelease = runtime.operation?.waitForNativeRelease();
+    const physical = runtime.physicalSettlement.then(
+      () => runtime.operation && hasNativeExecution(runtime.operation.record)
+        ? runtime.operation.waitForNativeRelease() : undefined,
       error => {
-        this.settledPhysical = true;
+        if (runtime.operation && hasNativeExecution(runtime.operation.record)) return runtime.operation.waitForNativeRelease();
         throw error;
       },
     );
-    this.browserOutcome = runtime.browser
+    this.physicalSettlement = (nativeRelease ? Promise.race([physical, nativeRelease]) : physical).then(
+      () => {
+        if (runtime.operation && hasNativeExecution(runtime.operation.record) && !runtime.operation.hasNativeRelease()) {
+          throw retainedOperationError();
+        }
+        this.settledPhysical = true;
+        if (runtime.operation) { runtime.operation.record.physicalSettled = true; this.checkpoint(); }
+      },
+      error => {
+        this.settledPhysical = !runtime.operation?.record.nativeScope && runtime.mode !== "read-only" && !retainsBrowserExecution(error);
+        throw error;
+      },
+    );
+    void this.physicalSettlement.catch(() => {});
+    const resultReady = runtime.operation?.waitForNativeResultReady().then(ready => ready.answer);
+    this.browserOutcome = (resultReady ? Promise.race([runtime.browser, resultReady]) : runtime.browser)
+      .catch(error => {
+        // A helper may die after result-ready ACK but before /end or its result frame.
+        // Return only that already durable, exactly scoped answer; keep the release gate closed.
+        const operation = runtime.operation;
+        if (operation?.record.nativeFinal && operation.record.nativeScope) {
+          return operation.nativeFinalFor(operation.record.nativeScope).answer;
+        }
+        throw error;
+      })
+      .then(answer => {
+        const operation = runtime.operation;
+        if (operation && hasNativeExecution(operation.record) && operation.record.nativeFinal) {
+          const ready = operation.nativeFinalFor(operation.record.nativeScope!);
+          if (ready.answer !== answer) throw retainedOperationError();
+          // A completion racing explicit cancellation may persist the full original answer
+          // before a final text frame arrives. Reproduce only its exact already-emitted prefix.
+          const prefix = runtime.text.value();
+          if (!ready.answer.startsWith(prefix)) throw retainedOperationError();
+          runtime.text.push(ready.answer.slice(prefix.length));
+        }
+        return answer;
+      })
       .then(answer => ({ type: "final", answer }) as ChatGptBrowserOutcome)
-      .catch(error => ({ type: "error", error: error instanceof Error ? error : new Error(String(error)) }) as ChatGptBrowserOutcome)
+      .catch(error => ({ type: "error", error: error instanceof ExplicitNativeCancellation && runtime.submission?.phase === "prepared"
+        ? nativePreparationCancelledError() : error instanceof Error ? error : new Error(String(error)) }) as ChatGptBrowserOutcome)
       .then(outcome => {
       this.settledBrowserOutcome = outcome;
+      const operation = runtime.operation;
+      if (operation) {
+        const record = operation.record;
+        record.conversationKey = runtime.conversationKey;
+        record.generation = outcome.type === "final" ? "final" : "unknown";
+        record.delivery = "unknown"; // HTTP writes are not a client ACK.
+        if (outcome.type === "final") {
+          // A read-only DOM observer can finish logically without granting a new durable
+          // result-ready/completion authority. Only the original writer supplies nativeFinal.
+          if (!hasNativeExecution(record) || record.nativeFinal) record.final = { answer: outcome.answer,
+            events: this.finalPrelude, reasoning: this.finalReasoning };
+          else delete record.final;
+        }
+        else {
+          record.recovery = "retained";
+          const typed = outcome.error instanceof ChatGptWebAdapterError ? outcome.error : undefined;
+          record.error = { code: typed?.code, retryable: typed?.retryable ?? runtime.submission?.phase === "prepared",
+            ...(typed && "diagnostics" in typed ? { diagnostics: typed.diagnostics as Record<string, unknown> } : {}) };
+        }
+        this.checkpoint();
+      }
       const error = outcome.type === "error" && outcome.error instanceof ChatGptWebAdapterError
         ? outcome.error : undefined;
       console.info(`[chatgpt-web] browser_settled ${JSON.stringify({
         traceId: this.traceId,
+        ...(runtime.operation ? { receipt: runtime.operation.receipt() } : {}),
         outcome: outcome.type,
         compaction: runtime.usageInput?._compactionRequest === true,
         ...(!runtime.usageInput?._compactionRequest ? { submission: runtime.submission?.phase ?? "unknown" } : {}),
@@ -347,6 +495,40 @@ export class ChatGptTurnSession {
       })}`);
       return outcome;
     });
+  }
+
+  /** Bounded by the existing helper lifecycle; an ended un-released owner fails closed.
+   * physicalSettlement itself remains a release-only promise so later metadata can resolve it. */
+  async waitForPhysicalSettlement(signal?: AbortSignal): Promise<void> {
+    const lifecycle = this.runtime.physicalSettlement.then(
+      () => {
+        if (this.runtime.operation && hasNativeExecution(this.runtime.operation.record)
+          && !this.runtime.operation.hasNativeRelease()) throw retainedOperationError();
+        return this.physicalSettlement;
+      },
+      error => {
+        if (this.runtime.operation && hasNativeExecution(this.runtime.operation.record)) {
+          if (this.runtime.operation.hasNativeRelease()) return;
+          throw retainedOperationError();
+        }
+        throw error;
+      },
+    );
+    await awaitWithAbort(Promise.race([this.physicalSettlement, lifecycle]), signal);
+  }
+
+  checkpoint(): void {
+    const operation = this.runtime.operation;
+    if (!operation) return;
+    operation.record.rounds = Object.fromEntries([...this.rounds].map(([key, round]) => [key, {
+      events: round.events, reasoning: round.reasoning, completed: round.completed,
+      ...(round.failure ? { failure: round.failure.message } : {}),
+    }]));
+    if (operation.record.final) {
+      operation.record.final.events = this.finalPrelude;
+      operation.record.final.reasoning = this.finalReasoning;
+    }
+    operation.checkpoint();
   }
 
   /** An exact reconnect replaces its stale HTTP observer, never the browser execution. */
@@ -478,12 +660,14 @@ export class ChatGptTurnSession {
 
   completeRound(key: string): void {
     this.round(key).completed = true;
+    this.checkpoint();
   }
 
   failRound(key: string, error: Error): void {
     const round = this.round(key);
     round.failure = error;
     round.completed = true;
+    this.checkpoint();
   }
 
   roundCompleted(key: string): boolean {
@@ -541,6 +725,7 @@ export class ChatGptTurnSessions {
   private readonly retirements = new Map<string, Promise<void>>();
   private readonly ownerRetirements = new Map<string, Promise<void>>();
   private readonly conversationRetirements = new Map<string, Promise<void>>();
+  private readonly retiringSessions = new Map<string, ChatGptTurnSession>();
 
   constructor(
     private readonly ttlMs = 30 * 60_000,
@@ -598,10 +783,15 @@ export class ChatGptTurnSessions {
       }
       const pending = this.retirements.get(key) ?? this.ownerRetirements.get(ownerKey);
       if (pending) {
+        // Do not wait forever on the release-only promise after the helper has already
+        // ended. Its retained session remains available for exact release reconciliation.
+        for (const [retiredKey, session] of this.retiringSessions) {
+          if (retiredKey === key || session.ownerKey === ownerKey) await session.waitForPhysicalSettlement(signal);
+        }
         await awaitWithAbort(pending, signal);
         continue;
       }
-      const activeOwner = [...this.entries].find(([ownedKey, session]) => (
+      const activeOwner = [...this.entries, ...this.retiringSessions].find(([ownedKey, session]) => (
         ownedKey !== key && session.ownerKey === ownerKey && !session.isPhysicallySettled()
       ));
       if (activeOwner) {
@@ -621,7 +811,7 @@ export class ChatGptTurnSessions {
         }
         // A completed response may still be releasing its browser surface. Sequential work
         // waits for that cleanup; preemption requires a proven newer canonical instruction.
-        await awaitWithAbort(ownedSession.physicalSettlement, signal);
+        await ownedSession.waitForPhysicalSettlement(signal);
         continue;
       }
       if (signal?.aborted) throw new DOMException("ChatGPT web turn aborted", "AbortError");
@@ -635,6 +825,11 @@ export class ChatGptTurnSessions {
     return session;
   }
 
+  /** Metadata reconciliation addresses the original owner even after explicit retirement. */
+  findPhysicalOwner(key: string): ChatGptTurnSession | undefined {
+    return this.entries.get(key) ?? this.retiringSessions.get(key);
+  }
+
   findConversationHead(conversationKey: string): ChatGptTurnSession | undefined {
     const session = this.conversationHeads.get(conversationKey);
     session?.touch();
@@ -643,6 +838,9 @@ export class ChatGptTurnSessions {
 
   /** Wait for a retained conversation epoch that has been detached but not physically released. */
   async waitForConversationRetirement(conversationKey: string, signal?: AbortSignal): Promise<void> {
+    for (const session of this.retiringSessions.values()) {
+      if (session.runtime.conversationKey === conversationKey) await session.waitForPhysicalSettlement(signal);
+    }
     const pending = this.conversationRetirements.get(conversationKey);
     if (pending) await awaitWithAbort(pending, signal);
   }
@@ -679,7 +877,7 @@ export class ChatGptTurnSessions {
   ): Promise<number> {
     const pending = this.conversationRetirements.get(conversationKey);
     if (pending) {
-      await pending;
+      await this.waitForConversationRetirement(conversationKey);
       return 0;
     }
     const matches = [...this.entries].filter(([, session]) => (
@@ -695,6 +893,12 @@ export class ChatGptTurnSessions {
     }
     this.conversationHeads.delete(conversationKey);
     for (const [key, session] of matches) {
+      if (session.runtime.operation && hasNativeExecution(session.runtime.operation.record) && !session.isPhysicallySettled()) {
+        this.retiringSessions.set(key, session);
+        void session.physicalSettlement.then(() => {
+          if (this.retiringSessions.get(key) === session) this.retiringSessions.delete(key);
+        }, () => {});
+      }
       if (this.entries.get(key) === session
         && (session !== preserved?.session || key !== preserved.executionKey)) {
         this.entries.delete(key);
@@ -711,23 +915,23 @@ export class ChatGptTurnSessions {
     const retirement = Promise.all(matches.map(([, session]) => session.physicalSettlement))
       .then(async () => { await release?.(); });
     this.conversationRetirements.set(conversationKey, retirement);
-    try {
-      await retirement;
-    } finally {
-      if (this.conversationRetirements.get(conversationKey) === retirement) {
-        this.conversationRetirements.delete(conversationKey);
-      }
-    }
+    void retirement.then(() => {
+      if (this.conversationRetirements.get(conversationKey) === retirement) this.conversationRetirements.delete(conversationKey);
+    }, () => { /* Keep unresolved physical/context release fenced. */ });
+    await Promise.all(matches.map(([, session]) => session.waitForPhysicalSettlement()));
+    await retirement;
     return matches.length;
   }
 
   async waitForRetirement(key: string): Promise<void> {
+    await this.retiringSessions.get(key)?.waitForPhysicalSettlement();
     await this.retirements.get(key);
   }
 
   async retireAndWait(key: string, signal?: AbortSignal): Promise<boolean> {
     const pending = this.retirements.get(key);
     if (pending) {
+      await this.retiringSessions.get(key)?.waitForPhysicalSettlement(signal);
       await awaitWithAbort(pending, signal);
       return true;
     }
@@ -788,7 +992,7 @@ export class ChatGptTurnSessions {
     const sessions = [...this.entries.values()]
       .filter(session => session.traceId === traceId && session.isActive());
     for (const session of sessions) session.cancel(reason);
-    return { cancelled: sessions.length, settlement: Promise.all(sessions.map(session => session.physicalSettlement)).then(() => undefined) };
+    return { cancelled: sessions.length, settlement: Promise.all(sessions.map(session => session.waitForPhysicalSettlement())).then(() => undefined) };
   }
 
   /**
@@ -840,7 +1044,7 @@ export class ChatGptTurnSessions {
   private prune(): void {
     const cutoff = Date.now() - this.ttlMs;
     for (const [key, session] of this.entries) {
-      if (session.isActive() || session.lastUsedAt() >= cutoff) continue;
+      if (session.isActive() || !session.isPhysicallySettled() || session.lastUsedAt() >= cutoff) continue;
       session.cancel();
       this.entries.delete(key);
       this.forgetConversationHead(session);
@@ -856,14 +1060,16 @@ export class ChatGptTurnSessions {
 
   private beginRetirement(key: string, session: ChatGptTurnSession, reason?: Error): Promise<void> {
     const existing = this.retirements.get(key);
-    if (existing) return existing;
+    if (existing) return this.retiringSessions.get(key)?.waitForPhysicalSettlement() ?? existing;
     const conversationKey = session.conversationKey();
     session.cancel(reason);
     const retirement = session.physicalSettlement;
     this.retirements.set(key, retirement);
+    this.retiringSessions.set(key, session);
     void retirement.then(() => {
       if (this.retirements.get(key) === retirement) this.retirements.delete(key);
-    });
+      if (this.retiringSessions.get(key) === session) this.retiringSessions.delete(key);
+    }, () => { /* Retained ownership keeps its rejection fence. */ });
     if (session.ownerKey) {
       const previous = this.ownerRetirements.get(session.ownerKey);
       const ownerRetirement = previous
@@ -874,7 +1080,7 @@ export class ChatGptTurnSessions {
         if (this.ownerRetirements.get(session.ownerKey!) === ownerRetirement) {
           this.ownerRetirements.delete(session.ownerKey!);
         }
-      });
+      }, () => { /* Retained owner remains blocked. */ });
     }
     if (conversationKey) {
       const previous = this.conversationRetirements.get(conversationKey);
@@ -892,7 +1098,9 @@ export class ChatGptTurnSessions {
         forgetConversationRetirement,
       );
     }
-    return retirement;
+    const wait = session.waitForPhysicalSettlement();
+    void wait.catch(() => {});
+    return wait;
   }
 }
 

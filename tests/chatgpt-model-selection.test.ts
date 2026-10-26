@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { chatGptModelFamilyMatches, selectChatGptModelFamily } from "../src/adapters/chatgpt-web/model-selection";
+import { chatGptUsageModelFromAnnouncements } from "../src/adapters/chatgpt-web/limits";
 
 test("model selection recognizes Latest in the launcher languages without accepting other model names", async () => {
   for (const [label, accepted] of [
@@ -37,6 +38,21 @@ test("family confirmation verifies the exact Sol or Pro version, including the o
   expect(chatGptModelFamilyMatches(["6 Pro, 5 of 5."], "6", "xhigh")).toBe(false);
 });
 
+test("Simplified Chinese effort announcements preserve exact model and effort verification (#911)", () => {
+  for (const [label, effort] of [["即时", "low"], ["中", "medium"], ["高", "high"]] as const) {
+    expect(chatGptModelFamilyMatches([`GPT-6 Sol ${label}，第 3 项，共 3 项`, `6 ${label}`], "6", effort)).toBeTrue();
+    expect(chatGptModelFamilyMatches([`5.6 ${label}`], "6", effort)).toBeFalse();
+    expect(chatGptModelFamilyMatches([`6 Astra ${label}`], "6", effort)).toBeFalse();
+    expect(chatGptModelFamilyMatches([`6 ${label}`, "6 Pro"], "6", effort)).toBeFalse();
+  }
+  for (const effort of ["low", "medium", "xhigh", "max"] as const) {
+    expect(chatGptModelFamilyMatches(["6 高"], "6", effort)).toBeFalse();
+  }
+  for (const label of ["超高", "高级", "高 reasoning", "高 6.1"]) {
+    expect(chatGptModelFamilyMatches([`6 ${label}`], "6", "high")).toBeFalse();
+  }
+});
+
 
 test("model verification accepts Unicode announcement punctuation without weakening identity", () => {
   for (const separator of ["、", "，", "،", "؛", "：", "—", "。", ",", ";"]) {
@@ -48,4 +64,21 @@ test("model verification accepts Unicode announcement punctuation without weaken
   }
   expect(chatGptModelFamilyMatches(["\u2068６ Pro\u2069、position"], "6", "max")).toBeTrue();
   expect(chatGptModelFamilyMatches(["6 Pro for better answers"], "6", "max")).toBeFalse();
+});
+
+test("repeated picker version verifies GPT-5.6 Pro without accepting conflicting evidence (#875)", () => {
+  for (const header of ["5.6 Sol 5.6 Pro", "GPT-5.6 Sol GPT-5.6 Pro"]) {
+    const evidence = ["5.6 Pro, 5 of 5.", header];
+    expect(chatGptModelFamilyMatches(evidence, "5.6", "max")).toBeTrue();
+    expect(chatGptUsageModelFromAnnouncements(evidence)).toBe("gpt-5.6-pro");
+    expect(chatGptModelFamilyMatches(evidence, "5.6", "high")).toBeFalse();
+    expect(chatGptModelFamilyMatches(evidence, "6", "max")).toBeFalse();
+  }
+  for (const header of ["5.6 Sol 6 Pro", "5.6 Sol 5.7 Pro", "5.6 Sol 5.6.1 Pro"]) {
+    expect(chatGptModelFamilyMatches(["5.6 Pro, 5 of 5.", header], "5.6", "max")).toBeFalse();
+    expect(chatGptModelFamilyMatches([header], "5.6", "high")).toBeFalse();
+    expect(chatGptUsageModelFromAnnouncements([header])).toBe("pro-unknown");
+  }
+  expect(chatGptModelFamilyMatches(["6 Astra 6 Pro"], "6", "max")).toBeTrue();
+  expect(chatGptModelFamilyMatches(["6 Astra 6 Pro"], "6", "high")).toBeFalse();
 });

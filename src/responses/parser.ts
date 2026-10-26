@@ -1,3 +1,4 @@
+import { parseChatGptSessionEffort } from "../chatgpt-session-effort";
 import type {
   CodexAgentMessage,
   CodexAssistantMessage,
@@ -17,6 +18,7 @@ import { compactionItemToText, isNativeTextCompaction } from "./compaction";
 import { previousResponseReplayPrefixLength } from "./state";
 import { decodeReasoningEnvelope } from "./reasoning-envelope";
 import { parseCodexDelegation } from "./delegation";
+import { readNativeThreadDelegation } from "./native-context";
 
 function isObj(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -38,12 +40,17 @@ const QUESTION_ANSWER_EXCLUDED_KINDS = new Set([
   "skills.selected_skill_instructions",
 ]);
 
-function qaUserContent(item: { content?: unknown }, kinds: string[] | undefined): string | CodexContentPart[] {
+function qaUserContent(item: { content?: unknown }, kinds: string[] | undefined): {
+  qaContent?: string | CodexContentPart[]; qaProvenance: "native" | "unresolved";
+} {
   const parts = typeof item.content === "string" ? [{ type: "input_text", text: item.content }] : item.content;
-  if (!Array.isArray(kinds) || !Array.isArray(parts) || kinds.length !== parts.length) {
-    return inputContentParts(item.content as unknown[] | string | undefined);
+  if (kinds === undefined) return { qaProvenance: "unresolved" };
+  if (!Array.isArray(kinds) || !kinds.every(kind => typeof kind === "string")
+    || !Array.isArray(parts) || kinds.length !== parts.length) {
+    return { qaContent: inputContentParts(item.content as unknown[] | string | undefined), qaProvenance: "unresolved" };
   }
-  return inputContentParts(parts.filter((_part, index) => !QUESTION_ANSWER_EXCLUDED_KINDS.has(kinds[index]!)));
+  return { qaContent: inputContentParts(parts.filter((_part, index) => !QUESTION_ANSWER_EXCLUDED_KINDS.has(kinds[index]!))),
+    qaProvenance: "native" };
 }
 
 function inputContentParts(blocks: unknown[] | string | undefined): string | CodexContentPart[] {
@@ -422,13 +429,14 @@ export function parseRequest(body: unknown): CodexParsedRequest {
             const content = inputContentParts(msg.content as unknown[] | string | undefined);
             const kinds = msg.internal_chat_message_metadata_passthrough?.content_item_kinds;
             const selectedSkill = msg.role === "user" && kinds?.length === 1
+              && (typeof msg.content === "string" || Array.isArray(msg.content) && msg.content.length === 1)
               && kinds[0] === "skills.selected_skill_instructions";
             messages.push({
               role: msg.role,
               content,
               timestamp: now,
               ...(selectedSkill ? { origin: "codex_skill" as const } : {}),
-              ...(msg.role === "user" ? { qaContent: qaUserContent(msg, kinds) } : {}),
+              ...(msg.role === "user" ? qaUserContent(msg, kinds) : {}),
             });
             break;
           }
@@ -587,6 +595,12 @@ export function parseRequest(body: unknown): CodexParsedRequest {
 
       if (effectiveType === "function_call_output") {
         pendingReasoning.length = 0;
+        const delegation = readNativeThreadDelegation(item as Record<string, unknown>);
+        if (delegation) {
+          messages.push({ role: "agentMessage", author: delegation.sourceThreadId,
+            content: delegation.output, timestamp: now });
+          continue;
+        }
         const output = item as { call_id: string; output?: string | unknown[] };
         const toolInfo = findToolById(messages, output.call_id);
         const nativeDelegation = parseCodexDelegation(item);
@@ -645,7 +659,8 @@ export function parseRequest(body: unknown): CodexParsedRequest {
   // advertises ultra plus an older/direct caller can. Degrade it to max like upstream instead of
   // silently dropping reasoning altogether.
   const requestedEffort = data.reasoning?.effort === "ultra" ? "max" : data.reasoning?.effort;
-  if (requestedEffort && REASONING_EFFORTS.has(requestedEffort)) {
+  if (requestedEffort && (REASONING_EFFORTS.has(requestedEffort)
+    || (data.model.startsWith("chatgpt-web/") && parseChatGptSessionEffort(requestedEffort).explicit))) {
     options.reasoning = requestedEffort;
   }
   const summaryMode = data.reasoning?.summary;

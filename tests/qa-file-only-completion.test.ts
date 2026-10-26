@@ -20,13 +20,15 @@ function fixtureWorker(page: Page, root: string, baseUrl: string, options: {
   const mode = resolveChatGptWebModelMode(CHATGPT_WEB_MODEL_ID, "low", { ...capabilities, localToolsEnabled: options.localTools === true });
   let ready!: () => void;
   const readyForObservation = new Promise<void>(resolve => { ready = resolve; });
-  const config = {
-    appName: "file-only-fixture", browserHost: "launcher", useSavedChats: false,
+  const config: ResolvedBrowserConfig = {
+    appName: "file-only-fixture", browserHost: "launcher",
+    storageStatePath: join(root, "unused-state.json"), chromeExecutablePath: join(root, "unused-chrome"),
+    headed: false, autoApproveToolCalls: false,
     browserDiagnosticsPath: join(root, "diagnostics"),
     ...(options.downloadDirectory === false ? {} : { downloadDirectory: join(root, "downloads") }),
     ...(options.downloadBaseUrl === false ? {} : { downloadBaseUrl: baseUrl }),
     turnTimeoutMs: options.timeoutMs ?? 10_000,
-  } as ResolvedBrowserConfig;
+  };
   const worker = Object.assign(Object.create(ChatGptBrowserWorker.prototype), {
     config,
     prepareChatSurface: async () => {},
@@ -48,7 +50,10 @@ function fixtureWorker(page: Page, root: string, baseUrl: string, options: {
   const deltas: string[] = [];
   let released = false;
   const turn: BrowserTurn = {
-    traceId: "file-only-fixture", modelId: CHATGPT_WEB_MODEL_ID, reasoning: "low",
+    traceId: "file-only-fixture", modelId: CHATGPT_WEB_MODEL_ID, reasoning: "low", sessionMode: "temporary",
+    // This fixture invokes the inner response loop; the public run() method
+    // normally derives this absolute deadline from config.turnTimeoutMs.
+    recoveryDeadlineAt: Date.now() + (options.timeoutMs ?? 10_000),
     capabilities: { ...capabilities, localToolsEnabled: options.localTools === true },
     prepare: async () => ({ text: "Create a fixture CSV", images: [], release: () => { released = true; } }),
     onTextDelta: delta => { deltas.push(delta); },
@@ -153,91 +158,3 @@ realBrowserTest("vanished card at download time fails instead of publishing an e
     expect(await page.evaluate(() => (window as any).downloadClicks)).toBe(0);
   });
 }, 15_000);
-
-
-async function paperAnswerFixture(page: Page) {
-  await page.setContent(`<section id="turn" data-turn-key="fixture-current">
-    <div data-streaming-response-status>
-      <span hidden data-chatgpt-agent-turn-start></span>
-      <div role="status">Reading the paper</div>
-      <div data-markdown-text-style="assistant-message"><p>Checking the cited result.</p></div>
-    </div>
-    <div data-content-search-unit-key="fixture:1:assistant">
-      <h4 data-conversation-role="assistant">Assistant</h4>
-      <div id="answer" data-markdown-text-style="assistant-message">
-        <p data-start="0" data-end="99">Draft claim with <a href="https://example.org/draft">source</a>.</p>
-        <p data-start="100" data-end="150">Final paragraph.</p>
-      </div>
-    </div>
-    <button data-testid="copy-turn-action-button">Copy</button>
-  </section><button data-testid="stop-button">Stop</button>`);
-}
-
-realBrowserTest("papers waits for browser completion and emits the rewritten final text and citation exactly once", async () => {
-  await withFixture(async (page, root, baseUrl) => {
-    await paperAnswerFixture(page);
-    const { worker, turn, deltas, readyForObservation } = fixtureWorker(page, root, baseUrl);
-    turn.deferTextUntilComplete = true;
-    const reasoning: string[] = [], commentary: string[] = [];
-    turn.onReasoningSummary = text => reasoning.push(text);
-    turn.onCommentary = text => commentary.push(text);
-    let completed = false;
-    const answer = worker.runBrowserTurn(turn, undefined, page).then(text => { completed = true; return text; }, error => error);
-    await readyForObservation;
-    // Exceeds both incremental Markdown stability and the completion settle interval.
-    await page.waitForTimeout(2300);
-    expect(deltas).toEqual([]);
-    expect(completed).toBe(false);
-    expect(reasoning.join("")).toContain("Reading the paper");
-    expect(commentary.join("")).toContain("Checking the cited result.");
-    await page.locator('#answer p').first().evaluate(element => {
-      element.innerHTML = 'Corrected claim with <a href="https://example.org/final#evidence">source</a>.';
-    });
-    await page.locator('[data-testid="stop-button"]').evaluate(element => element.remove());
-    const result = await answer;
-    expect(result).toBe("Corrected claim with [source](https://example.org/final#evidence).\n\nFinal paragraph.");
-    expect(deltas).toEqual([result]);
-    expect(completed).toBe(true);
-  });
-}, 15_000);
-
-realBrowserTest("papers never publishes an unfinished answer or a failed completion", async () => {
-  await withFixture(async (page, root, baseUrl) => {
-    for (const failureKind of ["no-completion-evidence", "rejected-answer"]) {
-      await paperAnswerFixture(page);
-      await page.locator('[data-testid="stop-button"]').evaluate(element => element.remove());
-      if (failureKind === "no-completion-evidence") {
-        await page.locator('[data-testid="copy-turn-action-button"]').evaluate(element => element.remove());
-      } else {
-        await page.locator('#answer').evaluate(element => { element.innerHTML = '<p>api_tool unavailable</p>'; });
-      }
-      const { worker, turn, deltas, released } = fixtureWorker(page, root, baseUrl, { timeoutMs: 4500 });
-      turn.deferTextUntilComplete = true;
-      const failure = await worker.runBrowserTurn(turn, undefined, page).then(() => undefined, error => error);
-      expect(failure).toBeInstanceOf(Error);
-      expect(failure.message).toContain(failureKind === "no-completion-evidence" ? "timed out" : "api_tool unavailable");
-      expect(deltas).toEqual([]);
-      expect(released()).toBe(true);
-    }
-  });
-}, 20_000);
-
-realBrowserTest("ordinary QA and Full retain strict incremental Markdown consistency", async () => {
-  await withFixture(async (page, root, baseUrl) => {
-    for (const localTools of [false, true]) {
-      await paperAnswerFixture(page);
-      const { worker, turn, deltas, readyForObservation } = fixtureWorker(page, root, baseUrl, { localTools });
-      const result = worker.runBrowserTurn(turn, undefined, page).then(() => undefined, error => error);
-      await readyForObservation;
-      await page.waitForTimeout(1300);
-      expect(deltas.join("")).toContain("Draft claim with [source](https://example.org/draft).");
-      await page.locator('#answer p').first().evaluate(element => {
-        element.innerHTML = 'Corrected claim with <a href="https://example.org/final#evidence">source</a>.';
-      });
-      await page.locator('[data-testid="stop-button"]').evaluate(element => element.remove());
-      const failure = await result;
-      expect(failure).toMatchObject({ code: "browser_stream_inconsistent", retryable: false });
-      expect(deltas.join("")).not.toContain("Corrected claim");
-    }
-  });
-}, 20_000);

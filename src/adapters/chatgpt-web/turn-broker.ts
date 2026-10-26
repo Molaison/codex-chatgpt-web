@@ -1,3 +1,7 @@
+import { namespacedToolName } from "../../types";
+import { mcpInvocationId } from "./mcp-observation";
+import { nativeExecutionReceipt } from "./native-terminal-receipt";
+import { OperationJournal, operationRuntimeDirectory, operationDigest } from "./operation-journal";
 import { createHash, randomBytes } from "node:crypto";
 import { chmodSync, existsSync, lstatSync, mkdirSync, unlinkSync } from "node:fs";
 import { createConnection, createServer, type Server, type Socket } from "node:net";
@@ -47,6 +51,7 @@ export interface BrokerToolResult {
 
 interface PendingInvocation {
   request: BrokerToolRequest;
+  requestHash: string;
   queuedAt: number;
   deliveredAt?: number;
   resolve: (result: BrokerToolResult) => void;
@@ -97,9 +102,42 @@ interface SafeTurnControl {
   completionWaiters: Set<SafeWaiter<string>>;
 }
 
-interface TurnChannel {
+interface DurableToolCall {
+  requestId: string;
+  signature: string;
+  request: BrokerToolRequest;
+  state: "proposed" | "unknown" | "completed";
+  observerLost?: boolean;
+  publicDeliveryLost?: true;
+  delivery?: "unknown" | "sent";
+  reconciliation?: "receipt_query" | "native_handle_query";
+  result?: BrokerToolResult;
+  resultHash?: string;
+}
+interface DurableToolChannel {
+  version: 1;
+  observationIngressHash?: string;
+  receiptRecovery?: true;
+  receiptContinuation?: {
+    acceptedResults: Record<string, string>;
+    environmentHash: string;
+    resumed: boolean;
+  };
   traceId: string;
+  tokenHash: string;
+  bindingHash?: string;
+  expiresAt?: number;
+  calls: Record<string, DurableToolCall>;
+  observationState?: { activeActivityRefs: string[]; revision: number };
+}
+interface TurnChannel {
+  durable: DurableToolChannel;
+  invokePromises: Map<string, Promise<BrokerToolResult>>;
+  invokeObservers: Map<string, Set<AbortSignal>>;
+  traceId: string;
+  tokenHash: string;
   externalOwner: boolean;
+  ingressToken?: string;
   environment: PendingTurn;
   bindingId?: string;
   queuedCallIds: string[];
@@ -133,12 +171,19 @@ interface BrokerRequest {
     | "release"
     | "invoke"
     | "owner_status"
+    | "owner_release_status"
+    | "owner_invocation_receipt"
+    | "read_tool_receipt"
+    | "public_delivery_lost"
+    | "owner_receipt_recovery"
+    | "owner_receipt_resume"
     | "owner_register"
     | "owner_register_safe"
     | "owner_update"
     | "owner_safe_sent"
     | "owner_next"
     | "owner_complete"
+    | "owner_recovery_rotate"
     | "owner_completion_fence_begin"
     | "owner_completion_fence_commit"
     | "owner_wait_retirement"
@@ -153,6 +198,12 @@ interface BrokerRequest {
     | "submit_compaction_handoff";
   token?: string;
   bindingId?: string;
+  /** Logical MCP identity, independent of the connection's transport request id. */
+  invocationId?: string;
+  rpcId?: string | number;
+  acceptedResults?: Record<string, string>;
+  retryReadOnly?: boolean;
+  recoveryToken?: string;
   wireName?: string;
   freeform?: boolean;
   arguments?: Record<string, unknown>;
@@ -169,6 +220,7 @@ interface BrokerRequest {
   surfaceNonce?: string;
   finalAnswer?: string;
   contract?: "native" | "safe";
+  termination?: TurnTerminationDiagnostic;
   failure?: BrokerRetirementFailure;
 }
 
@@ -176,6 +228,25 @@ interface BrokerResponse {
   id: string;
   result?: unknown;
   error?: string;
+}
+
+const terminationSources = ["broker.revoke", "owner_rpc", "mcp.release", "broker.ttl", "broker.close",
+  "runtime.drain", "runtime.trace_cancel", "runtime.cancel", "runtime.failure", "runtime.prepare",
+  "runtime.retire", "runtime.browser_outcome", "compaction.cleanup", "launcher.cancel", "launcher.lease"] as const;
+const terminationReasons = ["explicit_revoke", "cancelled", "failure", "completed", "ttl_expired",
+  "shutdown", "drain", "lease_expired", "cleanup"] as const;
+export interface TurnTerminationDiagnostic {
+  source: typeof terminationSources[number];
+  reason: typeof terminationReasons[number];
+}
+const runtimeInstanceId = opaqueId("runtime");
+function terminationDiagnostic(value: unknown, fallback: TurnTerminationDiagnostic): TurnTerminationDiagnostic {
+  if (!value || typeof value !== "object") return fallback;
+  const candidate = value as Partial<TurnTerminationDiagnostic>;
+  return {
+    source: terminationSources.includes(candidate.source!) ? candidate.source! : fallback.source,
+    reason: terminationReasons.includes(candidate.reason!) ? candidate.reason! : fallback.reason,
+  };
 }
 
 const brokers = new Map<string, TurnBroker>();
@@ -275,6 +346,11 @@ function assertSurfaceNonce(value: unknown): asserts value is string {
   }
 }
 
+export interface CompletedReceiptRecovery {
+  token: string;
+  receipts: Array<{ request: BrokerToolRequest; result: BrokerToolResult; resultHash: string }>;
+}
+
 export interface TurnBrokerOwner {
   register(environment: ChatGptTurnEnvironment, ttlMs?: number, traceId?: string): Promise<string>;
   registerSafe(
@@ -294,10 +370,13 @@ export interface TurnBrokerOwner {
   waitForSafeCompletion(token: string, signal?: AbortSignal): Promise<string>;
   requestCompaction(token: string, queuedResult: BrokerToolResult): number | Promise<number>;
   compactionDeliveryCount(token: string): number | Promise<number>;
+  recoverCompletedReceipts?(token: string, acceptedResults: Record<string, string>, retryReadOnly?: boolean): CompletedReceiptRecovery | undefined | Promise<CompletedReceiptRecovery | undefined>;
+  resumeAfterReceiptRecovery?(token: string, recoveryToken: string, acceptedResults: Record<string, string>): boolean | Promise<boolean>;
+  rotateForRecovery?(token: string): string | undefined | Promise<string | undefined>;
   beginCompletionFence(token: string): number | undefined | Promise<number | undefined>;
   commitCompletionFence(token: string, revision: number): boolean | Promise<boolean>;
   waitForRetirement(token: string, signal?: AbortSignal): Promise<BrokerRetirementFailure | undefined>;
-  revoke(token: string, reason?: Error): void | Promise<void>;
+  revoke(token: string, reason?: Error, diagnostic?: TurnTerminationDiagnostic): void | Promise<void>;
 }
 
 /**
@@ -318,6 +397,7 @@ export class TurnBroker implements TurnBrokerOwner {
   }
 
   private readonly channels = new Map<string, TurnChannel>();
+  private readonly recoveryIngress = new Map<string, string>();
   private readonly pending = new Map<string, TurnChannel>();
   private readonly compactionTransactions = new CompactionTransactionStore();
   private readonly bindings = new Map<string, { token: string; channel: TurnChannel }>();
@@ -333,7 +413,204 @@ export class TurnBroker implements TurnBrokerOwner {
   private startPromise?: Promise<void>;
   private socketIdentity?: { dev: number; ino: number };
 
-  private constructor(readonly socketPath: string) {}
+  private readonly journal: OperationJournal;
+  private constructor(readonly socketPath: string) {
+    this.journal = new OperationJournal(operationRuntimeDirectory(undefined, socketPath), "tool-operations");
+  }
+
+  private checkpoint(channel: TurnChannel): void {
+    channel.durable.observationState = { activeActivityRefs: [...channel.activities].map(operationDigest).sort(), revision: channel.activityRevision };
+    this.journal.write(channel.durable.tokenHash, channel.durable);
+  }
+
+  private archiveRetiredChannel(channel: TurnChannel): void {
+    if (channel.activities.size || channel.invocations.size || channel.queuedCallIds.length
+      || channel.deliveredCallIds.size || this.nativeSessions(channel.durable).open.size) return;
+    for (const call of Object.values(channel.durable.calls)) {
+      if (call.state !== "completed" || !call.result || call.resultHash !== operationDigest(JSON.stringify(call.result))
+        || call.observerLost && !call.reconciliation) return;
+      // An accepted RPC is not proof that an asynchronous command/gateway stopped. Keep any
+      // unsupported native lifetime in active inventory; its original receipts remain intact.
+      const receipt = nativeExecutionReceipt(call.result);
+      if (["exec_command", "write_stdin"].includes(call.request.wireName) && receipt.state === "unknown"
+        || ["exec", "wait"].includes(call.request.wireName) && receipt.state !== "terminal") return;
+    }
+    this.journal.archive(channel.durable.tokenHash);
+    if (channel.bindingId) this.journal.archive(`binding:${operationDigest(channel.bindingId)}`);
+    if (channel.ingressToken) this.journal.archive(`ingress:${operationDigest(channel.ingressToken)}`);
+  }
+
+  releaseStatus(): Record<string, number> {
+    const counts = { durable_live_turns:[...this.channels.values()].filter(c=>!c.completionCommitted).length,
+      durable_unknown_calls:0,durable_native_continuations:0,durable_active_mcp_requests:0,durable_inventory_errors:0 };
+    try {
+      const records=this.journal.readAll<Partial<DurableToolChannel> & {ownerTokenHash?:string}>();
+      const channels=new Set<string>(), references:string[]=[];
+      for (const record of records) {
+        if (!record || typeof record !== "object") throw new Error("Invalid inventory");
+        if (!record.calls) {
+          // Binding and ingress indexes refer to the primary receipt; they are not executions.
+          if ((Object.keys(record).length===1 && /^[a-f0-9]{64}$/.test(record.tokenHash ?? ""))
+            || (record.version===1 && /^[a-f0-9]{64}$/.test(record.ownerTokenHash ?? "")
+              && typeof record.traceId === "string" && Object.keys(record).length===3)) {
+            references.push(record.ownerTokenHash ?? record.tokenHash!); continue;
+          }
+          throw new Error("Unrecognized inventory record");
+        }
+        if (record.version!==1 || !/^[a-f0-9]{64}$/.test(record.tokenHash ?? "") || Array.isArray(record.calls)
+          || !record.observationState || !Array.isArray(record.observationState.activeActivityRefs)) throw new Error("Invalid channel inventory");
+        channels.add(record.tokenHash!);
+        counts.durable_active_mcp_requests += record.observationState.activeActivityRefs.length;
+        for (const call of Object.values(record.calls)) {
+          if (!call || !call.request || !["proposed","unknown","completed"].includes(call.state)) throw new Error("Invalid call inventory");
+          if (call.state!=="completed" || (call.observerLost && !call.reconciliation)) counts.durable_unknown_calls++;
+          if (call.state==="completed") {
+            if (!call.result || call.resultHash!==operationDigest(JSON.stringify(call.result))) throw new Error("Invalid retained receipt");
+            if (["exec_command","write_stdin"].includes(call.request.wireName) && !call.request.freeform
+              && nativeExecutionReceipt(call.result).state==="unknown") counts.durable_unknown_calls++;
+          }
+        }
+        counts.durable_native_continuations += this.nativeSessions(record as DurableToolChannel).open.size;
+      }
+      if (references.some(reference=>!channels.has(reference))) throw new Error("Missing primary receipt");
+    } catch { counts.durable_inventory_errors++; }
+    return counts;
+  }
+
+  /** Read-only proof from the original dead local owner. Never restores a token/binding or reconciles a call. */
+  inspectRetainedObservation(tokenHash: string, traceId: string, deliveredToolResults: Record<string, string>): { digest: string; bindingHash?: string } {
+    const retain = (reason: string): never => { throw new Error(`Full observation retained: ${reason}`); };
+    if (!/^[a-f0-9]{64}$/.test(tokenHash)) return retain("invalid channel reference");
+    const ingress = this.journal.read<{ version: 1; ownerTokenHash: string; traceId: string }>(`ingress:${tokenHash}`);
+    const ownerHash = ingress?.ownerTokenHash ?? tokenHash;
+    if (!/^[a-f0-9]{64}$/.test(ownerHash) || (ingress && (ingress.version !== 1 || ingress.traceId !== traceId))) return retain("invalid recovery channel link");
+    if ([...this.channels.values()].some(channel => channel.durable.tokenHash === ownerHash)) return retain("original tool owner is still live");
+    const record = this.journal.read<DurableToolChannel>(ownerHash);
+    if (!record || record.version !== 1 || record.tokenHash !== ownerHash || record.traceId !== traceId
+      || (record.observationIngressHash ?? ownerHash) !== tokenHash
+      || !record.observationState || !Array.isArray(record.observationState.activeActivityRefs)
+      || record.observationState.activeActivityRefs.length !== 0 || !Number.isSafeInteger(record.observationState.revision)
+      || (record.bindingHash !== undefined && !/^[a-f0-9]{64}$/.test(record.bindingHash))) return retain("original binding/activity proof is unavailable");
+    if (record.bindingHash && this.journal.read<{ tokenHash: string }>(`binding:${record.bindingHash}`)?.tokenHash !== ownerHash) return retain("original binding link changed or is missing");
+    const calls = Object.entries(record.calls);
+    if (calls.length !== Object.keys(deliveredToolResults).length || (calls.length && !record.bindingHash)) return retain("original round receipts do not match the native binding");
+    const openSessions = new Set<number>();
+    for (const [id, call] of calls) {
+      if (call.state !== "completed" || !call.result || call.resultHash !== operationDigest(JSON.stringify(call.result))
+        || deliveredToolResults[id] !== call.resultHash || (call.observerLost && !call.reconciliation)) return retain("native execution or result delivery remains unknown");
+      if (!["exec_command", "write_stdin"].includes(call.request.wireName) || call.request.freeform) return retain("tool lifetime has no supported terminal proof");
+      const receipt = nativeExecutionReceipt(call.result);
+      if (receipt.state === "unknown") return retain("native terminal receipt is unsupported or ambiguous");
+      if (receipt.state === "running") openSessions.add(receipt.sessionId);
+      else if (call.request.wireName === "write_stdin" && Number.isSafeInteger(call.request.arguments?.session_id)) {
+        openSessions.delete(Number(call.request.arguments!.session_id));
+      }
+    }
+    if (openSessions.size) return retain("a native process still has an unclosed session handle");
+    return { digest: operationDigest(JSON.stringify(record)), ...(record.bindingHash ? { bindingHash: record.bindingHash } : {}) };
+  }
+
+  private replayInvocation(channel: DurableToolChannel, request: BrokerRequest): BrokerToolResult {
+    const call = Object.values(channel.calls).find(call => call.requestId === this.invocationIdentity(request));
+    if (call && call.signature !== this.invocationSignature(request)) throw new Error("Tool request identity conflicts with its accepted invocation");
+    if (call?.state === "completed" && call.result) {
+      this.reconcileReceipt(channel, call);
+      return call.result;
+    }
+    throw new Error(`${retiredTurnLabel(channel.traceId)} has already finished; this Codex Native action can no longer run. Tool execution retained with unknown outcome. Reconcile the original native handle, do not redispatch`);
+  }
+
+  private invocationIdentity(request: BrokerRequest): string {
+    return operationDigest(request.invocationId ?? request.id);
+  }
+
+  private reconcileReceipt(channel: DurableToolChannel, call: DurableToolCall): DurableToolChannel {
+    if (!call.observerLost || call.reconciliation) return channel;
+    const next = { ...channel, calls: { ...channel.calls, [call.request.callId]: {
+      ...call, reconciliation: "receipt_query" as const, delivery: "unknown" as const,
+    } } };
+    // An explicit same-receipt query reconciles the operation; it is not a remote delivery ACK.
+    this.journal.write(next.tokenHash, next);
+    return next;
+  }
+
+  private invocationSignature(request: BrokerRequest): string {
+    const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical)
+      : value && typeof value === "object" ? Object.fromEntries(Object.entries(value)
+        .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, value]) => [key, canonical(value)])) : value;
+    return operationDigest(JSON.stringify(canonical([request.wireName?.trim(), request.freeform === true,
+      request.freeform === true ? request.input ?? "" : request.arguments ?? {}])));
+  }
+
+  private observeInvocation(channel: TurnChannel, requestId: string,
+    invocation: Promise<BrokerToolResult>, signal?: AbortSignal): Promise<BrokerToolResult> {
+    if (!signal) return invocation;
+    let observers = channel.invokeObservers.get(requestId);
+    if (!observers) channel.invokeObservers.set(requestId, observers = new Set());
+    observers.add(signal);
+    const detached = () => {
+      observers.delete(signal);
+      const call = Object.values(channel.durable.calls).find(call => call.requestId === requestId);
+      if (observers.size || !call || call.state === "completed" || call.observerLost) return;
+      // Transport loss is not native completion. Preserve the original owner, but fence new
+      // automatic side effects even when the next MCP request uses a fresh RPC identity.
+      call.observerLost = true;
+      call.delivery = "unknown";
+      try { this.checkpoint(channel); }
+      catch (error) {
+        // The earlier pre-dispatch checkpoint is still fail-closed after restart. Keep the live
+        // fence too; loss of storage cannot authorize another invocation.
+        const code = (error as NodeJS.ErrnoException)?.code;
+        console.error(`[chatgpt-web] tool_observer_checkpoint_failed ${JSON.stringify({ traceId: channel.traceId,
+          requestRef: requestId, recovery: "retained", ...(typeof code === "string" && /^[A-Z0-9_]+$/.test(code) ? { code } : {}) })}`);
+      }
+    };
+    signal.addEventListener("abort", detached, { once: true });
+    if (signal.aborted) detached();
+    return invocation.finally(() => {
+      signal.removeEventListener("abort", detached);
+      observers.delete(signal);
+      if (!observers.size) channel.invokeObservers.delete(requestId);
+    });
+  }
+
+  private isKnownHandlePoll(channel: DurableToolChannel, request: BrokerRequest): boolean {
+    // Freeform programs cannot prove an empty native poll without executing them. Do not
+    // interpret arbitrary JS or trust a caller's readOnly hint at the retained-action fence.
+    if (request.freeform || request.wireName?.trim() !== "write_stdin") return false;
+    const args = request.arguments ?? {};
+    if (args.chars !== undefined && args.chars !== "") return false;
+    if (!Number.isSafeInteger(args.session_id) || (args.session_id as number) < 0) return false;
+    if (Object.keys(args).some(key => !["session_id", "chars", "yield_time_ms", "max_output_tokens"].includes(key))) return false;
+    if (args.yield_time_ms !== undefined && (!Number.isSafeInteger(args.yield_time_ms)
+      || (args.yield_time_ms as number) < 250 || (args.yield_time_ms as number) > 60_000)) return false;
+    return this.nativeSessions(channel).open.has(Number(args.session_id));
+  }
+
+  private completedCallHasSession(call: DurableToolCall, sessionId: unknown): boolean {
+    if (call.state !== "completed" || !call.result || call.result.isError) return false;
+    if (!["exec_command", "write_stdin", "exec"].includes(call.request.wireName)) return false;
+    const receipt = nativeExecutionReceipt(call.result);
+    return receipt.state === "running" && receipt.sessionId === sessionId;
+  }
+
+  private diagnostic(
+    event: "registered" | "queued" | "delivered" | "toolCompleted" | "completionCommitted" | "retired",
+    channel: TurnChannel,
+    details: { requestHash?: string; callId?: string; deliveryPath?: string; termination?: TurnTerminationDiagnostic } = {},
+  ): void {
+    console.info("[chatgpt-web] " + (event === "retired" ? "broker_retired" : "broker_lifecycle") + " " + JSON.stringify({
+      event, runtimeInstanceId, pid: process.pid, brokerHash: handleFingerprint(this.socketPath),
+      traceId: channel.traceId, tokenHash: channel.tokenHash, externalOwner: channel.externalOwner,
+      pendingTools: channel.invocations.size, queuedTools: channel.queuedCallIds.length,
+      deliveredTools: channel.deliveredCallIds.size, activeMcpRequests: channel.activities.size,
+      completionCommitted: channel.completionCommitted, activityRevision: channel.activityRevision,
+      ...(details.requestHash ? { requestHash: details.requestHash } : {}),
+      ...(details.callId ? { callRef: handleFingerprint(details.callId) } : {}),
+      ...(details.deliveryPath ? { deliveryPath: details.deliveryPath } : {}),
+      ...(details.termination ? terminationDiagnostic(details.termination, { source: "broker.revoke", reason: "explicit_revoke" }) : {}),
+    }));
+  }
 
   /**
    * A ChatGPT turn outlives the request that started it, and its Codex Native calls arrive from a
@@ -362,7 +639,12 @@ export class TurnBroker implements TurnBrokerOwner {
     }
     const token = opaqueId(handlePrefix);
     const channel: TurnChannel = {
+      durable: { version: 1, traceId, tokenHash: operationDigest(token), calls: {},
+        ...(ttlMs !== undefined ? { expiresAt: Date.now() + ttlMs } : {}) },
+      invokePromises: new Map(),
+      invokeObservers: new Map(),
       traceId,
+      tokenHash: handleFingerprint(token),
       externalOwner,
       environment: {
         ...environment,
@@ -381,8 +663,10 @@ export class TurnBroker implements TurnBrokerOwner {
       completionCommitted: false,
       retirementWaiters: new Set(),
     };
+    this.checkpoint(channel);
     this.channels.set(token, channel);
     this.pending.set(token, channel);
+    this.diagnostic("registered", channel);
     console.info(`[chatgpt-web] broker trace=${traceId} registered tokenHash=${handleFingerprint(token)}`);
     return token;
   }
@@ -472,6 +756,7 @@ export class TurnBroker implements TurnBrokerOwner {
     // observer disconnects after the broker handed off a batch but before the adapter journaled
     // it, the exact reconnect receives the same call ids instead of losing the model's invocation.
     const delivered = [...channel.deliveredCallIds]
+      .filter(id => !channel.durable.calls[id]?.observerLost)
       .map(id => channel.invocations.get(id)?.request)
       .filter((request): request is BrokerToolRequest => Boolean(request));
     if (delivered.length > 0) {
@@ -483,6 +768,9 @@ export class TurnBroker implements TurnBrokerOwner {
       this.logToolDelivery(channel, ready, "immediate");
       return ready;
     }
+    // Losing an MCP observer fences dispatch, not the owning browser turn. Keep this owner
+    // wait alive while the original invocation settles or an exact receipt is reconciled.
+    // takeQueued and invoke still prevent this wait from authorizing another side effect.
     if (signal?.aborted) throw new DOMException("tool wait aborted", "AbortError");
     return new Promise<BrokerToolRequest[]>((resolveWait, rejectWait) => {
       const waiter: ToolWaiter = { resolve: resolveWait, reject: rejectWait, ...(signal ? { signal } : {}) };
@@ -500,12 +788,18 @@ export class TurnBroker implements TurnBrokerOwner {
   completeTool(token: string, callId: string, result: BrokerToolResult): void {
     this.prune();
     const channel = this.channels.get(token);
-    if (!channel) throw new Error("turn token is invalid or expired");
+    if (!channel) {
+      const saved = this.journal.read<DurableToolChannel>(operationDigest(token));
+      const call = saved?.calls[callId];
+      if (call?.state === "completed" && call.resultHash === operationDigest(JSON.stringify(result))) return;
+      if (saved) throw new Error("Tool execution retained; completion cannot authorize redispatch or replace an unknown result");
+      throw new Error("turn token is invalid or expired");
+    }
     this.assertSafeHarnessRunning(channel, true);
     if (channel.completionCommitted) throw new Error("Codex turn completion is already committed");
     const invocation = channel.invocations.get(callId);
     if (!invocation) {
-      const accepted = channel.completedToolResults.get(callId);
+      const accepted = channel.completedToolResults.get(callId) ?? channel.durable.calls[callId]?.resultHash;
       if (accepted === undefined) throw new Error(`tool call is not pending: ${callId}`);
       const replay = createHash("sha256").update(JSON.stringify(result)).digest("hex");
       if (replay !== accepted) throw new Error(`tool completion conflicts with the accepted result: ${callId}`);
@@ -514,10 +808,26 @@ export class TurnBroker implements TurnBrokerOwner {
     if (!channel.deliveredCallIds.has(callId)) {
       throw new Error(`tool call was completed before it was delivered: ${callId}`);
     }
-    // Serialize before mutating pending state, and retain only a digest rather than tool output.
+    // Persist the exact private result before ACK, including any native recovery handle.
     const accepted = createHash("sha256").update(JSON.stringify(result)).digest("hex");
+    const receipt = channel.durable.calls[callId]!;
+    const completed = { ...receipt, state: "completed" as const, result, resultHash: accepted, delivery: "unknown" as const };
+    const calls = { ...channel.durable.calls, [callId]: completed };
+    if (!result.isError && this.isKnownHandlePoll(channel.durable, { id: receipt.requestId, method: "invoke", ...receipt.request })) {
+      for (const [id, previous] of Object.entries(channel.durable.calls)) {
+        if (id !== callId && previous.observerLost && !previous.reconciliation
+          && this.completedCallHasSession(previous, receipt.request.arguments?.session_id)) {
+          calls[id] = { ...previous, reconciliation: "native_handle_query", delivery: "unknown" };
+        }
+      }
+    }
+    const next = { ...channel.durable, calls };
+    this.journal.write(next.tokenHash, next); // Result and native handles survive before ACK.
+    channel.durable = next;
     channel.deliveredCallIds.delete(callId);
     channel.invocations.delete(callId);
+    channel.invokePromises.delete(receipt.requestId);
+    this.diagnostic("toolCompleted", channel, { callId, requestHash: invocation.requestHash });
     channel.completedToolResults.set(callId, accepted);
     while (channel.completedToolResults.size > MAX_COMPLETED_TOOL_RECEIPTS) {
       const oldest = channel.completedToolResults.keys().next();
@@ -526,6 +836,179 @@ export class TurnBroker implements TurnBrokerOwner {
     }
     console.info(`[chatgpt-web] broker trace=${channel.traceId} completed call=${callId.slice(0, 17)} pending=${channel.invocations.size} isError=${result.isError === true}`);
     invocation.resolve(result);
+  }
+
+  /** A public disconnect cannot authorize execution. Match its exact admitted RPC only. */
+  private notePublicDeliveryLost(request: BrokerRequest): { recorded: boolean } {
+    const owner = request.token && (this.recoveryIngress.get(request.token) ?? request.token);
+    const channel = owner ? this.channels.get(owner) : undefined;
+    if (!channel || channel.safe || channel.completionCommitted || !channel.bindingId
+      || (channel.ingressToken ?? owner) !== request.token
+      || !["string", "number"].includes(typeof request.rpcId)) return { recorded: false };
+    const matches = Object.values(channel.durable.calls).filter(call => (!request.wireName || call.request.wireName === request.wireName)
+      && call.requestId === operationDigest(mcpInvocationId(channel.bindingId!, request.rpcId!, call.request.wireName)));
+    if (matches.length !== 1) return { recorded:false };
+    const call=matches[0]!;
+    call.publicDeliveryLost = true;
+    this.checkpoint(channel);
+    console.info(`[chatgpt-web] public_delivery_lost=${JSON.stringify({ trace: channel.traceId,
+      call_ref: operationDigest(call.request.callId), native_redispatch: false })}`);
+    return { recorded: true };
+  }
+
+  recoverCompletedReceipts(token: string, acceptedResults: Record<string, string>, retryReadOnly = false): CompletedReceiptRecovery | undefined {
+    this.prune();
+    const channel = this.channels.get(token);
+    if (!channel || channel.safe || channel.completionCommitted || (channel.durable.receiptRecovery && !retryReadOnly
+        && !Object.values(channel.durable.calls).some(call => call.publicDeliveryLost
+          && !channel.durable.receiptContinuation?.acceptedResults[call.request.callId]))
+      || channel.invocations.size || channel.activities.size || channel.queuedCallIds.length || channel.deliveredCallIds.size) return undefined;
+    const calls = Object.values(channel.durable.calls);
+    if (!calls.length || !calls.some(call => call.publicDeliveryLost)
+      || calls.length !== Object.keys(acceptedResults).length) return undefined;
+    if (!this.acceptedRecoveryCalls(channel, acceptedResults)) return undefined;
+    const ingress = opaqueId("turn");
+    const ingressHash = operationDigest(ingress);
+    this.journal.write(`ingress:${ingressHash}`, { version: 1, ownerTokenHash: channel.durable.tokenHash, traceId: channel.traceId });
+    channel.durable = { ...channel.durable, receiptRecovery: true, observationIngressHash: ingressHash,
+      receiptContinuation: { acceptedResults: { ...acceptedResults },
+        environmentHash: this.recoveryEnvironmentHash(channel), resumed: false } };
+    // The owner must accept the reconstructed context before the fresh page gets execution.
+    // Old bindings retain exact-result query access, never admission to new calls.
+    this.checkpoint(channel);
+    if (channel.bindingId) {
+      this.bindings.delete(channel.bindingId);
+      this.journal.archive(`binding:${operationDigest(channel.bindingId)}`);
+    }
+    channel.bindingId = undefined;
+    if (channel.ingressToken) {
+      this.recoveryIngress.delete(channel.ingressToken);
+      this.journal.archive(`ingress:${operationDigest(channel.ingressToken)}`);
+    }
+    channel.ingressToken = ingress;
+    this.recoveryIngress.set(ingress, token);
+    console.info(`[chatgpt-web] receipt_context_recovery=${JSON.stringify({ trace: channel.traceId,
+      receipts: calls.map(call => ({ call_ref: operationDigest(call.request.callId), result_hash: call.resultHash })), native_redispatch: false })}`);
+    return { token: ingress, receipts: calls.map(call => ({ request: structuredClone(call.request),
+      result: structuredClone(call.result!), resultHash: call.resultHash! })) };
+  }
+
+  private recoveryEnvironmentHash(channel: TurnChannel): string {
+    return operationDigest(JSON.stringify([environmentIdentity(channel.environment), channel.environment.tools]));
+  }
+
+  private acceptedRecoveryCalls(channel: TurnChannel, accepted: Record<string, string>): boolean {
+    const calls = Object.values(channel.durable.calls);
+    return calls.length > 0 && calls.length === Object.keys(accepted).length && calls.every(call => {
+      if (call.state !== "completed" || !call.result || !call.resultHash
+        || call.resultHash !== operationDigest(JSON.stringify(call.result))
+        || accepted[call.request.callId] !== call.resultHash
+        || (call.observerLost && !call.reconciliation)) return false;
+      if (["exec_command", "write_stdin"].includes(call.request.wireName)) {
+        return !call.request.freeform && nativeExecutionReceipt(call.result).state !== "unknown";
+      }
+      // Arbitrary exec programs may yield nested asynchronous work. Do not infer their
+      // lifetime from a completed outer RPC. Declared synchronous/custom tool results
+      // (including apply_patch and failures) are themselves the accepted call outcome.
+      const declared = channel.environment.tools.find(tool => namespacedToolName(tool.namespace, tool.name) === call.request.wireName
+        && (tool.freeform === true) === call.request.freeform);
+      return !!declared && !["exec", "wait"].includes(declared.name);
+    });
+  }
+
+  resumeAfterReceiptRecovery(token: string, recoveryToken: string, acceptedResults: Record<string, string>): boolean {
+    this.prune();
+    const channel = this.channels.get(token);
+    const recovery = channel?.durable.receiptContinuation;
+    if (!channel || !recovery || channel.ingressToken !== recoveryToken || channel.completionCommitted
+      || channel.compactionRequested || channel.invocations.size || channel.activities.size
+      || recovery.environmentHash !== this.recoveryEnvironmentHash(channel)
+      || !this.acceptedRecoveryCalls(channel, acceptedResults)
+      || Object.keys(recovery.acceptedResults).length !== Object.keys(acceptedResults).length
+      || Object.entries(recovery.acceptedResults).some(([id, hash]) => acceptedResults[id] !== hash)) return false;
+    channel.durable = { ...channel.durable, receiptContinuation: { ...recovery, resumed: true } };
+    this.checkpoint(channel);
+    return true;
+  }
+
+  /** Terminal handle evidence dominates late running replies from concurrent polls. */
+  private nativeSessions(channel: DurableToolChannel): { open: Set<number>; closed: Set<number> } {
+    const open = new Set<number>(), closed = new Set<number>();
+    for (const call of Object.values(channel.calls)) {
+      if (call.state !== "completed" || !call.result
+        || !["exec_command", "write_stdin"].includes(call.request.wireName) || call.request.freeform) continue;
+      const receipt = nativeExecutionReceipt(call.result);
+      if (receipt.state === "terminal" && call.request.wireName === "write_stdin"
+        && Number.isSafeInteger(call.request.arguments?.session_id)) {
+        const id = Number(call.request.arguments!.session_id);
+        closed.add(id); open.delete(id);
+      } else if (receipt.state === "running") {
+        if (call.request.wireName === "exec_command") closed.delete(receipt.sessionId);
+        if (!closed.has(receipt.sessionId)) open.add(receipt.sessionId);
+      }
+    }
+    return { open, closed };
+  }
+
+  private assertReceiptContinuation(channel: TurnChannel, request: BrokerRequest): void {
+    const recovery = channel.durable.receiptContinuation;
+    if (!recovery?.resumed || recovery.environmentHash !== this.recoveryEnvironmentHash(channel)) {
+      throw new Error("Native execution is closed until the owner accepts receipt recovery under the current permissions");
+    }
+    if (!channel.environment.tools.some(tool => namespacedToolName(tool.namespace, tool.name) === request.wireName?.trim()
+      && (tool.freeform === true) === (request.freeform === true))) {
+      throw new Error("Native continuation tool is not authorized in the current turn");
+    }
+    const original = Object.keys(recovery.acceptedResults).map(id => channel.durable.calls[id]!);
+    const emptyPoll = this.isKnownHandlePoll(channel.durable, request);
+    if (!emptyPoll && original.some(call => this.recoveryActionSignature(call.request) === this.recoveryActionSignature(request))) {
+      throw new Error("Recovered action is already accepted; query its original receipt, never repeat its side effects");
+    }
+    if (request.wireName?.trim() === "write_stdin") {
+      const session = request.arguments?.session_id;
+      if (this.nativeSessions(channel.durable).closed.has(Number(session))) {
+        throw new Error("Native session is already terminal; query the retained receipt");
+      }
+      if (original.some(call => this.completedCallHasSession(call, session)) && !emptyPoll) {
+        const polled = Object.values(channel.durable.calls).some(call => !recovery.acceptedResults[call.request.callId]
+          && call.state === "completed" && call.request.wireName === "write_stdin"
+          && call.request.arguments?.session_id === session
+          && (call.request.arguments?.chars ?? "") === ""
+          && call.result && nativeExecutionReceipt(call.result).state !== "unknown");
+        if (!polled) throw new Error("Recover the original native handle with a short empty poll before sending new stdin");
+      }
+    }
+  }
+
+  private recoveryActionSignature(request: Pick<BrokerRequest, "wireName" | "freeform" | "input" | "arguments">): string {
+    // Poll/output budgets do not make a repeated command or stdin side effect a new step.
+    const args = { ...request.arguments };
+    if (["exec_command", "write_stdin"].includes(request.wireName?.trim() ?? "")) {
+      delete args.yield_time_ms; delete args.max_output_tokens;
+    }
+    return this.invocationSignature({ id: "recovery", method: "invoke", ...request, arguments: args });
+  }
+
+  /** Rotate only a channel which has NEVER admitted an MCP action. Owner/poll identity stays stable. */
+  rotateForRecovery(token: string): string | undefined {
+    this.prune();
+    const channel = this.channels.get(token);
+    if (!channel || channel.safe || channel.completionCommitted || channel.activityRevision !== 0
+      || channel.invocations.size || channel.activities.size || Object.keys(channel.durable.calls).length) return undefined;
+    const ingress = opaqueId("turn");
+    // Keep dead-owner observation attached to the stable native journal, not a parallel channel.
+    const ingressHash = operationDigest(ingress);
+    this.journal.write(`ingress:${ingressHash}`, { version: 1, ownerTokenHash: channel.durable.tokenHash, traceId: channel.traceId });
+    channel.durable = { ...channel.durable, observationIngressHash: ingressHash };
+    // Checkpoint the unchanged zero-dispatch boundary before exposing a new browser capability.
+    this.checkpoint(channel);
+    if (channel.ingressToken) {
+      this.recoveryIngress.delete(channel.ingressToken);
+      this.journal.archive(`ingress:${operationDigest(channel.ingressToken)}`);
+    }
+    channel.ingressToken = ingress;
+    this.recoveryIngress.set(ingress, token);
+    return ingress;
   }
 
   beginCompletionFence(token: string): number | undefined {
@@ -550,6 +1033,7 @@ export class TurnBroker implements TurnBrokerOwner {
       || channel.invocations.size > 0) return false;
     channel.completionCommitted = true;
     channel.completionRevision = revision;
+    this.diagnostic("completionCommitted", channel);
     console.info(
       `[chatgpt-web] broker trace=${channel.traceId} committed browser completion revision=${revision}`,
     );
@@ -700,15 +1184,22 @@ export class TurnBroker implements TurnBrokerOwner {
     return this.waitForSafeState(safe.completionWaiters, signal, "Zero Risk turn completion wait aborted");
   }
 
-  revoke(token: string, reason = new Error("Codex turn binding was revoked"), failure?: BrokerRetirementFailure): void {
+  revoke(token: string, reason = new Error("Codex turn binding was revoked"), detail?: BrokerRetirementFailure | TurnTerminationDiagnostic): void {
+    const failure = detail && "source" in detail ? undefined : detail;
+    const diagnostic = detail && "source" in detail ? detail : { source: "broker.revoke", reason: "explicit_revoke" } as const;
     const channel = this.channels.get(token);
     if (!channel) return;
     const diagnostics = retirementDiagnostics(channel);
     console.info(`[chatgpt-web] broker_retired ${JSON.stringify({
       ...diagnostics,
+      event: "retired", runtimeInstanceId, pid: process.pid,
+      brokerHash: handleFingerprint(this.socketPath), tokenHash: channel.tokenHash,
+      externalOwner: channel.externalOwner, activityRevision: channel.activityRevision,
+      ...terminationDiagnostic(diagnostic, { source: "broker.revoke", reason: "explicit_revoke" }),
       ...(failure ? { failure } : {}),
     })}`);
     this.channels.delete(token);
+    if (channel.ingressToken) this.recoveryIngress.delete(channel.ingressToken);
     this.pending.delete(token);
     if (channel.bindingId) {
       this.bindings.delete(channel.bindingId);
@@ -722,6 +1213,7 @@ export class TurnBroker implements TurnBrokerOwner {
     }
     this.retire(this.retiredTokens, token, channel.traceId);
     this.resolveSafeWaiters(channel.retirementWaiters, failure);
+    this.archiveRetiredChannel(channel);
     this.rejectChannel(channel, reason);
   }
 
@@ -734,15 +1226,16 @@ export class TurnBroker implements TurnBrokerOwner {
     const tokens = [...this.channels]
       .filter(([, channel]) => channel.externalOwner)
       .map(([token]) => token);
-    for (const token of tokens) this.revoke(token);
+    for (const token of tokens) this.revoke(token, undefined, { source: "runtime.drain", reason: "drain" });
     return tokens.length;
   }
 
-  revokeTrace(traceId: string, reason = new Error("Codex turn binding was revoked")): number {
+  revokeTrace(traceId: string, reason = new Error("Codex turn binding was revoked"),
+    diagnostic: TurnTerminationDiagnostic = { source: "runtime.trace_cancel", reason: "cancelled" }): number {
     const tokens = [...this.channels]
       .filter(([, channel]) => channel.traceId === traceId)
       .map(([token]) => token);
-    for (const token of tokens) this.revoke(token, reason);
+    for (const token of tokens) this.revoke(token, reason, diagnostic);
     return tokens.length;
   }
 
@@ -823,7 +1316,7 @@ export class TurnBroker implements TurnBrokerOwner {
 
   async close(): Promise<void> {
     this.compactionTransactions.close();
-    for (const token of [...this.channels.keys()]) this.revoke(token);
+    for (const token of [...this.channels.keys()]) this.revoke(token, undefined, { source: "broker.close", reason: "shutdown" });
     const server = this.server;
     this.server = undefined;
     this.startPromise = undefined;
@@ -998,12 +1491,68 @@ export class TurnBroker implements TurnBrokerOwner {
     if (!request || typeof request !== "object" || typeof request.id !== "string" || request.id.length === 0 || request.id.length > 256) {
       throw new Error("turn broker request id is invalid");
     }
-    if (!["claim", "resolve", "release", "invoke", "owner_status", "owner_register", "owner_register_safe", "owner_update", "owner_safe_sent", "owner_next", "owner_complete", "owner_completion_fence_begin", "owner_completion_fence_commit", "owner_wait_retirement", "owner_revoke", "owner_safe_wait_start", "owner_safe_wait_completion", "owner_request_compaction", "owner_compaction_delivery_count", "safe_start", "safe_complete", "activity_complete", "submit_compaction_handoff"].includes(request.method)) {
+    if (!["claim", "resolve", "release", "invoke", "owner_status", "owner_release_status", "owner_invocation_receipt", "read_tool_receipt", "public_delivery_lost", "owner_receipt_recovery", "owner_receipt_resume", "owner_register", "owner_register_safe", "owner_update", "owner_safe_sent", "owner_next", "owner_complete", "owner_recovery_rotate", "owner_completion_fence_begin", "owner_completion_fence_commit", "owner_wait_retirement", "owner_revoke", "owner_safe_wait_start", "owner_safe_wait_completion", "owner_request_compaction", "owner_compaction_delivery_count", "safe_start", "safe_complete", "activity_complete", "submit_compaction_handoff"].includes(request.method)) {
       throw new Error("turn broker method is invalid");
+    }
+    if (request.invocationId !== undefined && (typeof request.invocationId !== "string"
+      || request.invocationId.length === 0 || request.invocationId.length > 256)) {
+      throw new Error("turn broker invocation id is invalid");
     }
   }
 
   private async dispatch(request: BrokerRequest, socketSignal?: AbortSignal): Promise<unknown> {
+    if (request.method === "owner_release_status") return {contract:"broker-durable-release-v1",...this.releaseStatus()};
+    if (request.method === "public_delivery_lost") return this.notePublicDeliveryLost(request);
+    if (request.method === "owner_receipt_recovery") {
+      if (!request.token || !request.acceptedResults || typeof request.acceptedResults !== "object" || Array.isArray(request.acceptedResults)) throw new Error("Native accepted-result proof is required");
+      return { recovery: this.recoverCompletedReceipts(request.token, request.acceptedResults, request.retryReadOnly === true) ?? null };
+    }
+    if (request.method === "owner_receipt_resume") {
+      if (!request.token || !request.recoveryToken || !request.acceptedResults
+        || typeof request.acceptedResults !== "object" || Array.isArray(request.acceptedResults)) throw new Error("Native accepted-result proof is required");
+      return { resumed: this.resumeAfterReceiptRecovery(request.token, request.recoveryToken, request.acceptedResults) };
+    }
+    if (request.method === "read_tool_receipt") {
+      if (!request.bindingId) throw new Error("The original turn binding is required");
+      const live = this.bindings.get(request.bindingId)?.channel;
+      const link = this.journal.read<{ tokenHash: string }>(`binding:${operationDigest(request.bindingId)}`);
+      const saved = live?.durable ?? (link && this.journal.read<DurableToolChannel>(link.tokenHash));
+      if (!saved || saved.bindingHash !== operationDigest(request.bindingId)) throw new Error("Original turn receipt binding unavailable");
+      const calls = Object.values(saved.calls);
+      if (!request.callId && calls.length > 1) return { state: "select_receipt", total: calls.length,
+        receipts: calls.slice(-20).map((call, index) => ({ call_id: call.request.callId,
+          sequence: Math.max(0, calls.length - 20) + index + 1, tool: call.request.wireName, state: call.state })),
+        omitted: Math.max(0, calls.length - 20), native_redispatch: false };
+      const call = request.callId ? calls.find(call => call.request.callId === request.callId) : calls[0];
+      if (!call) return { state: "not_found", execution_state: "unknown", native_redispatch: false, retryable: false };
+      if (call.state !== "completed") return { state: "unknown", call_id: call.request.callId,
+        tool: call.request.wireName, execution_state: "unknown", native_redispatch: false, retryable: false };
+      if (!call.result || call.resultHash !== operationDigest(JSON.stringify(call.result))) throw new Error("Retained native receipt integrity failure");
+      // This explicit result read acknowledges known native completion only. It cannot
+      // certify delivery to ChatGPT, reopen permissions or dispatch any native operation.
+      const reconciled = this.reconcileReceipt(saved, call);
+      if (live) live.durable = reconciled;
+      return { state: "completed", call_id: call.request.callId, tool: call.request.wireName,
+        result: call.result, result_hash: call.resultHash, native_redispatch: false, response_delivery_ack: "unknown" };
+    }
+    if (request.method === "owner_invocation_receipt") {
+      if (!request.bindingId || !request.invocationId || !request.wireName) throw new Error("The original binding, invocation and tool signature are required");
+      const liveChannel = this.bindings.get(request.bindingId)?.channel;
+      const live = liveChannel?.durable;
+      const link = this.journal.read<{ tokenHash: string }>(`binding:${operationDigest(request.bindingId)}`);
+      const saved = live ?? (link && this.journal.read<DurableToolChannel>(link.tokenHash));
+      if (!saved || (!live && !link)) throw new Error("The original invocation binding is unavailable; execution remains unknown");
+      const call = Object.values(saved.calls).find(call => call.requestId === this.invocationIdentity(request));
+      if (!call) return { state: "not_found", execution_state: "unknown", retryable: false, delivery: "unknown" };
+      if (call.signature !== this.invocationSignature(request)) throw new Error("Tool request identity conflicts with its accepted invocation");
+      if (call.state === "completed" && (!call.result || call.resultHash !== operationDigest(JSON.stringify(call.result)))) throw new Error("The retained native result receipt is invalid");
+      // This query neither invokes nor calls reconcileReceipt. A terminal result is not a remote ACK.
+      return { state: call.state, invocation_id: request.invocationId, traceId: saved.traceId,
+        observerLost: call.observerLost === true, reconciliation: call.reconciliation ?? null,
+        delivery: "unknown", retryable: false,
+        ...(liveChannel ? { brokerState: retirementDiagnostics(liveChannel) } : {}),
+        ...(call.state === "completed" ? { result: call.result, resultHash: call.resultHash } : {}) };
+    }
     this.prune();
     if (request.method === "safe_start") {
       if (!request.token) throw new Error("Zero Risk request_id is required");
@@ -1080,6 +1629,10 @@ export class TurnBroker implements TurnBrokerOwner {
       this.completeTool(request.token, request.callId, request.toolResult);
       return { completed: true };
     }
+    if (request.method === "owner_recovery_rotate") {
+      if (!request.token) throw new Error("turn owner token is required");
+      return { token: this.rotateForRecovery(request.token) ?? null };
+    }
     if (request.method === "owner_completion_fence_begin") {
       if (!request.token) throw new Error("turn owner token is required");
       return { revision: this.beginCompletionFence(request.token) ?? null };
@@ -1099,7 +1652,7 @@ export class TurnBroker implements TurnBrokerOwner {
     }
     if (request.method === "owner_revoke") {
       if (!request.token) throw new Error("turn owner token is required");
-      this.revoke(request.token);
+      this.revoke(request.token, undefined, terminationDiagnostic(request.termination, { source: "owner_rpc", reason: "explicit_revoke" }));
       return { revoked: true };
     }
     if (request.method === "owner_safe_wait_start") {
@@ -1123,12 +1676,14 @@ export class TurnBroker implements TurnBrokerOwner {
     }
     if (request.method === "claim") {
       const contract = request.contract ?? "native";
-      const token = request.token;
+      const suppliedToken = request.token;
+      const token = typeof suppliedToken === "string" ? (this.recoveryIngress.get(suppliedToken) ?? suppliedToken) : suppliedToken;
       if (typeof token !== "string" || token.length === 0) {
         throw new Error(contract === "safe" ? "request id is required" : "turn token is required");
       }
       const channel = this.channels.get(token);
-      let activeChannel = channel && !channel.completionCommitted ? channel : undefined;
+      let activeChannel = channel && !channel.completionCommitted
+        && (channel.ingressToken ?? token) === suppliedToken ? channel : undefined;
       const retiredTurn = channel?.completionCommitted ? channel.traceId : this.retiredTokens.get(token);
       console.error(
         `[chatgpt-web] broker claim received (tokenChars=${token.length}, tokenHash=${handleFingerprint(token)}, valid=${Boolean(activeChannel)}`
@@ -1138,7 +1693,8 @@ export class TurnBroker implements TurnBrokerOwner {
         throw new Error(retiredTurn !== undefined
           ? `${contract === "safe" ? "This request_id" : "This turn_token"} was issued for ${retiredTurnLabel(retiredTurn)}, which has already finished.`
           + " This Codex Native action can no longer run."
-          : `${contract === "safe" ? "request id" : "turn token"} is invalid, expired, or revoked`);
+          : `${contract === "safe" ? "request id" : "turn token"} is invalid, expired, or revoked. `
+          + `Copy ${contract === "safe" ? "request_id" : "turn_token"} exactly from the current request; do not guess or reuse an earlier value.`);
       }
       if (activeChannel.safe) {
         if (contract !== "safe") throw new Error("Zero Risk request id requires the Zero Risk MCP contract");
@@ -1169,6 +1725,7 @@ export class TurnBroker implements TurnBrokerOwner {
         activeChannel.activityRevision += 1;
       }
       if (activeChannel.bindingId) {
+        this.checkpoint(activeChannel);
         const existing = this.bindings.get(activeChannel.bindingId);
         if (!existing || existing.token !== token || existing.channel !== activeChannel) {
           throw new Error("turn token binding state is inconsistent");
@@ -1178,13 +1735,17 @@ export class TurnBroker implements TurnBrokerOwner {
       this.pending.delete(token);
       const bindingId = opaqueId("binding");
       activeChannel.bindingId = bindingId;
+      activeChannel.durable.bindingHash = operationDigest(bindingId);
+      this.checkpoint(activeChannel);
+      this.journal.write(`binding:${operationDigest(bindingId)}`, { tokenHash: activeChannel.durable.tokenHash });
       this.bindings.set(bindingId, { token, channel: activeChannel });
       return { bindingId, activityId, environment: activeChannel.environment };
     }
 
     const bindingId = request.bindingId;
     if (request.method === "activity_complete") {
-      const token = request.token;
+      const suppliedToken = request.token;
+      const token = typeof suppliedToken === "string" ? (this.recoveryIngress.get(suppliedToken) ?? suppliedToken) : suppliedToken;
       if (typeof token !== "string" || token.length === 0) throw new Error("turn token is required");
       if (typeof request.activityId !== "string" || !/^activity_[A-Za-z0-9_-]{16,128}$/.test(request.activityId)) {
         throw new Error("turn activity id is invalid");
@@ -1201,12 +1762,21 @@ export class TurnBroker implements TurnBrokerOwner {
       // A cleanup that overtakes an ambiguously delivered claim is still a causal event. Its
       // tombstone makes the delayed claim fail instead of resurrecting activity after a fence.
       channel.activityRevision += 1;
+      this.checkpoint(channel);
       return { completed: wasActive };
     }
 
     if (typeof bindingId !== "string" || bindingId.length === 0) throw new Error("binding id is required");
     const binding = this.bindings.get(bindingId);
     if (!binding) {
+      if (request.method === "invoke") {
+        const link = this.journal.read<{ tokenHash: string }>(`binding:${operationDigest(bindingId)}`);
+        if (link) {
+          const saved = this.journal.read<DurableToolChannel>(link.tokenHash);
+          if (!saved) throw new Error("Missing retained tool checkpoint; dispatch blocked");
+          return this.replayInvocation(saved, request);
+        }
+      }
       const retiredTurn = this.retiredBindings.get(bindingId);
       if (request.method === "release" && retiredTurn !== undefined) {
         if (request.failure !== undefined) assertRetirementFailure(request.failure);
@@ -1227,7 +1797,7 @@ export class TurnBroker implements TurnBrokerOwner {
         assertRetirementFailure(request.failure);
         this.revoke(binding.token, chatGptToolTimeoutError(request.failure.tool, request.failure.timeoutMs), request.failure);
       } else {
-        this.revoke(binding.token);
+        this.revoke(binding.token, undefined, { source: "mcp.release", reason: "explicit_revoke" });
       }
       return { released: true,
         ...(request.failure === undefined ? {} : { diagnostics: this.retiredBindings.get(bindingId)! }),
@@ -1248,6 +1818,29 @@ export class TurnBroker implements TurnBrokerOwner {
 
     const wireName = request.wireName?.trim();
     if (!wireName) throw new Error("wire tool name is required");
+    const requestId = this.invocationIdentity(request);
+    const previous = Object.values(binding.channel.durable.calls).find(call => call.requestId === requestId);
+    if (previous) {
+      if (previous.signature !== this.invocationSignature(request)) throw new Error("Tool request identity conflicts with its accepted invocation");
+      if (previous.state === "completed") {
+        binding.channel.durable = this.reconcileReceipt(binding.channel.durable, previous);
+        return previous.result!;
+      }
+      const pending = binding.channel.invokePromises.get(requestId);
+      if (pending) {
+        const observed = this.observeInvocation(binding.channel, requestId, pending, socketSignal);
+        return previous.observerLost ? observed.then(result => {
+          if (!socketSignal?.aborted) binding.channel.durable = this.reconcileReceipt(binding.channel.durable, binding.channel.durable.calls[previous.request.callId]!);
+          return result;
+        }) : observed;
+      }
+      throw new Error("Tool invocation retained; no second dispatch is permitted");
+    }
+    if (binding.channel.durable.receiptRecovery) this.assertReceiptContinuation(binding.channel, request);
+    if (Object.values(binding.channel.durable.calls).some(call => call.observerLost && !call.reconciliation)
+      && !this.isKnownHandlePoll(binding.channel.durable, request)) {
+      throw new Error("Tool execution retained with unknown outcome; new side effects are blocked. Query the same receipt or empty-poll a known native session handle; do not resubmit");
+    }
     const callId = opaqueId("call");
     const toolRequest: BrokerToolRequest = {
       callId,
@@ -1255,11 +1848,17 @@ export class TurnBroker implements TurnBrokerOwner {
       freeform: request.freeform === true,
       ...(request.freeform === true ? { input: request.input ?? "" } : { arguments: request.arguments ?? {} }),
     };
-    return new Promise<BrokerToolResult>((resolveInvoke, rejectInvoke) => {
+    const receipt: DurableToolCall = { requestId, signature: this.invocationSignature(request),
+      request: toolRequest, state: "proposed", delivery: "unknown" };
+    const next = { ...binding.channel.durable, calls: { ...binding.channel.durable.calls, [callId]: receipt } };
+    this.journal.write(next.tokenHash, next);
+    binding.channel.durable = next;
+    const invocation = new Promise<BrokerToolResult>((resolveInvoke, rejectInvoke) => {
       binding.channel.invocations.set(callId, {
-        request: toolRequest, queuedAt: performance.now(), resolve: resolveInvoke, reject: rejectInvoke,
+        request: toolRequest, requestHash: handleFingerprint(request.id), queuedAt: performance.now(), resolve: resolveInvoke, reject: rejectInvoke,
       });
       binding.channel.queuedCallIds.push(callId);
+      this.diagnostic("queued", binding.channel, { callId, requestHash: handleFingerprint(request.id) });
       console.info(
         `[chatgpt-web] broker trace=${binding.channel.traceId} queued call=${callId.slice(0, 17)} tool=${wireName} waiters=${binding.channel.waiters.size}`,
       );
@@ -1269,10 +1868,20 @@ export class TurnBroker implements TurnBrokerOwner {
       })}`);
       this.scheduleToolWaiters(binding.channel);
     });
+    binding.channel.invokePromises.set(requestId, invocation);
+    return this.observeInvocation(binding.channel, requestId, invocation, socketSignal);
   }
 
   private takeQueued(channel: TurnChannel): BrokerToolRequest[] {
-    const ids = channel.queuedCallIds.splice(0);
+    const retained = Object.values(channel.durable.calls).some(call => call.observerLost && !call.reconciliation);
+    const ids = channel.queuedCallIds.filter(id => !channel.durable.calls[id]?.observerLost
+      && (!retained || this.isKnownHandlePoll(channel.durable, { id, method: "invoke", ...channel.durable.calls[id]!.request })));
+    const calls = { ...channel.durable.calls };
+    for (const id of ids) calls[id] = { ...calls[id]!, state: "unknown" };
+    const next = { ...channel.durable, calls };
+    if (ids.length) this.journal.write(next.tokenHash, next); // Fence before any native dispatch.
+    channel.durable = next;
+    channel.queuedCallIds = channel.queuedCallIds.filter(id => !ids.includes(id));
     for (const id of ids) {
       const invocation = channel.invocations.get(id);
       if (invocation) {
@@ -1285,6 +1894,8 @@ export class TurnBroker implements TurnBrokerOwner {
 
   private logToolDelivery(channel: TurnChannel, batch: BrokerToolRequest[], path: "immediate" | "waiter" | "replay"): void {
     for (const request of batch) {
+      this.diagnostic("delivered", channel, { callId: request.callId,
+        requestHash: channel.invocations.get(request.callId)?.requestHash, deliveryPath: path });
       console.info(
         `[chatgpt-web] broker trace=${channel.traceId} delivered call=${request.callId.slice(0, 17)} path=${path} replay=${path === "replay"}`,
       );
@@ -1296,13 +1907,19 @@ export class TurnBroker implements TurnBrokerOwner {
     if (channel.batchTimer) return;
     channel.batchTimer = setTimeout(() => {
       channel.batchTimer = undefined;
-      this.wakeToolWaiters(channel);
+      try { this.wakeToolWaiters(channel); }
+      catch (error) {
+        const failure = error instanceof Error ? error : new Error(String(error));
+        for (const waiter of channel.waiters) waiter.reject(failure);
+        channel.waiters.clear();
+      }
     }, 15);
   }
 
   private wakeToolWaiters(channel: TurnChannel): void {
     if (channel.queuedCallIds.length === 0 || channel.waiters.size === 0) return;
     const batch = this.takeQueued(channel);
+    if (batch.length === 0) return;
     this.logToolDelivery(channel, batch, "waiter");
     const waiters = [...channel.waiters];
     channel.waiters.clear();
@@ -1336,7 +1953,7 @@ export class TurnBroker implements TurnBrokerOwner {
     const now = Date.now();
     for (const [token, channel] of this.channels) {
       if (channel.environment.expiresAt === undefined || channel.environment.expiresAt > now) continue;
-      this.revoke(token);
+      this.revoke(token, undefined, { source: "broker.ttl", reason: "ttl_expired" });
     }
   }
 }
@@ -1355,11 +1972,40 @@ export class TurnBrokerTimeoutError extends Error {
 }
 
 /** Only transport ambiguity permits replay of an explicitly idempotent broker operation. */
-class TurnBrokerTransportError extends Error {
+export class TurnBrokerTransportError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "TurnBrokerTransportError";
   }
+}
+
+export interface BrokerPreconnectFailure {
+  readonly method: string;
+  readonly stage: "pre_connect";
+  readonly requestBytesWritten: 0;
+  readonly code?: string;
+}
+export interface BrokerClaimRejection {
+  readonly method: "claim";
+  readonly stage: "broker_rejected";
+  readonly nativeDispatched: false;
+}
+const claimRejections = new WeakMap<object, BrokerClaimRejection>();
+const trustedClaimRejections = new WeakSet<object>();
+export const brokerClaimRejection = (error: unknown): BrokerClaimRejection | undefined =>
+  error !== null && typeof error === "object" ? claimRejections.get(error) : undefined;
+export const isBrokerClaimRejection = (proof: unknown): proof is BrokerClaimRejection =>
+  proof !== null && typeof proof === "object" && trustedClaimRejections.has(proof);
+
+const preconnectFailures = new WeakMap<object, BrokerPreconnectFailure>();
+const trustedPreconnectProofs = new WeakSet<object>();
+
+/** Only this client's real pre-connect socket error creates proof; wire fields cannot. */
+export function brokerPreconnectFailure(error: unknown): BrokerPreconnectFailure | undefined {
+  return error !== null && typeof error === "object" ? preconnectFailures.get(error) : undefined;
+}
+export function isBrokerPreconnectFailure(proof: unknown): proof is BrokerPreconnectFailure {
+  return proof !== null && typeof proof === "object" && trustedPreconnectProofs.has(proof);
 }
 
 export async function callTurnBroker<T>(
@@ -1383,6 +2029,7 @@ export async function callTurnBroker<T>(
     const socket = createConnection(socketPath);
     let buffered = "";
     let settled = false;
+    let requestWriteAttempted = false;
     let response: BrokerResponse | undefined;
     const onAbort = () => finishError(new DOMException("ChatGPT web turn broker call aborted", "AbortError"));
     const cleanup = () => signal?.removeEventListener("abort", onAbort);
@@ -1403,23 +2050,46 @@ export async function callTurnBroker<T>(
       settled = true;
       clearTimeout(timer);
       cleanup();
-      if (response.error) rejectCall(new Error(response.error));
+      if (response.error) {
+        const error = new Error(response.error);
+        // A correlated broker rejection of claim precedes action(). claim itself never invokes Native.
+        if (request.method === "claim" && !signal?.aborted) {
+          const proof: BrokerClaimRejection = Object.freeze({ method: "claim", stage: "broker_rejected", nativeDispatched: false });
+          claimRejections.set(error, proof); trustedClaimRejections.add(proof);
+        }
+        rejectCall(error);
+      }
       else resolveCall(response.result as T);
     };
     const timer = timeoutMs === null
       ? undefined
       : setTimeout(() => finishError(new TurnBrokerTimeoutError()), timeoutMs);
     signal?.addEventListener("abort", onAbort, { once: true });
+    socket.setEncoding("utf8");
+    socket.once("error", error => {
+      if (settled) return;
+      const failure = new TurnBrokerTransportError(`ChatGPT web turn broker unavailable: ${error.message}`);
+      if (!requestWriteAttempted && !signal?.aborted) {
+        const proof: BrokerPreconnectFailure = Object.freeze({ method: request.method,
+          stage: "pre_connect", requestBytesWritten: 0, code: (error as NodeJS.ErrnoException).code });
+        preconnectFailures.set(failure, proof);
+        trustedPreconnectProofs.add(proof);
+      }
+      finishError(failure);
+    });
+    // A pre-aborted call still owns the socket's eventual error event; it grants no proof.
     if (signal?.aborted) {
       finishError(new DOMException("ChatGPT web turn broker call aborted", "AbortError"));
       return;
     }
-    socket.setEncoding("utf8");
-    socket.once("error", error => finishError(new TurnBrokerTransportError(`ChatGPT web turn broker unavailable: ${error.message}`)));
     // Other bounded calls wait for the server-owned pipe/socket close before their callers
     // advance the lifecycle while Bun drains named-pipe writes. Completion ACKs settle above.
     socket.once("close", finishResponse);
-    socket.once("connect", () => socket.write(`${JSON.stringify({ id, ...wireRequest })}\n`));
+    socket.once("connect", () => {
+      // Mark before serialization/write: even a failed write must remain ambiguous.
+      requestWriteAttempted = true;
+      socket.write(`${JSON.stringify({ id, ...wireRequest })}\n`);
+    });
     socket.on("data", chunk => {
       if (settled || response) return;
       buffered += chunk;
@@ -1628,6 +2298,25 @@ export class RemoteTurnBroker implements TurnBrokerOwner {
     return Number(response.count);
   }
 
+  async recoverCompletedReceipts(token: string, acceptedResults: Record<string, string>, retryReadOnly = false): Promise<CompletedReceiptRecovery | undefined> {
+    const response = await callTurnBroker<{ recovery: CompletedReceiptRecovery | null }>(this.socketPath,
+      { method: "owner_receipt_recovery", token, acceptedResults, retryReadOnly }, 5_000);
+    return response.recovery ?? undefined;
+  }
+
+  async resumeAfterReceiptRecovery(token: string, recoveryToken: string, acceptedResults: Record<string, string>): Promise<boolean> {
+    const response = await callTurnBroker<{ resumed: boolean }>(this.socketPath,
+      { method: "owner_receipt_resume", token, recoveryToken, acceptedResults }, 5_000);
+    return response.resumed === true;
+  }
+
+  async rotateForRecovery(token: string): Promise<string | undefined> {
+    const response = await callTurnBroker<{ token?: unknown }>(this.socketPath, { method: "owner_recovery_rotate", token });
+    if (response.token === null) return undefined;
+    if (typeof response.token !== "string" || !response.token.startsWith("turn_")) throw new Error("Invalid recovery capability");
+    return response.token;
+  }
+
   async beginCompletionFence(token: string): Promise<number | undefined> {
     const response = await callTurnBroker<{ revision?: unknown }>(this.socketPath, {
       method: "owner_completion_fence_begin",
@@ -1664,7 +2353,13 @@ export class RemoteTurnBroker implements TurnBrokerOwner {
     return response.failure;
   }
 
-  async revoke(token: string, _reason?: Error): Promise<void> {
-    await callTurnBroker(this.socketPath, { method: "owner_revoke", token });
+  async revoke(token: string, _reason?: Error,
+    diagnostic: TurnTerminationDiagnostic = { source: "owner_rpc", reason: "explicit_revoke" }): Promise<void> {
+    const termination = terminationDiagnostic(diagnostic, { source: "owner_rpc", reason: "explicit_revoke" });
+    console.info("[chatgpt-web] broker_lifecycle " + JSON.stringify({
+      event: "revokeRequested", runtimeInstanceId, pid: process.pid,
+      brokerHash: handleFingerprint(this.socketPath), tokenHash: handleFingerprint(token), ...termination,
+    }));
+    await callTurnBroker(this.socketPath, { method: "owner_revoke", token, termination });
   }
 }

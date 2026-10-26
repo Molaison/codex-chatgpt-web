@@ -20,9 +20,33 @@ test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("CodeMirror language invalida
       gap.style.height = "200px";
       editor.appendChild(gap);
     });
-    await expect(observe()).rejects.toThrow("one complete set of code lines");
+    let extractionError: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let snapshot;
+      try {
+        snapshot = await observe();
+      } catch (error) {
+        extractionError = error;
+        break;
+      }
+      // A budgeted probe may return no observation while parallel browsers are busy.
+      // Never accept a normal snapshot or any content from the incomplete code block.
+      expect(snapshot).toMatchObject({
+        observationTimedOut: true,
+        responsePresent: false,
+        fullHtml: "",
+        visibleText: "",
+        markdownSegments: [],
+        traceBlocks: [],
+        downloadableFiles: [],
+        images: [],
+        richWidgetSources: [],
+      });
+    }
+    expect(extractionError).toBeInstanceOf(Error);
+    expect((extractionError as Error).message).toContain("one complete set of code lines");
   } finally { await browser.close(); }
-});
+}, 15_000);
 
 test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("paragraph identity survives file preview movement in both response layouts", async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHATGPT_DOM_TEST_BROWSER, headless: true });
@@ -120,6 +144,45 @@ test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("preserves the accepted user 
   } finally { await browser.close(); }
 }, 15_000);
 
+test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("a Send receipt identifies a collapsed rich user turn after generation-only acceptance", async () => {
+  const browser = await chromium.launch({ executablePath: process.env.CHATGPT_DOM_TEST_BROWSER, headless: true });
+  try {
+    const worker = Object.create(ChatGptBrowserWorker.prototype) as any;
+    const receipt = "[codex-submission:ac924459-a03d-4784-96ec-5a97656abead]";
+    const prompt = receipt + "\n\nAct as the model backend.\n" + "inline task context ".repeat(1800);
+    const answer = '<span hidden data-chatgpt-agent-turn-start></span>';
+    for (const scenario of ["matching", "truncated", "wrong-receipt", "quoted-receipt", "prefix", "competing", "old-group-remains"] as const) {
+      const page = await browser.newPage();
+      await page.setContent('<main></main>');
+      const baseline = await worker.captureSubmissionBaseline(page, prompt);
+      await page.locator("main").evaluate(node => { node.innerHTML = '<button data-testid="stop-button">Stop</button>'; });
+      expect(await worker.currentSubmissionEvidence(page, baseline)).toBe("generation_running");
+      expect(baseline.acceptedUserIdentity).toBeUndefined();
+      await page.locator("main").evaluate((node, html) => {
+        node.innerHTML = `<div data-turn-key="fallback-turn-0">${html}</div>`;
+      }, answer);
+      const binding = await worker.waitForNewAssistantTurn(page, baseline, Date.now() + 2000);
+      const content = scenario === "wrong-receipt" ? prompt.replace("ac924459", "ffffffff")
+        : scenario === "quoted-receipt" ? "A different request.\n" + prompt
+        : scenario === "prefix" ? "Unrelated prefix " + prompt
+        : scenario === "truncated" ? prompt.slice(0, 10000) : prompt;
+      const mention = '<span data-prompt-link-href="app://codex" data-prompt-link-label="$codex">Codex Cloudflare</span>';
+      const user = `<div data-user-message-bubble><div data-search-result-target style="white-space:pre-wrap">${mention}\n  ${content}</div><button>Show more</button></div>`;
+      let replacement = `<div data-turn-key="persisted">${user}${answer}</div>`;
+      if (scenario === "competing") replacement += `<div data-turn-key="foreign">${user}${answer}</div>`;
+      if (scenario === "old-group-remains") replacement += '<div data-turn-key="fallback-turn-0"></div>';
+      await page.locator("main").evaluate((node, html) => { node.innerHTML = html; }, replacement);
+      const result = worker.reconcileAssistantTurnBinding(page, baseline, binding);
+      if (scenario === "matching" || scenario === "truncated") {
+        expect((await result).identity).toBe("group:assistant:persisted");
+      } else {
+        await expect(result).rejects.toThrow();
+      }
+      await page.close();
+    }
+  } finally { await browser.close(); }
+}, 30_000);
+
 // Execute the real observation/rebinding code against the reported renderer transition.
 // No account, network requests, or model submissions are used.
 test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("an exchange rekeys only with the exact submitted prompt and no competing turn", async () => {
@@ -195,6 +258,10 @@ test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("collapsed plugin messages re
       if (scenario === "wrong-plugin") expanded = expanded.replace("Clew review", "Other plugin");
       await page.locator('button').evaluate((button, { html, competing }) => {
         button.addEventListener('click', () => {
+          if (button.getAttribute('aria-expanded') === 'true') {
+            button.setAttribute('aria-expanded', 'false');
+            return;
+          }
           button.setAttribute('aria-expanded', 'true');
           button.parentElement!.querySelector('[data-search-result-target]')!.innerHTML = html;
           if (competing) document.querySelector('main')!.insertAdjacentHTML('beforeend', '<div data-turn-key="other"><div data-user-message-bubble>Another task</div></div>');
@@ -208,6 +275,57 @@ test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("collapsed plugin messages re
     }
   } finally { await browser.close(); }
 }, 20_000);
+
+test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("auto-linked URLs preserve exact prompt text and reject changed labels or destinations", async () => {
+  const browser = await chromium.launch({ executablePath: process.env.CHATGPT_DOM_TEST_BROWSER, headless: true });
+  try {
+    const page = await browser.newPage();
+    const worker = Object.create(ChatGptBrowserWorker.prototype) as any;
+    const url = "https://example.com/report?q=one&lang=en";
+    const prompt = `Keep  spaces\n${url}\nEnd.`;
+    for (const scenario of ["exact", "changed-label", "changed-destination", "extra-content"]) {
+      await page.setContent('<div id="group"><div data-user-message-bubble><div data-search-result-target></div></div></div>');
+      await page.locator('[data-search-result-target]').evaluate((node, { url, scenario }) => {
+        node.append("Keep  spaces\n");
+        const link = document.createElement("a");
+        link.href = scenario === "changed-destination" ? "https://example.org/other" : url;
+        link.setAttribute("data-search-result-target", "");
+        link.textContent = scenario === "changed-label" ? "report" : url;
+        node.append(link, scenario === "extra-content" ? " extra\nEnd." : "\nEnd.");
+      }, { url, scenario });
+      expect(await worker.userMessageMatchesSubmission(page.locator('#group'), prompt)).toBe(scenario === "exact");
+    }
+  } finally { await browser.close(); }
+});
+
+test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("reading a collapsed message restores the viewport and remounts its virtualized active answer", async () => {
+  const browser = await chromium.launch({ executablePath: process.env.CHATGPT_DOM_TEST_BROWSER, headless: true });
+  try {
+    const page = await browser.newPage();
+    const worker = Object.create(ChatGptBrowserWorker.prototype) as any;
+    const text = "Large history\n".repeat(2000);
+    await page.setContent('<div id="scroll" style="height:300px;overflow:auto"><div id="group"><div data-user-message-bubble>'
+      + '<div data-search-result-target style="white-space:pre-wrap">Preview</div>'
+      + '<button type="button" aria-expanded="false" data-thread-find-skip="true" data-markdown-copy="exclude">Show more</button>'
+      + '</div></div><div style="height:1000px"></div><div id="answer">Active answer</div></div><input id="composer">');
+    await page.locator('button').evaluate((button, text) => {
+      const answer = document.querySelector('#answer')!;
+      button.addEventListener('click', () => {
+        const open = button.getAttribute('aria-expanded') !== 'true';
+        button.setAttribute('aria-expanded', String(open));
+        button.parentElement!.querySelector('[data-search-result-target]')!.textContent = open ? text : "Preview";
+        if (open) answer.remove(); else document.querySelector('#scroll')!.append(answer);
+      });
+    }, text);
+    await page.locator('#composer').focus();
+    await page.locator('#scroll').evaluate(node => { node.scrollTop = node.scrollHeight; });
+    expect(await worker.userMessageMatchesSubmission(page.locator('#group'), text)).toBeTrue();
+    expect(await page.locator('button').getAttribute('aria-expanded')).toBe('false');
+    expect(await page.locator('#answer').count()).toBe(1);
+    expect(await page.locator('#scroll').evaluate(node => node.scrollHeight - node.clientHeight - node.scrollTop)).toBeLessThanOrEqual(1);
+    expect(await page.locator('#composer').evaluate(node => document.activeElement === node)).toBeTrue();
+  } finally { await browser.close(); }
+});
 
 test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("plain user code blocks preserve the full submitted code and whitespace", async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHATGPT_DOM_TEST_BROWSER, headless: true });
@@ -229,7 +347,8 @@ test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("rich-text rebind requires th
     const worker = Object.create(ChatGptBrowserWorker.prototype) as any;
     const token = "turn_0123456789abcdef0123456789abcdef";
     const foreign = "turn_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    const prompt = 'Task JSON with links.\nPass turn_token ' + token;
+    const receipt = '[codex-submission:ac924459-a03d-4784-96ec-5a97656abead]';
+    const prompt = receipt + '\n\nTask JSON with links.\nPass turn_token ' + token;
     for (const scenario of ["matching", "foreign", "missing", "duplicate", "token-prefix", "competing-turn"] as const) {
       const page = await browser.newPage();
       await page.setContent('<main></main>');
@@ -244,6 +363,10 @@ test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("rich-text rebind requires th
         : scenario === "duplicate" ? `${token} ${token}` : scenario === "token-prefix" ? `${token}extra` : token;
       await page.locator('button').evaluate((button, { displayed, competing }) => {
         button.addEventListener('click', () => {
+          if (button.getAttribute('aria-expanded') === 'true') {
+            button.setAttribute('aria-expanded', 'false');
+            return;
+          }
           button.setAttribute('aria-expanded', 'true');
           button.parentElement!.querySelector('[data-search-result-target]')!.append(' Pass turn_token ' + displayed);
           if (competing) document.querySelector('main')!.insertAdjacentHTML('beforeend', '<div data-turn-key="other"><div data-user-message-bubble>Other task</div></div>');
@@ -290,4 +413,61 @@ test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("binds captured Activity befo
       expect(await page.locator('input[type="file"]').evaluate(input => (input as HTMLInputElement).files?.[0]?.name)).toBe("codex-input-image-1.png");
     }
   } finally { await browser.close(); server.stop(true); }
+}, 15_000);
+
+test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("pre-Send baseline includes history rekeyed during preparation and still rejects duplicate new replies", async () => {
+  const browser = await chromium.launch({ executablePath: process.env.CHATGPT_DOM_TEST_BROWSER, headless: true });
+  try {
+    const page = await browser.newPage();
+    const worker = Object.create(ChatGptBrowserWorker.prototype) as any;
+    const answer = '<div data-conversation-role="assistant"></div>';
+    await page.setContent(`<main><div data-turn-key="old-stream">${answer}</div><div data-turn-key="virtualized"></div></main>`);
+    const baseline = await worker.captureSubmissionBaseline(page, "Steered instruction");
+    await page.locator("main").evaluate((node, html) => { node.innerHTML = html; }, `<div data-turn-key="old-saved">${answer}</div>`);
+    Object.assign(baseline, await worker.captureSubmissionBaseline(page, "Steered instruction", [], undefined, baseline.initialTurnIdentities));
+    expect(baseline.initialTurnIdentities).toContain("group:assistant:old-stream");
+    expect(baseline.initialTurnIdentities).toContain("group:assistant:old-saved");
+    expect(baseline.initialTurnIdentities).toContain("group:assistant:virtualized");
+    expect(await worker.currentSubmissionEvidence(page, baseline)).toBeUndefined();
+    await page.locator("main").evaluate((node, html) => { node.innerHTML += html; },
+      `<div data-turn-key="submitted"><div data-user-message-bubble>Steered instruction</div>${answer}</div><div data-turn-key="virtualized">${answer}</div>`);
+    expect(await worker.currentSubmissionEvidence(page, baseline)).toBe("user_turn");
+    const bound = await worker.waitForNewAssistantTurn(page, baseline, Date.now() + 2000);
+    expect(bound.identity).toBe("group:assistant:submitted");
+    await page.locator("main").evaluate((node, html) => { node.innerHTML += html; }, `<div data-turn-key="competing">${answer}</div>`);
+    await expect(worker.waitForNewAssistantTurn(page, baseline, Date.now() + 10_000)).rejects.toThrow("2 new conversation turns");
+  } finally { await browser.close(); }
+}, 15_000);
+
+// The production failure ended with the effort menu focused and the draft unchanged.
+test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("Send targets its button when model-menu focus restoration races activation", async () => {
+  const browser = await chromium.launch({ executablePath: process.env.CHATGPT_DOM_TEST_BROWSER, headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`<main></main><form data-chatgpt-composer>
+      <div id="prompt-textarea" contenteditable="true" role="textbox">Continue the same session.</div>
+      <button id="effort" type="button" aria-haspopup="menu" aria-expanded="false">GPT-6 Extra High</button>
+      <button data-testid="send-button" type="submit">Send</button>
+    </form><script>
+      window.sends=0; window.menuOpens=0;
+      const send=document.querySelector('[data-testid="send-button"]');
+      const effort=document.querySelector('#effort');
+      send.addEventListener('focus',()=>effort.focus());
+      effort.addEventListener('click',()=>{ window.menuOpens++; effort.setAttribute('aria-expanded','true'); });
+      document.querySelector('form').addEventListener('submit',event=>{
+        event.preventDefault(); window.sends++;
+        document.querySelector('main').innerHTML+='<div data-turn-key="submitted"><div data-user-message-bubble>Continue the same session.</div></div>';
+        document.querySelector('#prompt-textarea').textContent='';
+      });
+    </script>`);
+    const worker = Object.create(ChatGptBrowserWorker.prototype) as any;
+    const baseline = await worker.captureSubmissionBaseline(page, "Continue the same session.");
+    let accepted=0;
+    const evidence = await worker.sendAttachedPrompt(page, baseline, undefined, AbortSignal.timeout(5000), undefined,
+      { onSendActivated: () => page.locator('#effort').focus(), onSubmitted: () => { accepted++; } });
+    expect(evidence).toBe("user_turn");
+    expect(await page.evaluate(() => ({ sends: (window as any).sends, menuOpens: (window as any).menuOpens })))
+      .toEqual({ sends: 1, menuOpens: 0 });
+    expect(accepted).toBe(1);
+  } finally { await browser.close(); }
 }, 15_000);

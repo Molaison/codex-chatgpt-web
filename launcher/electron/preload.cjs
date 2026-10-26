@@ -7,6 +7,7 @@ function subscription(channel, listener) {
 }
 
 contextBridge.exposeInMainWorld("codexWebLauncher", {
+  acknowledgeMaintenance: (value) => ipcRenderer.invoke("launcher:maintenance-ack", value),
   snapshot: () => ipcRenderer.invoke("launcher:snapshot"),
   getLimits: () => ipcRenderer.invoke("launcher:limits"),
   setupLimits: () => ipcRenderer.invoke("launcher:limits-setup"),
@@ -47,7 +48,6 @@ contextBridge.exposeInMainWorld("codexWebLauncher", {
   setComposerPredictions: (enabled) => ipcRenderer.invoke("launcher:composer-predictions", enabled),
   setSkillAttachments: (enabled) => ipcRenderer.invoke("launcher:skill-attachments", enabled),
   setFreshConversationPerTurn: (enabled) => ipcRenderer.invoke("launcher:fresh-conversation-per-turn", enabled),
-  setUseSavedChats: (enabled) => ipcRenderer.invoke("launcher:use-saved-chats", enabled),
   setAutoApproveToolCalls: (enabled) => ipcRenderer.invoke("launcher:auto-approve-tool-calls", enabled),
   setZeroRiskPro: (enabled) => ipcRenderer.invoke("launcher:zero-risk-pro", enabled),
   setBrowserInteractionMode: (mode) => ipcRenderer.invoke("launcher:browser-interaction-mode", mode),

@@ -1,3 +1,7 @@
+import { QaHealthAdmission, type HostAssignmentAdmission } from "./qa-health";
+import { parseChatGptSessionEffort as parseQaSessionEffort } from "./chatgpt-session-effort";
+export { parseChatGptSessionEffort as parseQaSessionEffort } from "./chatgpt-session-effort";
+import { ReleaseAdmission, releaseTrackedResponse, type ReleaseControlConfig } from "./release-admission";
 import { createReceiptStore, receiptIdentity, replayReceipt, MAX_RECEIPT_BYTES, isQaCompactionRequest } from "./qa-pool-receipts";
 import { PaperRegistry, PaperError, normalizePaperId, poolSessionHash, type PaperScope, type PaperRow } from "./paper-registry";
 import type { PaperRecoveryReader } from "./paper-recovery";
@@ -7,10 +11,12 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { gunzipSync, zstdDecompressSync } from "node:zlib";
+import type { ProviderNotice } from "./types";
 
-export interface QaPoolAccount { id: string; origin: string; models: string[]; enabled?: boolean; sessionModes?: boolean; conversationStoreDirectory?: string; browserHostDescriptorPath?: string }
+export interface QaPoolAccount { id: string; origin: string; models: string[]; enabled?: boolean; sessionModes?: boolean; conversationStoreDirectory?: string; browserHostDescriptorPath?: string; runtimeControlTokenFile?: string; qaHealthPinPath?: string }
 export interface QaPoolConfig {
   host: string; port: number; databasePath: string;
+  releaseControl?: ReleaseControlConfig;
   clients: Array<{ id: string; keyFile: string; trustClientIdentity?: boolean }>;
   accounts: QaPoolAccount[];
   modelCatalogPath?: string;
@@ -34,12 +40,6 @@ function responseNotAdmitted(value: unknown, status: number): boolean {
     && error.retryable === true && error.submission_state === "not_submitted" && error.phase === "admission";
 }
 
-export function parseQaSessionEffort(value: unknown): { effort?: string; mode: "temporary" | "persistent"; explicit: boolean } {
-  const effort = nonempty(value);
-  const matched = effort && /^(none|minimal|low|medium|high|xhigh|max|ultra)-(temporary|persistent)$/.exec(effort);
-  return matched ? { effort: matched[1], mode: matched[2] === "temporary" ? "temporary" : "persistent", explicit: true }
-    : { effort, mode: "persistent", explicit: false };
-}
 
 export function normalizeQaPoolRequest(payload: Record<string, unknown>, headers: Headers, requestId: string = randomUUID()) {
   const metadata = record(payload.client_metadata);
@@ -167,6 +167,15 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
   const activeReceipts = new Map<string, Promise<void>>();
   const shutdownObservers = new Set<() => void>();
   let closed = false;
+  const liveDispatches = new Set<string>();
+  if (config.releaseControl) db.exec("CREATE TABLE IF NOT EXISTS qa_release_dispatches (id TEXT PRIMARY KEY, state TEXT NOT NULL)");
+  const admission = config.releaseControl ? new ReleaseAdmission("pool", config.releaseControl, () => ({
+    active_dispatches: liveDispatches.size,
+    active_histories: activeHistories.size, active_receipts: activeReceipts.size,
+    active_paper_reads: activePaperReads.size, active_paper_recoveries: paperRecoveries.size,
+    pending_dispatches: (db.query("SELECT COUNT(*) AS n FROM qa_release_dispatches WHERE state!='terminal'").get() as {n:number}).n,
+    pending_history: (db.query("SELECT COUNT(*) AS n FROM sessions WHERE pending_history_turn IS NOT NULL").get() as {n:number}).n,
+  })) : undefined;
   if (!(db.query("PRAGMA table_info(sessions)").all() as Array<{ name: string }>).some(column => column.name === "project_id")) {
     db.exec("ALTER TABLE sessions ADD COLUMN project_id TEXT; ALTER TABLE sessions ADD COLUMN project_name TEXT;");
   }
@@ -185,19 +194,23 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
   if (new Set(clients.map(client => client.digest.toString("hex"))).size !== clients.length) {
     db.close(); throw new Error("Each QA pool client must have a distinct API key");
   }
+  const health = new QaHealthAdmission(config.accounts.filter(a => a.enabled !== false));
+  db.exec("CREATE TABLE IF NOT EXISTS qa_health_admissions (session_hash TEXT PRIMARY KEY, receipt_json TEXT NOT NULL)");
+  const recordHealthAdmission = db.query("INSERT INTO qa_health_admissions VALUES (?, ?)");
   const failure = (status: number, code: string, message: string) => Response.json({ error: { code, type: "qa_pool_error", message } }, { status });
-  const select = db.transaction((hash: string, model: string, route?: NonNullable<QaPoolConfig["projectRoutes"]>[number]) => {
+  const select = db.transaction((hash: string, model: string, selected: QaPoolAccount,
+    consumeAdmission: () => HostAssignmentAdmission | undefined, route?: NonNullable<QaPoolConfig["projectRoutes"]>[number]) => {
     const owner = find.get(hash);
     if (owner) return owner;
-    const counts = new Map(count.all().map(row => [row.account_id, row.n]));
-    const eligible = config.accounts.filter(account => account.enabled !== false && account.models.includes(model)
-      && (!route || account.id === route.accountId))
-      .sort((a, b) => (counts.get(a.id) ?? 0) - (counts.get(b.id) ?? 0) || a.id.localeCompare(b.id));
-    if (!eligible[0]) return undefined;
-    insert.run(hash, eligible[0].id, new Date().toISOString(), route?.projectId ?? null, route?.displayName ?? route?.name ?? null);
+    if (closed || admission?.draining || admission?.sealed || selected.enabled === false || !selected.models.includes(model)
+      || route && selected.id !== route.accountId) return undefined;
+    const receipt = consumeAdmission();
+    if (!receipt || receipt.assignment.sessionHash !== hash || receipt.runtime.accountId !== selected.id) return undefined;
+    insert.run(hash, selected.id, new Date().toISOString(), route?.projectId ?? null, route?.displayName ?? route?.name ?? null);
+    recordHealthAdmission.run(hash, JSON.stringify(receipt));
     return find.get(hash)!;
   });
-  async function fetchRequest(request: Request): Promise<Response> {
+  async function fetchRequest(request: Request, admitted = true): Promise<Response> {
     if (closed) return failure(503, "pool_closed", "The QA pool is closed");
     const url = new URL(request.url);
     const supplied = createHash("sha256").update(request.headers.get("authorization") ?? "").digest();
@@ -219,7 +232,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
       }
     }
     const pathname = identityPath?.[1] ?? prefix?.[2] ?? url.pathname;
-    if (request.method === "GET" && url.pathname === "/healthz") return Response.json({ status: "ok", persistentSessions: true, accounts: config.accounts.filter(a => a.enabled !== false).length });
+    if (request.method === "GET" && url.pathname === "/healthz") return Response.json({ status: "ok", persistentSessions: true, health: health.snapshot(), accounts: config.accounts.filter(a => a.enabled !== false).length });
     if (request.method === "GET" && pathname === "/v1/models") {
       const models = route?.modelAliases ? Object.keys(route.modelAliases) : [...new Set(config.accounts.filter(a => a.enabled !== false && (!route || a.id === route.accountId)).flatMap(a => a.models))];
       const catalog = config.modelCatalogPath
@@ -262,6 +275,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
     const paperMetadata = JSON.parse(record(normalized.payload.client_metadata)["x-codex-turn-metadata"] as string);
     let paper: { id: string; scope: PaperScope; row: PaperRow } | undefined;
     if (route?.name === "papers" && (paperMetadata.paper_id === undefined || paperMetadata.paper_operation === undefined)) return failure(400,"paper_id_required","Upgrade the papers client or provide paper_id and paper_operation; anonymous paper chats are disabled");
+    if (!admitted && (paperMetadata.paper_id !== undefined || paperMetadata.paper_operation !== undefined)) return failure(503, "pool_draining", "New paper work is fenced; existing work is preserved");
     if (paperMetadata.paper_id !== undefined || paperMetadata.paper_operation !== undefined) {
       if (pathname !== "/v1/responses" || client.id !== "cpr" || route?.name !== "papers") return failure(409, "paper_route_required", "Paper operations require the authenticated papers project route");
       const paperAccount = config.accounts.find(a => a.id === route.accountId);
@@ -328,7 +342,53 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
       record(normalized.payload.client_metadata)["x-codex-turn-metadata"] = JSON.stringify({...paperMetadata,thread_id:normalized.thread});
     }
     const hash = createHash("sha256").update(JSON.stringify(["qa-pool/v1", sessionScope, normalized.thread])).digest("hex");
-    const owner = select(hash, model, route);
+    let owner = find.get(hash);
+    let assignmentNotice: ProviderNotice | undefined;
+    if (!owner && admitted) {
+      const candidates = config.accounts.filter(a => a.enabled !== false && a.models.includes(model) && (!route || a.id === route.accountId));
+      if (!candidates.length) return failure(400, "model_unavailable", "No account supports the requested model");
+      const checks = await Promise.all(candidates.map(async a => ({ id: a.id, ready: await health.check(a) })));
+      if (closed) return failure(503, "pool_closed", "The QA pool is closed");
+      if (admission?.draining || admission?.sealed) return failure(503, "pool_draining", "New work is fenced; no new message was sent");
+      // All candidate/UI waits finish before choosing one account. A probe is
+      // selection evidence only; it is not permission to commit an owner.
+      owner = find.get(hash);
+      if (!owner) {
+        const counts = new Map(count.all().map(row => [row.account_id, row.n]));
+        const eligible = candidates.filter(a => checks.some(c => c.id === a.id && c.ready))
+          .sort((a, b) => (counts.get(a.id) ?? 0) - (counts.get(b.id) ?? 0) || a.id.localeCompare(b.id));
+        let admissionFailed = false;
+        for (const selected of eligible) {
+          owner = find.get(hash);
+          if (owner) break;
+          if (!health.eligibleNow(selected)) { admissionFailed = true; continue; }
+          const consume = await health.authorizeSelected(selected, hash);
+          if (closed) return failure(503, "pool_closed", "The QA pool is closed");
+          if (admission?.draining || admission?.sealed) return failure(503, "pool_draining", "New work is fenced; no new message was sent");
+          // A concurrent caller may have committed the original mapping while
+          // this request waited. Preserve it even if our fresh admission failed.
+          try {
+            owner = find.get(hash);
+            if (!owner && consume) {
+              owner = select.immediate(hash, model, selected, consume, route) ?? null;
+              if (owner && admissionFailed && owner.account_id === selected.id) assignmentNotice = {
+                version: 1, id: randomUUID(), execution_id: randomUUID(), seq: 1,
+                kind: "account_pinned", observed_at: new Date().toISOString(),
+                message: "The server selected another eligible account before submitting this new conversation.",
+                source: "chatgpt-web", evidence: "observed",
+              };
+            }
+          }
+          catch { return failure(503, "account_admission_unavailable", "The account admission could not be persisted; no new message was sent"); }
+          if (owner) break;
+          // No ownership or submission was committed. Only this boundary may
+          // try another account; existing sessions and dispatched work stay pinned.
+          admissionFailed = true;
+        }
+      }
+      if (!owner) return failure(503, "account_health_unavailable", "No configured account has current authenticated health proof; no new message was sent");
+    }
+    if (!owner && !admitted) return failure(503, "pool_draining", "New work is fenced; no new message was sent");
     if (!owner) return failure(400, "model_unavailable", "No account supports the requested model");
     const account = config.accounts.find(a => a.id === owner.account_id);
     // 旧会话永远不因过期、禁用或上游故障静默换号。
@@ -366,6 +426,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
         return failure(409, "temporary_turn_uncertain", "This request may have been submitted; reconcile it before retrying");
       }
     }
+    if (!admitted) return failure(503, "pool_draining", "New work is fenced; no new message was sent");
     if (owner.pending_history_turn) return failure(409, "temporary_turn_uncertain", "A prior turn may have been submitted but its history was not committed; reconcile it before continuing");
     const historyExpiresAt = Date.now() + 48 * 60 * 60 * 1000;
     if (retainHistory && activeHistories.has(hash)) return failure(409, "temporary_turn_in_progress", "Wait for this conversation's current turn to finish");
@@ -426,6 +487,12 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
       const value = request.headers.get(name); if (value) headers.set(name, value);
     }
     let paperCompleted = false;
+    let terminalKnown = false;
+    let dispatchId: string | undefined;
+    const terminalResponse = (value: unknown) => {
+      const response = record(value);
+      return typeof response.id === "string" && ["completed", "failed", "cancelled", "incomplete"].includes(String(response.status));
+    };
     const historyAttempt = randomUUID();
     let historyReserved = false;
     let settleReceipt = () => {};
@@ -435,6 +502,9 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
     let detachObserverAbort = () => {};
     const stopObservation = () => { detachObserverAbort(); if (observationTimer) clearTimeout(observationTimer); observation?.abort(); cancelRead?.(); settleReceipt(); };
     const release = (notSubmitted = false) => {
+      if (dispatchId && liveDispatches.delete(dispatchId)) {
+        db.query("UPDATE qa_release_dispatches SET state=? WHERE id=?").run(terminalKnown || notSubmitted ? "terminal" : "uncertain", dispatchId);
+      }
       activeHistories.delete(hash);
       settleReceipt();
       detachObserverAbort();
@@ -509,6 +579,11 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
     if (paper) papers.begin(paper.id);
     if (retainHistory) activeHistories.add(hash);
     let receivedResponse = false;
+    if (admission) {
+      dispatchId = randomUUID();
+      db.query("INSERT INTO qa_release_dispatches VALUES (?, 'pending')").run(dispatchId);
+      liveDispatches.add(dispatchId);
+    }
     try {
       const response = await fetch(account.origin.replace(/\/$/, "") + pathname, {
         method: "POST", headers, body: JSON.stringify(normalized.payload), signal: observation?.signal ?? request.signal, redirect: "error",
@@ -518,17 +593,18 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
       let body: BodyInit | null = response.body;
       let notSubmitted = false;
       const streaming = (response.headers.get("content-type") ?? "").includes("text/event-stream");
-      if ((paper || retainHistory) && response.body && !streaming) {
+      if ((paper || retainHistory || admission) && response.body && !streaming) {
         // A failed paper turn is not always an HTTP error, so classify the explicit pre-send
         // attachment failure from the body before deciding whether the reservation is retryable.
         const bytes = await response.arrayBuffer();
         let parsed: unknown; try { parsed = JSON.parse(new TextDecoder().decode(bytes)); } catch { parsed = undefined; }
-        if (response.ok) completed(parsed);
+        terminalKnown = terminalResponse(parsed);
+        if (response.ok && (paper || retainHistory)) completed(parsed);
         // A 200 stream-less body can still carry status:"failed" with the explicit adapter code.
         if (!paperCompleted && parsed !== undefined && (preSendAttachmentFailure(parsed, Boolean(retainHistory))
           || responseNotAdmitted(parsed, response.status))) notSubmitted = true;
         body = bytes; release(notSubmitted);
-      } else if ((retainHistory || paper) && response.body && response.ok) {
+      } else if ((retainHistory || paper || admission) && response.body && response.ok) {
         const reader = response.body.getReader(); let buffered = Buffer.alloc(0);
         cancelRead = () => { resumeRead?.(); void reader.cancel().catch(() => {}); };
         const wire: Uint8Array[] = []; let wireBytes = 0; let terminalSaved = false; let cacheable = true;
@@ -572,10 +648,14 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
                 const event = record(JSON.parse(data));
                 if (event.type === "response.completed") {
                   if (terminalSaved) throw new Error("Duplicate terminal event");
-                  const committed = completed(event.response, receipt && cacheable ? Buffer.concat(wire) : undefined, cacheable);
+                  terminalKnown = terminalResponse(event.response);
+                  const committed = (paper || retainHistory) ? completed(event.response, receipt && cacheable ? Buffer.concat(wire) : undefined, cacheable) : terminalKnown;
                   if (receipt && !committed) throw new Error("Invalid completed response");
                   terminalSaved = true;
-                } else if ((event.type === "response.failed" || event.type === "error") && preSendAttachmentFailure(event, Boolean(retainHistory))) notSubmitted = true;
+                } else if (["response.failed", "response.incomplete", "response.cancelled", "error"].includes(String(event.type))) {
+                  terminalKnown ||= terminalResponse(event.response);
+                  if (preSendAttachmentFailure(event, Boolean(retainHistory))) notSubmitted = true;
+                }
               }
               if (!observerCancelled) controller.enqueue(chunk.value);
               if (receipt && terminalSaved) {
@@ -594,6 +674,22 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
           },
         });
       } else release();
+      if (assignmentNotice && streaming && body instanceof ReadableStream) {
+        // Provider notices have their own sequence and never enter the model's
+        // input, canonical response, or Responses event sequence_number.
+        const reader = body.getReader();
+        const notice = new TextEncoder().encode(`event: response.provider_notice\ndata: ${JSON.stringify({ type: "response.provider_notice", notice: assignmentNotice })}\n\n`);
+        body = new ReadableStream<Uint8Array>({
+          start(controller) { controller.enqueue(notice); },
+          async pull(controller) {
+            try {
+              const chunk = await reader.read();
+              if (chunk.done) controller.close(); else controller.enqueue(chunk.value);
+            } catch (error) { controller.error(error); }
+          },
+          cancel(reason) { return reader.cancel(reason); },
+        });
+      }
       return new Response(body, { status: response.status, headers: {
         "content-type": response.headers.get("content-type") ?? "application/json",
         "cache-control": "no-store",
@@ -604,14 +700,34 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
       return failure(502, "session_account_unreachable", "This session's account runtime is unreachable; retry after it recovers"); }
   }
   return { fetch: async (request: Request) => {
-    try { return await fetchRequest(request); }
-    catch (error) { if (error instanceof PaperError) return failure(error.status,error.code,error.message); throw error; }
-  }, close: () => { closed = true; clearInterval(sweep); for (const stop of shutdownObservers) stop(); shutdownObservers.clear(); db.close(); } };
+    const control = admission?.control(request);
+    if (control) return control;
+    if (admission?.sealed) return new Response("Native ingress sealed", {status:503});
+    const lease = admission?.enter();
+    try {
+      const response = await fetchRequest(request, lease?.admitted ?? true);
+      return lease ? releaseTrackedResponse(response, lease.finish, request.signal) : response;
+    } catch (error) {
+      lease?.finish();
+      if (error instanceof PaperError) return failure(error.status,error.code,error.message);
+      throw error;
+    }
+  }, close: () => {
+    if (admission && !admission.status().safe_to_stop) throw Error("Pool native work is not drained; preserve original owner");
+    closed = true; health.close(); clearInterval(sweep); for (const stop of shutdownObservers) stop(); shutdownObservers.clear(); db.close(); } };
 }
 
 if (import.meta.main) {
   if (!process.argv[2]) throw new Error("Usage: qa-pool <config.json>");
   const config = JSON.parse(readFileSync(resolve(process.argv[2]), "utf8")) as QaPoolConfig;
   const pool = createQaPool(config);
-  Bun.serve({ hostname: config.host, port: config.port, fetch: pool.fetch, maxRequestBodySize: 64 * 1024 * 1024, idleTimeout: 0 });
+  const listener = Bun.serve({ hostname: config.host, port: config.port, fetch: pool.fetch, maxRequestBodySize: 64 * 1024 * 1024, idleTimeout: 0 });
+  // PID 1 ignores default TERM. Close only after the native admission owner is idle.
+  const stop = async () => {
+    try { pool.close(); }
+    catch (error) { console.error("Pool stop refused; preserve active owner", error); return; }
+    await listener.stop();
+  };
+  process.on("SIGTERM", stop);
+  process.on("SIGINT", stop);
 }

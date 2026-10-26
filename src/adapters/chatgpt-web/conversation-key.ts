@@ -19,7 +19,7 @@ export function forkedFromThreadId(parsed: CodexParsedRequest): string | undefin
   return typeof parent === "string" ? parent : undefined;
 }
 
-function messageText(item: Record<string, unknown>): string | undefined {
+function messageText(item: { content?: unknown }): string | undefined {
   const content = item.content;
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return undefined;
@@ -60,11 +60,9 @@ export function chatGptConversationKey(
   return createHash("sha256").update(JSON.stringify({
     namespace,
     threadId: identity.threadId,
-    // A human chat keeps its identity when its model or reasoning effort changes.
-    // Native tool sessions still need their exact model/compaction ownership.
+    // Effort is a per-turn control. Tool sessions retain model/compaction ownership.
     ...(options.questionAnswer ? { purpose: "question-answer" } : {
       modelId: parsed.modelId,
-      reasoning: parsed.options.reasoning,
       ...(parsed._chatgptModelFamily ? { modelFamily: parsed._chatgptModelFamily } : {}),
       compaction: compactionEpoch(raw?.input),
     }),
@@ -90,6 +88,25 @@ function submittedPrefixLength(parsed: CodexParsedRequest, previous?: CodexParse
     ? priorMessages.length : 0;
 }
 
+/** Private fingerprints bind a saved chat to full canonical input, including native item identity. */
+export function canonicalConversationHistory(parsed: CodexParsedRequest): string[] | undefined {
+  const raw = parsed._rawBody as { input?: unknown; previous_response_id?: unknown } | undefined;
+  // Incremental API continuations have a separately proved saved-response contract.
+  if (!Array.isArray(raw?.input) || raw?.previous_response_id || parsed._chatgptSavedConversationContinuation) return undefined;
+  const messages = raw.input.filter((item): item is Record<string, unknown> => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const value = item as Record<string, unknown>;
+    return ((value.type === "message" || value.type === undefined) && (value.role === "user" || value.role === "assistant"))
+      || ["function_call", "custom_tool_call", "function_call_output", "custom_tool_call_output"].includes(String(value.type));
+  });
+  return messages.length ? messages.map(message => {
+    // Native item IDs distinguish a new identical instruction after rewind from
+    // the old accepted instruction. Runtime/developer preamble IDs are excluded.
+    const { type, role, id, phase, content, name, arguments: args, call_id, output } = message;
+    return createHash("sha256").update(JSON.stringify({ type, role, id, phase, content, name, arguments: args, call_id, output })).digest("hex");
+  }) : undefined;
+}
+
 /** Full history remains canonical; a retained epoch receives only the suffix after its last assistant reply. */
 export function retainedConversationResumeRequest(
   parsed: CodexParsedRequest,
@@ -98,6 +115,15 @@ export function retainedConversationResumeRequest(
   const lastAssistant = parsed.context.messages.findLastIndex(message => message.role === "assistant"
     && (!options.questionAnswer || (message.phase !== "commentary"
       && message.content.some(part => part.type === "text" && part.text.trim().length > 0))));
+  const lastInterrupted = parsed.context.messages.findLastIndex(message => message.role === "user"
+    && /^<turn_aborted>[\s\S]*<\/turn_aborted>$/.test(messageText(message)?.trim() ?? ""));
+  if (lastInterrupted > lastAssistant) {
+    // A tool-call/partial assistant is not a completed task boundary. Keeping only
+    // its suffix would send "aborted by user + go on" while claiming context is
+    // complete. This marker chooses more canonical context, never cancellation
+    // authority or evidence that an old command did/did not execute.
+    return { ...parsed, context: { ...parsed.context, messages: [...parsed.context.messages] } };
+  }
   if (!options.questionAnswer && lastAssistant < 0) return undefined;
   // Incremental API requests may contain no previous assistant at all. A queued
   // full-history request may also arrive before that answer exists in the client.

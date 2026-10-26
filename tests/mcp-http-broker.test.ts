@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { defaultBrokerEndpoint } from "../src/config";
 import type { ChatGptMcpContract } from "../src/adapters/chatgpt-web/mcp-server";
 import { startChatGptMcpHttpServer } from "../src/adapters/chatgpt-web/mcp-http";
-import { TurnBroker } from "../src/adapters/chatgpt-web/turn-broker";
+import { TurnBroker, callTurnBroker } from "../src/adapters/chatgpt-web/turn-broker";
 import type { ChatGptTurnEnvironment } from "../src/adapters/chatgpt-web/environment";
 
 const cleanup: Array<() => Promise<unknown> | void> = [];
@@ -48,7 +48,7 @@ test("HTTP tools still require a live broker capability and preserve native appr
   const { http, broker, environment } = fixture();
   const { client } = await connect(http.url);
   const token = await broker.register(environment, 60_000);
-  const invalid = await client.callTool({ name: "codex_exec", arguments: { turn_token: "turn_invalid_012345678901234567890", cmd: "pwd" } });
+  const invalid = await client.callTool({ name: "codex_exec", arguments: { turn_token: `turn_${"x".repeat(32)}`, cmd: "pwd" } });
   expect(invalid.isError).toBeTrue();
   expect(JSON.stringify(invalid.content)).toContain("invalid, expired, or revoked");
   const execution = client.callTool({ name: "codex_exec", arguments: {
@@ -125,12 +125,17 @@ test("cancelling a reused request ID is isolated to its HTTP session", async () 
   })).status).toBe(202);
   expect((await calls[0]!).status).toBe(408);
 
-  await broker.waitForRetirement(tokens[0]!);
+  // MCP cancellation detaches this response observer, while Native execution still owns
+  // the first call. It neither retires its capability nor cancels the other HTTP session.
+  expect(await callTurnBroker<{ bindingId: string }>(broker.socketPath, { method: "claim", token: tokens[0]! }))
+    .toMatchObject({ bindingId: expect.any(String) });
+  expect(broker.releaseStatus().durable_unknown_calls).toBe(2);
 
   broker.completeTool(tokens[1]!, invocations[1]!.callId, { content: [{ type: "text", text: "other-session" }] });
   const other = await calls[1]!;
   expect(other.status).toBe(200);
   expect((await other.json()).result.content).toEqual([{ type: "text", text: "other-session" }]);
+  broker.completeTool(tokens[0]!, invocations[0]!.callId, { content: [], structuredContent: { exit_code: 0, output: "original completed after observer cancellation" } });
 
   const followup = post(sessionIds[1]!, {
     jsonrpc: "2.0", id: 78, method: "tools/call",

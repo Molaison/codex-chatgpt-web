@@ -118,15 +118,17 @@ test.each([2, 6] as const)("QA ignores legacy Bigger Context %d without importin
   expect(result.skillFiles).toBeUndefined();
 });
 
-test("QA preserves explicit verbosity and JSON schema without importing a runtime role", () => {
+test("QA rejects protocol output controls instead of rewriting the human question", () => {
   const parsed = request([user("Return the answer.")]);
   parsed.options.verbosity = "high";
-  parsed.options.outputFormat = { type: "json_schema", name: "answer", strict: true,
+  expect(() => compile(parsed)).toThrow(expect.objectContaining({ code: "chatgpt_chat_output_control_unsupported", retryable: false }));
+  delete parsed.options.verbosity;
+  const format = { type: "json_schema" as const, name: "answer", strict: true,
     schema: { type: "object", properties: { result: { type: "string" } }, required: ["result"], additionalProperties: false } };
-  const result = compile(parsed);
-  expect(result.text).toContain("Requested answer detail: high.");
-  expect(result.text).toEndWith(JSON.stringify(parsed.options.outputFormat.schema));
-  expect(result.text).not.toMatch(/Codex|RUNTIME_|tool|codex_/);
+  parsed.options.outputFormat = format;
+  expect(() => compile(parsed)).toThrow(expect.objectContaining({ code: "chatgpt_chat_output_control_unsupported", retryable: false }));
+  const humanQuestion = "Return an object matching " + JSON.stringify(format.schema);
+  expect(compile(request([user(humanQuestion)])).text).toBe(humanQuestion);
 });
 
 test("QA compaction uses the same filtering and keeps only conversational summary instructions", () => {
@@ -175,16 +177,15 @@ test("QA compaction fails explicitly instead of discarding an oversized cumulati
   expect(() => compile(parsed)).toThrow("exceed the compaction message budget");
 });
 
-test("QA Luna keeps its required summary tail without importing local tools", () => {
+test("QA Luna keeps the human question and rejects a private summary tail", () => {
   const parsed = request([user("What is the capital of France?")]);
   parsed.modelId = CHATGPT_WEB_LUNA_MODEL_ID;
-  const result = compileChatGptWebPrompt(parsed, { ...capabilities, solAvailable: false }, undefined, {
+  expect(() => compileChatGptWebPrompt(parsed, { ...capabilities, solAvailable: false }, undefined, {
     importCodexPrompt: false, captureLunaCheckpoint: true,
-  });
-  expect(result.text).toContain("What is the capital of France?");
-  expect(result.text).toContain(CHATGPT_LUNA_CHECKPOINT_MARKER);
-  expect(result.text).toContain("Objective:, State:, Evidence:, Decisions:, and Pending:");
-  expect(result.text).not.toMatch(/RUNTIME_|Codex Native|local tools|codex_context_json/);
+  })).toThrow(expect.objectContaining({ code: "chatgpt_chat_output_control_unsupported", retryable: false }));
+  const result = compileChatGptWebPrompt(parsed, { ...capabilities, solAvailable: false }, undefined, { importCodexPrompt: false });
+  expect(result.text).toBe("What is the capital of France?");
+  expect(result.text).not.toContain(CHATGPT_LUNA_CHECKPOINT_MARKER);
 });
 
 test("direct legacy compilation still imports its original runtime contract", () => {

@@ -1,6 +1,7 @@
-import { randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { closeSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { atomicWriteFile } from "./config";
 
 export const GENERATED_FILE_MAX_BYTES = 64 * 1024 * 1024;
 export const GENERATED_FILE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -19,6 +20,51 @@ export interface GeneratedFileMetadata {
   fileId?: string;
   /** 缓存过期后可按顺序重放的原始下载 URL。 */
   sources?: string[];
+  recoveryScope?: string;
+  contentSha256?: string;
+}
+
+interface GeneratedFileRecovery {
+  version: 1;
+  scope: string;
+  token: string;
+  baseUrl: string;
+  metadata: GeneratedFileMetadata;
+}
+
+function syncGeneratedFileDirectory(directory: string): void {
+  if (process.platform === "win32") return;
+  const fd = openSync(directory, "r");
+  try { fsyncSync(fd); } finally { closeSync(fd); }
+}
+
+function recoveredGeneratedFile(
+  directory: string, index: string, scope: string, baseUrl: string,
+  filename: string, mime: string, contentSha256: string, now: number,
+): GeneratedFileRecovery | undefined {
+  let serialized: string;
+  try { serialized = readFileSync(index, "utf8"); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; }
+  const unavailable = () => { throw new Error("The original generated file is unavailable for observation recovery"); };
+  let saved: GeneratedFileRecovery;
+  try { saved = JSON.parse(serialized); } catch { return unavailable(); }
+  if (!saved || typeof saved !== "object" || saved.version !== 1 || saved.scope !== scope
+    || saved.baseUrl !== baseUrl || !TOKEN.test(saved.token)) return unavailable();
+  const metadata = readMetadata(join(directory, saved.token));
+  if (!metadata || JSON.stringify(metadata) !== JSON.stringify(saved.metadata)
+    || metadata.filename !== filename || metadata.mime !== mime || metadata.recoveryScope !== scope
+    || metadata.contentSha256 !== contentSha256 || !Number.isFinite(metadata.expiresAt) || metadata.expiresAt <= now) return unavailable();
+  let bytes: Buffer;
+  try { bytes = readFileSync(join(directory, saved.token, "content")); } catch { return unavailable(); }
+  if (bytes.length !== metadata.size || bytes.length > GENERATED_FILE_MAX_BYTES
+    || createHash("sha256").update(bytes).digest("hex") !== contentSha256) return unavailable();
+  return saved;
+}
+
+function generatedFileUrl(baseUrl: string, token: string, metadata: GeneratedFileMetadata): string {
+  return metadata.fileId
+    ? baseUrl + "/estuary/content?id=" + metadata.fileId + "&fn=" + encodeURIComponent(metadata.filename)
+    : baseUrl + "/files/" + token + "/" + encodeURIComponent(metadata.filename);
 }
 
 /** 缓存过期后的重新下载凭据；由调用方在已登录浏览器里取回字节。 */
@@ -85,7 +131,7 @@ export function purgeExpiredGeneratedFiles(directory: string, now = Date.now()):
 
 export function storeGeneratedFile(
   directory: string, baseUrl: string, filename: string, mime: string, bytes: Uint8Array,
-  now = Date.now(), options: { sources?: readonly string[] } = {},
+  now = Date.now(), options: { sources?: readonly string[]; recoveryScope?: string } = {},
 ): string {
   if (!filename || /[/\\\r\n\0]/.test(filename) || filename === "." || filename === "..") {
     throw new Error("Generated file has an invalid filename");
@@ -97,20 +143,58 @@ export function storeGeneratedFile(
   }
   const sources = normalizeSources(options.sources);
   const fileId = fileIdFromSources(sources);
+  const normalizedMime = normalizeMime(mime), origin = baseUrl.replace(/\/$/, "");
+  const scope = options.recoveryScope;
+  if (scope !== undefined && !TOKEN.test(scope)) throw new Error("Generated file recovery scope is invalid");
+  const contentSha256 = scope ? createHash("sha256").update(bytes).digest("hex") : undefined;
+  const artifact = scope ? createHash("sha256").update(JSON.stringify([filename, normalizedMime, contentSha256])).digest("hex") : undefined;
+  const recoveryDirectory = scope ? join(directory, "recovery", scope) : undefined;
+  const index = recoveryDirectory ? join(recoveryDirectory, artifact + ".json") : undefined;
+  if (index) {
+    const saved = recoveredGeneratedFile(directory, index, scope!, origin, filename, normalizedMime, contentSha256!, now);
+    if (saved) {
+      syncGeneratedFileDirectory(recoveryDirectory!);
+      return generatedFileUrl(origin, saved.token, saved.metadata);
+    }
+  }
   purgeExpiredGeneratedFiles(directory, now);
   const token = randomBytes(32).toString("hex");
   const path = join(directory, token);
   mkdirSync(path, { recursive: true, mode: 0o700 });
-  writeFileSync(join(path, "content"), bytes, { mode: 0o600 });
-  writeFileSync(join(path, "metadata.json"), JSON.stringify({
-    filename, mime: normalizeMime(mime), size: bytes.byteLength, expiresAt: now + GENERATED_FILE_TTL_MS,
+  const metadata: GeneratedFileMetadata = {
+    filename, mime: normalizedMime, size: bytes.byteLength, expiresAt: now + GENERATED_FILE_TTL_MS,
     ...(fileId ? { fileId } : {}), ...(sources ? { sources } : {}),
-  }), { mode: 0o600 });
-  const origin = baseUrl.replace(/\/$/, "");
-  // 有原生标识时给出 ChatGPT 原生形状的下载链接，否则退回随机能力链接。
-  return fileId
-    ? origin + "/estuary/content?id=" + fileId + "&fn=" + encodeURIComponent(filename)
-    : origin + "/files/" + token + "/" + encodeURIComponent(filename);
+    ...(scope ? { recoveryScope: scope, contentSha256 } : {}),
+  };
+  if (scope) {
+    atomicWriteFile(join(path, "content"), bytes, { durable: true });
+    atomicWriteFile(join(path, "metadata.json"), JSON.stringify(metadata), { durable: true });
+    syncGeneratedFileDirectory(path);
+  } else {
+    writeFileSync(join(path, "content"), bytes, { mode: 0o600 });
+    writeFileSync(join(path, "metadata.json"), JSON.stringify(metadata), { mode: 0o600 });
+  }
+  if (index) {
+    mkdirSync(recoveryDirectory!, { recursive: true, mode: 0o700 });
+    syncGeneratedFileDirectory(join(directory, "recovery"));
+    syncGeneratedFileDirectory(directory);
+    const pending = join(recoveryDirectory!, artifact + "." + token + ".tmp");
+    atomicWriteFile(pending, JSON.stringify({ version: 1, scope, token, baseUrl: origin, metadata }), { durable: true });
+    try {
+      // The original capability becomes observable only after both bytes and metadata are saved.
+      // Competing observers converge on one random token without overwriting the winner.
+      try { linkSync(pending, index); syncGeneratedFileDirectory(recoveryDirectory!); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        const saved = recoveredGeneratedFile(directory, index, scope!, origin, filename, normalizedMime, contentSha256!, now);
+        if (!saved) throw new Error("Generated file recovery publication disappeared");
+        syncGeneratedFileDirectory(recoveryDirectory!);
+        rmSync(path, { recursive: true, force: true });
+        return generatedFileUrl(origin, saved.token, saved.metadata);
+      }
+    } finally { rmSync(pending, { force: true }); }
+  }
+  return generatedFileUrl(origin, token, metadata);
 }
 
 function downloadResponse(request: Request, metadata: GeneratedFileMetadata, content: Buffer): Response {

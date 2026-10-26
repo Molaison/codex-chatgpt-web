@@ -1,3 +1,4 @@
+const { validDelivery } = require("./health-maintenance.cjs");
 const languages = require("./languages.json");
 const fs = require("node:fs");
 const { writePrivateFileAtomic } = require("./atomic-file.cjs");
@@ -20,7 +21,6 @@ const DEFAULT_STATE = Object.freeze({
   composerPredictionsEnabled: true,
   experimentalSkillAttachments: false,
   experimentalFreshConversationPerTurn: false,
-  useSavedChats: false,
   zeroRiskProEnabled: false,
   browserSmokePassed: false,
   browserSmokeVersion: null,
@@ -40,7 +40,9 @@ function readState(filePath) {
     const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
     if (!parsed || parsed.version !== 1) return { ...DEFAULT_STATE };
     const state = { ...DEFAULT_STATE, ...parsed };
+    if (!validDelivery(state.maintenanceDelivery)) delete state.maintenanceDelivery;
     delete state.bridgeEnabled;
+    delete state.useSavedChats;
     if (state.language !== null && (typeof state.language !== "string" || !Object.hasOwn(languages, state.language))) {
       state.language = DEFAULT_STATE.language;
     }
@@ -56,7 +58,6 @@ function readState(filePath) {
       "composerPredictionsEnabled",
       "experimentalSkillAttachments",
       "experimentalFreshConversationPerTurn",
-      "useSavedChats",
       "zeroRiskProEnabled",
       "browserSmokePassed",
       "sidebarOpen",

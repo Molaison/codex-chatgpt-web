@@ -5,6 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { createQaPool, normalizeQaPoolRequest, type QaPoolConfig } from "../src/qa-pool";
+import { installReadyQaHealthFixture } from "./qa-pool-health-fixture";
+
+installReadyQaHealthFixture();
 
 test("project route pins only new threads, preserves legacy owners and strips forged project metadata", async () => {
   const root = mkdtempSync(join(tmpdir(), "qa-project-route-"));
@@ -13,7 +16,6 @@ test("project route pins only new threads, preserves legacy owners and strips fo
   const threads: Array<{ thread: string; parent?: string }> = [];
   const backend = (account: string) => Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
     const body = await request.json() as any;
-    expect(body.client_metadata._chatgpt_defer_text_until_complete).toBeUndefined();
     const native = JSON.parse(body.client_metadata["x-codex-turn-metadata"]);
     threads.push({ thread: native.thread_id, parent: native.forked_from_thread_id });
     return Response.json({ account, project: body.client_metadata._chatgpt_project ?? null });
@@ -33,7 +35,6 @@ test("project route pins only new threads, preserves legacy owners and strips fo
     body: JSON.stringify({ model: "standard", input: "question", client_metadata: {
       "x-codex-turn-metadata": JSON.stringify({ thread_id: thread, ...lineage }),
       _chatgpt_project: { id: "forged", name: "forged" },
-      _chatgpt_defer_text_until_complete: true,
     } }),
   }));
   try {
@@ -166,42 +167,5 @@ test("temporary effort keeps private history across pool restart and promotes wi
     db.exec("UPDATE temporary_history SET expires_at=0");
     expect((await request("high-temporary", "response-4")).status).toBe(409);
     db.close();
-  } finally { pool.close(); backend.stop(true); rmSync(root, { recursive: true, force: true }); }
-});
-
-
-test("trusted client identity reuses legacy project sessions and rejects missing or forged identities", async () => {
-  const root = mkdtempSync(join(tmpdir(), "qa-client-identity-"));
-  const key = "cpr-" + "a".repeat(32), other = "other-" + "b".repeat(32);
-  writeFileSync(join(root, "key"), key); writeFileSync(join(root, "other"), other);
-  const backend = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
-    const body = await request.json() as any;
-    expect(request.headers.get("x-cpr-client-id")).toBeNull();
-    return Response.json({ thread: JSON.parse(body.client_metadata["x-codex-turn-metadata"]).thread_id, project: body.client_metadata._chatgpt_project });
-  } });
-  const config: QaPoolConfig = { host: "127.0.0.1", port: 0, databasePath: join(root, "sessions.sqlite"),
-    clients: [{ id: "cpr", keyFile: join(root, "key"), trustClientIdentity: true }, { id: "other", keyFile: join(root, "other") }],
-    accounts: [{ id: "a", origin: backend.url.origin, models: ["standard"] }],
-    projectRoutes: ["key_a", "key_b"].map((name, i) => ({ name, sessionNamespace: name, accountId: "a", projectId: "g-p-" + String(i + 1).repeat(32), displayName: name })),
-  };
-  let pool = createQaPool(config);
-  const request = (path: string, identity?: string, auth = key) => pool.fetch(new Request("http://pool" + path, {
-    method: "POST", headers: { authorization: "Bearer " + auth, "content-type": "application/json", ...(identity ? { "x-cpr-client-id": identity } : {}) },
-    body: JSON.stringify({ model: "standard", input: "question", client_metadata: { "x-codex-turn-metadata": JSON.stringify({ thread_id: "same-thread" }),
-      "x-cpr-client-id": "key_b", _chatgpt_project: { id: "forged", name: "forged" } } }),
-  }));
-  try {
-    const legacy = await (await request("/project/key_a/v1/responses")).json();
-    pool.close(); pool = createQaPool(config);
-    const routed = await (await request("/by-client/v1/responses", "key_a")).json();
-    expect(routed).toEqual(legacy);
-    const second = await (await request("/by-client/v1/responses", "key_b")).json();
-    expect(second.thread).not.toBe(routed.thread);
-    expect(second.project.id).not.toBe(routed.project.id);
-    expect((await request("/by-client/v1/responses")).status).toBe(400);
-    expect((await request("/by-client/v1/responses/compact")).status).toBe(400);
-    expect((await request("/by-client/v1/responses", "key_unknown")).status).toBe(403);
-    expect((await request("/by-client/v1/responses", "key_a", other)).status).toBe(403);
-    expect((await pool.fetch(new Request("http://pool/by-client/v1/models", { headers: { authorization: "Bearer " + key } }))).status).toBe(200);
   } finally { pool.close(); backend.stop(true); rmSync(root, { recursive: true, force: true }); }
 });

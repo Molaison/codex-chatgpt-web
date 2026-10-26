@@ -30,7 +30,7 @@ test("proxies official /models auth and query, then appends grouped and legacy W
     headers: { authorization: "Bearer codex-oauth-token", "if-none-match": "native-etag" },
   });
   let upstream: Request | undefined;
-  const config = defaultConfig("full");
+  const config = { ...defaultConfig("full"), browserHost: "launcher" as const, mcpProvider: "external-http" as const };
   config.subagentProtocol = "native";
   config.extraHighAvailable = true;
   config.proAvailable = true;
@@ -72,6 +72,14 @@ test("proxies official /models auth and query, then appends grouped and legacy W
   };
   expect(body.models.map(model => model.slug)).toEqual([
     "gpt-5.6-sol",
+    "chatgpt-web/gpt-5.6-chat-persist",
+    "chatgpt-web/gpt-5.6-chat-temp",
+    "chatgpt-web/gpt-5.6-tools-persist",
+    "chatgpt-web/gpt-5.6-tools-temp",
+    "chatgpt-web/gpt-6-chat-persist",
+    "chatgpt-web/gpt-6-chat-temp",
+    "chatgpt-web/gpt-6-tools-persist",
+    "chatgpt-web/gpt-6-tools-temp",
     "chatgpt-web/gpt-6-sol-instant",
     "chatgpt-web/gpt-6-sol",
     "chatgpt-web/gpt-5.6-sol-instant",

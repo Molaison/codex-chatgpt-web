@@ -9,6 +9,9 @@ import { ChatGptTurnSessions, ChatGptTraceFeed, ChatGptTextFeed } from "../src/a
 import { MAX_CHATGPT_BROWSER_TABS } from "../src/adapters/chatgpt-web/concurrency";
 import { defaultConfig } from "../src/config";
 import { responseRequest } from "../src/server";
+import { installReadyQaHealthFixture } from "./qa-pool-health-fixture";
+
+installReadyQaHealthFixture();
 
 // Real pool routing and SQLite; only the external backend is replaced. Counts
 // prove forwards at this boundary, not physical browser Sends or CPR integration.
@@ -248,14 +251,14 @@ test("expired latest receipt removes cached content and cannot replay stale outp
   } finally { f.close(); }
 });
 
-test("more than 256 intentional turns continue normally with only one latest receipt", async () => {
+test("receipt retention is independent of turn count rather than capped at 256", async () => {
   const f = fixture();
   try {
     for (let index = 0; index < 270; index++) {
       const response = await f.request(payload(`turn-${index}`, `SYNTHETIC_${index}`));
       expect(response.status).toBe(200); await response.text();
     }
-    expect(f.rows("SELECT COUNT(*) AS n FROM qa_request_receipts")).toEqual([{ n: 1 }]);
+    expect(f.rows("SELECT COUNT(*) AS n FROM qa_request_receipts")).toEqual([{ n: 270 }]);
     expect(f.calls).toHaveLength(270);
     f.restart();
     const latest = await f.request(payload("turn-269", "SYNTHETIC_269"));
@@ -434,8 +437,8 @@ test("new completion rolls latest receipt and history expiry together while repl
     const before = Date.now();
     const next = await f.request(payload("next")); expect(next.status).toBe(200); await next.text();
     const after = Date.now();
-    const expiries = () => f.rows("SELECT h.expires_at AS history_expiry, r.expires_at AS receipt_expiry FROM temporary_history h JOIN qa_request_receipts r USING (session_hash)") as Array<{ history_expiry: number; receipt_expiry: number }>;
-    const saved = expiries(); expect(saved).toHaveLength(1);
+    const expiries = () => f.rows("SELECT h.expires_at AS history_expiry, r.expires_at AS receipt_expiry FROM temporary_history h JOIN qa_request_receipts r USING (session_hash) ORDER BY r.expires_at DESC") as Array<{ history_expiry: number; receipt_expiry: number }>;
+    const saved = expiries(); expect(saved).toHaveLength(2);
     expect(saved[0].receipt_expiry).toBe(saved[0].history_expiry);
     expect(saved[0].receipt_expiry).toBeGreaterThan(oldDeadline);
     expect(saved[0].receipt_expiry).toBeGreaterThanOrEqual(before + 48 * 60 * 60 * 1000);
@@ -587,7 +590,10 @@ test("SQLite space pressure degrades optional cache but retains uncertainty when
     expect((await second.json()).id).toBe("large-history-head");
     expect(f.rows("SELECT response_id FROM temporary_history")).toEqual([{ response_id: "large-history-head" }]);
     expect(f.rows("SELECT pending_history_turn FROM sessions")).toEqual([{ pending_history_turn: null }]);
-    expect(f.rows("SELECT response_json FROM qa_request_receipts")).toEqual([{ response_json: null }]);
+    const receipts = f.rows("SELECT response_json FROM qa_request_receipts ORDER BY expires_at") as Array<{ response_json: string | null }>;
+    expect(receipts).toHaveLength(2);
+    expect(receipts[0].response_json).not.toBeNull();
+    expect(receipts[1].response_json).toBeNull();
     f.respond(() => Response.json({ id: "following-head", status: "completed", output: [] }));
     const next = await f.request(payload("following", "CONTINUE_AFTER_LARGE_ANSWER", "large-history-head"));
     expect(next.status).toBe(200); expect((await next.json()).id).toBe("following-head");

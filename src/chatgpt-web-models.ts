@@ -1,3 +1,4 @@
+import type { McpProvider, RuntimeMode } from "./config";
 export const CHATGPT_WEB_MODEL_PREFIX = "chatgpt-web/";
 /** Shared automatic transport profile; exact browser version is carried by modelFamily. */
 export const CHATGPT_WEB_BACKEND_MODEL = "gpt-5.6-sol";
@@ -296,6 +297,8 @@ export function resolveChatGptWebStagingTokenBudget(
 
 interface ChatGptWebModelRouteBase {
   slug: string;
+  toolAccess?: "chat" | "tools";
+  sessionMode?: "persistent" | "temporary";
   displayName: string;
   description: string;
   codexEffort: ChatGptWebCodexEffort;
@@ -326,6 +329,8 @@ export type ChatGptWebModelRoute = ChatGptWebAutomaticModelRoute | ChatGptWebZer
 
 export interface ChatGptWebAccountCapabilities {
   solAvailable: boolean;
+  mode?: RuntimeMode;
+  mcpProvider?: McpProvider;
   /** Missing in older saved observations; setup must probe before exposing Extra High. */
   extraHighAvailable?: boolean;
   proAvailable: boolean;
@@ -537,12 +542,24 @@ export const CHATGPT_WEB_MODEL_ROUTES: readonly ChatGptWebAutomaticModelRoute[] 
   },
 ];
 
+export const CHATGPT_WEB_SELECTOR_ROUTES: readonly ChatGptWebModelRoute[] =
+  (["5.6", "6"] as const).flatMap(family => (["chat", "tools"] as const).flatMap(toolAccess =>
+    (["persistent", "temporary"] as const).map(sessionMode => ({
+      slug: `chatgpt-web/gpt-${family}-${toolAccess}-${sessionMode === "persistent" ? "persist" : "temp"}`,
+      displayName: `GPT-${family} (Web) · ${toolAccess === "chat" ? "Chat" : "Tools"} · ${sessionMode === "persistent" ? "Persist" : "Temporary"}`,
+      description: `${toolAccess}; ${sessionMode === "persistent" ? "save chat history" : "temporary chat"}; high / xhigh / max (Pro)`,
+      interactionMode: "automatic" as const, backendModel: CHATGPT_WEB_BACKEND_MODEL,
+      codexEffort: "xhigh" as const, adapterEffort: "xhigh" as const, modelFamily: family,
+      supportedCodexEfforts: ["high", "xhigh", "max"] as const,
+      requiresPro: false, toolAccess, sessionMode,
+    }))));
+
 const routesBySlug = new Map(
   [
     CHATGPT_WEB_ZERO_RISK_MODEL_ROUTE,
     CHATGPT_WEB_ZERO_RISK_PRO_MODEL_ROUTE,
     ...CHATGPT_WEB_LUNA_MODEL_ROUTES,
-    ...CHATGPT_WEB_MODEL_ROUTES,
+    ...CHATGPT_WEB_MODEL_ROUTES, ...CHATGPT_WEB_SELECTOR_ROUTES,
     CHATGPT_WEB_LEGACY_LUNA_MODEL_ROUTE,
     CHATGPT_WEB_LUNA_THINK_MODEL_ROUTE,
     ...CHATGPT_WEB_LEGACY_MODEL_ROUTES,
@@ -552,6 +569,14 @@ const routesBySlug = new Map(
 
 export function isChatGptWebModelSlug(modelId: string): boolean {
   return modelId.startsWith(CHATGPT_WEB_MODEL_PREFIX);
+}
+
+/** Model availability does not grant tools beyond the runtime's configured transport. */
+export function chatGptWebLocalToolsEnabled(
+  capabilities: Pick<ChatGptWebAccountCapabilities, "mode" | "browserInteractionMode" | "mcpProvider">,
+): boolean {
+  return capabilities.mode === "full"
+    && (capabilities.browserInteractionMode === "manual" || capabilities.mcpProvider === "external-http");
 }
 
 export function availableChatGptWebModelRoutes(
@@ -569,6 +594,13 @@ export function availableChatGptWebModelRoutes(
   if (!capabilities.solAvailable) return includeLegacy
     ? [...CHATGPT_WEB_LUNA_MODEL_ROUTES, CHATGPT_WEB_LEGACY_LUNA_MODEL_ROUTE, CHATGPT_WEB_LUNA_THINK_MODEL_ROUTE]
     : CHATGPT_WEB_LUNA_MODEL_ROUTES;
+  if (capabilities.mode === "full") {
+    return [...CHATGPT_WEB_SELECTOR_ROUTES, ...(includeLegacy
+      ? [...CHATGPT_WEB_MODEL_ROUTES, ...CHATGPT_WEB_LEGACY_MODEL_ROUTES].map(route => ({ ...route, legacy: true })) : [])]
+      .filter(route => (route.toolAccess !== "tools" || chatGptWebLocalToolsEnabled(capabilities))
+        && (!route.requiresPro || capabilities.proAvailable)
+        && (!route.requiresExtraHigh || capabilities.extraHighAvailable));
+  }
   const candidates = includeLegacy
     ? [...CHATGPT_WEB_MODEL_ROUTES, ...CHATGPT_WEB_LEGACY_MODEL_ROUTES]
     : CHATGPT_WEB_MODEL_ROUTES;
@@ -582,7 +614,19 @@ export function chatGptWebRouteEfforts(
   capabilities: ChatGptWebAccountCapabilities,
 ): readonly ChatGptWebCodexEffort[] {
   return (route.supportedCodexEfforts ?? [route.codexEffort])
-    .filter(effort => effort !== "xhigh" || capabilities.extraHighAvailable === true);
+    .filter(effort => (effort !== "xhigh" || capabilities.extraHighAvailable === true)
+      && (!route.toolAccess || effort !== "max" || capabilities.proAvailable));
+}
+
+/** The catalog and a request without an explicit effort must select the same available default. */
+export function chatGptWebDefaultEffort(
+  route: ChatGptWebModelRoute,
+  capabilities: ChatGptWebAccountCapabilities,
+): ChatGptWebCodexEffort {
+  const efforts = chatGptWebRouteEfforts(route, capabilities);
+  const effort = efforts.includes(route.codexEffort) ? route.codexEffort : efforts[0];
+  if (!effort) throw new Error(`${route.displayName} has no available reasoning effort`);
+  return effort;
 }
 
 export function requireChatGptWebModelRoute(
@@ -595,6 +639,10 @@ export function requireChatGptWebModelRoute(
   }
   const route = routesBySlug.get(modelId);
   if (!route) throw new Error(`ChatGPT web model is not enabled: ${modelId}`);
+  if (route.toolAccess && capabilities.mode !== "full") throw new Error("Selector groups require the Full runtime");
+  if (route.toolAccess === "tools" && !chatGptWebLocalToolsEnabled(capabilities)) {
+    throw new Error("Tools selectors are unavailable for this runtime's configured tool transport");
+  }
   if (capabilities.browserInteractionMode === "manual") {
     if (route.interactionMode !== "manual") {
       throw new Error(`${route.displayName} is not available while Zero Risk is enabled`);
@@ -629,10 +677,11 @@ function resolveRouteEffort(
   reasoning?: string,
 ): ChatGptWebAutomaticModelRoute {
   if (!route.supportedCodexEfforts) return route;
-  const effort = reasoning ?? route.codexEffort;
+  const effort = reasoning ?? chatGptWebDefaultEffort(route, capabilities);
   if (!chatGptWebRouteEfforts(route, capabilities).includes(effort as ChatGptWebCodexEffort)) {
     throw new Error(`${route.displayName} does not support effort ${JSON.stringify(effort)} for this account`);
   }
   if (effort === route.codexEffort) return route;
-  return { ...route, codexEffort: effort as ChatGptWebCodexEffort, adapterEffort: effort as ChatGptWebAdapterEffort };
+  return { ...route, codexEffort: effort as ChatGptWebCodexEffort, adapterEffort: effort as ChatGptWebAdapterEffort,
+    ...(route.toolAccess ? { requiresPro: effort === "max" } : {}) };
 }

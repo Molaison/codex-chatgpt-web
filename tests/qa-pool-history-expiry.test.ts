@@ -4,6 +4,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createQaPool, type QaPoolConfig } from "../src/qa-pool";
+import { installReadyQaHealthFixture } from "./qa-pool-health-fixture";
+
+installReadyQaHealthFixture();
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "qa-history-expiry-"));

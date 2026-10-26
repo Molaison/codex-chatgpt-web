@@ -3,6 +3,7 @@ const { randomBytes, timingSafeEqual } = require("node:crypto");
 const { releaseRetainedConversation } = require("./retained-turn-release.cjs");
 
 const MAX_BODY_BYTES = 16 * 1024;
+const MAX_NATIVE_WATCH_BODY_BYTES = 256 * 1024;
 const MAX_MANUAL_START_BODY_BYTES = 3 * 1024 * 1024;
 const MANUAL_SENT_OBSERVER_TIMEOUT_MS = 35_000;
 
@@ -95,12 +96,22 @@ class BrowserControlServer {
       writeJson(response, 401, { error: "unauthorized" });
       return;
     }
-    const isTurn = request.url === "/v1/turn/start"
+    const isTurn = request.url === "/v1/turn/observe-ready"
+      || request.url === "/v1/turn/native-submission-watch"
+      || request.url === "/v1/turn/native-release-read"
+      || request.url === "/v1/turn/observe-complete"
+      || request.url === "/v1/turn/observe-end"
+      || request.url === "/v1/turn/observe"
+      || request.url === "/v1/turn/start"
       || request.url === "/v1/turn/heartbeat"
       || request.url === "/v1/turn/usage"
       || request.url === "/v1/turn/approval"
       || request.url === "/v1/turn/end";
     const isTurnRelease = request.url === "/v1/turn/release";
+    const isStandbyStatus = request.url === "/v1/browser/standby";
+    const isHealthRead = request.url === "/v1/health/read";
+    const isHealthAdmission = request.url === "/v1/health/admit";
+    const isHealthMaintenance = request.url === "/v1/health/maintenance";
     const isSessionInspect = request.url === "/v1/session/inspect";
     const isProxyResolution = request.url === "/v1/network/resolve-proxy";
     const manualAction = new Map([
@@ -111,15 +122,28 @@ class BrowserControlServer {
       ["/v1/manual/end", "end"],
       ["/v1/manual/cancel", "cancel"],
     ]).get(request.url);
-    if (request.method !== "POST" || (!isTurn && !isTurnRelease && !isSessionInspect && !isProxyResolution && !manualAction)) {
+    if (request.method !== "POST" || (!isHealthRead && !isHealthAdmission && !isHealthMaintenance && !isTurn && !isTurnRelease && !isSessionInspect && !isProxyResolution && !isStandbyStatus && !manualAction)) {
       writeJson(response, 404, { error: "not_found" });
       return;
     }
+    let nativeWatchDiagnostic;
     try {
       const body = await readJson(
         request,
-        manualAction === "start" ? MAX_MANUAL_START_BODY_BYTES : MAX_BODY_BYTES,
+        manualAction === "start" ? MAX_MANUAL_START_BODY_BYTES
+          : ["/v1/turn/native-submission-watch", "/v1/turn/native-release-read", "/v1/turn/observe-ready", "/v1/turn/observe", "/v1/turn/observe-complete", "/v1/turn/observe-end"].includes(request.url)
+            ? MAX_NATIVE_WATCH_BODY_BYTES : MAX_BODY_BYTES,
       );
+      if (request.url === "/v1/turn/native-submission-watch") {
+        nativeWatchDiagnostic = {
+          phase: "native-submission-watch",
+          ...(typeof body?.traceId === "string" && /^[a-f0-9]{12}$/.test(body.traceId) ? { traceId: body.traceId } : {}),
+          ...(typeof body?.sendId === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(body.sendId)
+            ? { sendId: body.sendId } : {}),
+          ...(["start", "read", "stage-complete", "final-complete", "cancel-request", "cancel-terminal"].includes(body?.action)
+            ? { action: body.action } : {}),
+        };
+      }
       if (isProxyResolution) {
         const url = new URL(body?.url);
         if (url.origin !== "https://chatgpt.com" || url.username || url.password
@@ -136,6 +160,27 @@ class BrowserControlServer {
       const preferences = this.getPreferences();
       const host = this.getBrowserHost();
       if (!host) throw new Error("browser host is not ready");
+      if (isHealthAdmission) {
+        writeJson(response, 200, host.admitHealthAssignment(body));
+        return;
+      }
+      if (isHealthRead) {
+        writeJson(response, 200, await host.readPassiveHealth(body));
+        return;
+      }
+      if (isHealthMaintenance) {
+        writeJson(response, 200, host.reportHealthMaintenance(body));
+        return;
+      }
+      if (isStandbyStatus) {
+        writeJson(response, 200, {
+          standbyReady: host.standbyView?.ready === true,
+          standbyPresent: Boolean(host.standbyView),
+          activeTurns: [...host.turnTabs.values()].filter(tab => tab.status === "running").length,
+          tabs: host.snapshot().tabs,
+        });
+        return;
+      }
       if (isSessionInspect) {
         if (host.browserInteractionMode() === "manual") {
           const error = new Error(
@@ -294,9 +339,40 @@ class BrowserControlServer {
         writeJson(response, 200, { ok: true, ...release });
         return;
       }
+      if (request.url === "/v1/turn/observe-complete") {
+        if (host.browserInteractionMode() === "manual") throw new Error("Automatic browser interaction is disabled");
+        const result = await host.completeObservedNativeTurn(body);
+        writeJson(response, 200, { ok: true, ...result });
+        return;
+      }
+      if (request.url === "/v1/turn/observe-end") {
+        if (host.browserInteractionMode() === "manual") throw new Error("Automatic browser interaction is disabled");
+        const result = await host.endObservedTurn(body);
+        writeJson(response, 200, { ok: true, ...result });
+        return;
+      }
+      if (request.url === "/v1/turn/native-release-read") {
+        const nativeRelease = host.nativeReleaseRead(body);
+        writeJson(response, 200, { ok: true, nativeRelease });
+        return;
+      }
+      if (request.url === "/v1/turn/native-submission-watch") {
+        if (host.browserInteractionMode() === "manual") throw new Error("Automatic browser interaction is disabled");
+        const nativeSubmissionWatch = await host.nativeSubmissionWatch(body);
+        writeJson(response, 200, { ok: true, nativeSubmissionWatch });
+        return;
+      }
+      if (request.url === "/v1/turn/observe-ready" || request.url === "/v1/turn/observe") {
+        if (host.browserInteractionMode() === "manual") throw new Error("Automatic browser interaction is disabled");
+        await host.observeTurnWithNativeWatch(body.traceId, body.helperPid, body.surfaceId, body.observation,
+          request.url === "/v1/turn/observe-ready");
+        writeJson(response, 200, { ok: true });
+        return;
+      }
       if (request.url === "/v1/turn/approval") {
         if (host.browserInteractionMode() === "manual") throw new Error("Automatic browser interaction is disabled");
-        host.setTurnApprovalPending(body.traceId, body.helperPid, body.pending);
+        host.setTurnApprovalPending(body.traceId, body.helperPid, body.pending,
+          ...(body.surfaceId === undefined ? [] : [body.surfaceId]));
         this.logger.info("browser.tool_approval", { traceId: body.traceId, pending: body.pending });
         writeJson(response, 200, { ok: true });
         return;
@@ -304,7 +380,7 @@ class BrowserControlServer {
       if (request.url === "/v1/turn/usage") {
         if (host.browserInteractionMode() === "manual") throw new Error("Limits tracking is disabled in Zero Risk mode");
         // The same owner check as a heartbeat prevents another helper from charging this tab.
-        host.heartbeatTurn(body.traceId, body.helperPid);
+        host.heartbeatTurn(body.traceId, body.helperPid, ...(body.surfaceId === undefined ? [] : [false, undefined, body.surfaceId]));
         if (!this.limits) throw new Error("Limits tracking is unavailable");
         const recorded = this.limits.record(body);
         writeJson(response, 200, { ok: true, recorded });
@@ -330,6 +406,7 @@ class BrowserControlServer {
             body.connectorIdentity,
             body.requireRetainedConversation === true,
             acquisition.signal,
+            ...(body.conversationUrl !== undefined || body.leaseFencing !== undefined ? [body.conversationUrl, body.leaseFencing] : []),
           );
         } finally {
           response.off("close", onClose);
@@ -338,12 +415,13 @@ class BrowserControlServer {
         writeJson(response, 200, { ok: true, ...lease, trackUsage: this.limits?.enabled() === true });
         return;
       } else if (request.url === "/v1/turn/heartbeat") {
-        host.heartbeatTurn(body.traceId, body.helperPid, body.refreshViewport === true, body.progress);
+        host.heartbeatTurn(body.traceId, body.helperPid, body.refreshViewport === true, body.progress,
+          ...(body.surfaceId === undefined ? [] : [body.surfaceId]));
         this.logger.debug?.("browser.turn_heartbeat", { traceId: body.traceId });
         writeJson(response, 200, { ok: true });
         return;
       } else {
-        if (!['completed', 'failed', 'aborted'].includes(body.status)) throw new Error("turn status is invalid");
+        if (!['completed', 'cancelled', 'failed', 'aborted'].includes(body.status)) throw new Error("turn status is invalid");
         const release = await host.endTurn(
           body.traceId,
           body.helperPid,
@@ -352,6 +430,8 @@ class BrowserControlServer {
           body.message,
           body.retain === true,
           body.connectorBound === true,
+          body.surfaceId,
+          body.nativeRelease,
         );
         this.logger.info("browser.turn_ended", { traceId: body.traceId, status: body.status });
         writeJson(response, 200, { ok: true, ...release });
@@ -359,21 +439,31 @@ class BrowserControlServer {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn("browser.control_rejected", { message });
+      this.logger.warn("browser.control_rejected", { message,
+        ...(nativeWatchDiagnostic ? {
+          ...nativeWatchDiagnostic,
+          ...(["watch_state_rejected", "owner_fence_rejected", "request_schema_rejected", "bootstrap_unready", "turn_state_rejected", "scope_rejected"]
+            .includes(error?.nativeWatchReason) ? { reason: error.nativeWatchReason } : {}),
+        } : {}),
+      });
+      const writerConflict = error?.code === "browser_writer_conflict";
       const cancelled = error?.code === "turn_cancelled";
       const retainedUnavailable = error?.code === "retained_conversation_unavailable";
+      const ownerLost = error?.code === "turn_owner_lost";
       const manualInspectionDisabled = error?.code === "manual_browser_inspection_disabled";
       const manualOwnerLost = error?.code === "manual_turn_owner_lost";
       const manualTimedOut = error?.code === "manual_turn_timed_out";
       writeJson(
         response,
-        cancelled || retainedUnavailable || manualInspectionDisabled || manualOwnerLost
+        writerConflict || cancelled || retainedUnavailable || ownerLost || manualInspectionDisabled || manualOwnerLost
           ? 409
           : manualTimedOut ? 408 : 400,
         {
         error: message,
+        ...(writerConflict ? { code: "browser_writer_conflict" } : {}),
         ...(cancelled ? { code: "turn_cancelled" } : {}),
         ...(retainedUnavailable ? { code: "retained_conversation_unavailable" } : {}),
+        ...(ownerLost ? { code: "turn_owner_lost" } : {}),
         ...(manualInspectionDisabled ? { code: "manual_browser_inspection_disabled" } : {}),
         ...(manualOwnerLost ? { code: "manual_turn_owner_lost" } : {}),
         ...(manualTimedOut ? { code: "manual_turn_timed_out" } : {}),

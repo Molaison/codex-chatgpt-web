@@ -856,3 +856,36 @@ test("chart DOM transports data while the Markdown view excludes renderer contro
   expect(parseChatGptChartWidgets(['{"mark":"bar","data":{"values":[{"x":"v","y":1}]}, "encoding":{"x":{"field":"x"},"y":{"field":"y"}},"transform":[{"calculate":"alert(1)"}]}'])[0])
     .toEqual({version: 1, kind: "cartesian_chart", id: "chart-1", mark: "bar", title: "", xField: "x", yField: "y", points: [{x:"v",y:1}]});
 });
+
+test("unwitnessed repeated-text remount cannot establish identity from a complete text prefix", async () => {
+  const html = `<section id="turn"><div class="markdown"><p>Repeated.</p><p>Repeated.</p><p>Number 03 <a href="https://example.com/3">link</a>.</p><p>Growing.</p></div></section>`;
+  const frames = await snapshots(html, [doc => {
+    const root = doc.querySelector(".markdown")!;
+    root.innerHTML = root.innerHTML;
+    root.lastElementChild!.textContent = "Growing answer.";
+    root.innerHTML += "<p>Final.</p>";
+  }]);
+  const buffer = new ChatGptMarkdownBuffer(undefined, 0);
+  expect(buffer.observe(frames[0]!.markdownSegments, 0).length).toBeGreaterThan(0);
+  expect(buffer.observe(frames[1]!.markdownSegments, 1)).toBe("");
+  expect(buffer.currentSnapshotIsConsistent()).toBeFalse();
+  expect(() => buffer.finish()).toThrow(ChatGptMarkdownConsistencyError);
+});
+
+test("complete-prefix remount cannot hide changed links, text, order or missing repeated occurrences", async () => {
+  const html = `<section id="turn"><div class="markdown"><p>Repeated.</p><p>Repeated.</p><p>Number 03 <a href="https://example.com/3">link</a>.</p><p>Pending.</p></div></section>`;
+  for (const mutation of ["link", "text", "order", "missing"] as const) {
+    const [first, changed] = await snapshots(html, [doc => {
+      const root = doc.querySelector(".markdown")!;
+      root.innerHTML = root.innerHTML;
+      if (mutation === "link") root.querySelector("a")!.setAttribute("href", "https://example.com/other");
+      if (mutation === "text") root.firstElementChild!.textContent = "Changed.";
+      if (mutation === "order") root.insertBefore(root.children[2]!, root.children[1]!);
+      if (mutation === "missing") root.firstElementChild!.remove();
+    }]);
+    const buffer = new ChatGptMarkdownBuffer(undefined, 0);
+    buffer.observe(first!.markdownSegments, 0);
+    buffer.observe(changed!.markdownSegments, 1);
+    expect(() => buffer.finish()).toThrow(ChatGptMarkdownConsistencyError);
+  }
+});

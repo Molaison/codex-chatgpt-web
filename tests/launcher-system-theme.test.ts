@@ -18,6 +18,8 @@ test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("launcher CDP attachments pre
   const child = Bun.spawn([
     process.env.CHATGPT_DOM_TEST_BROWSER!,
     "--headless=new",
+    // Containerized Linux test runners may execute as root; this is an unauthenticated fixture.
+    ...(process.platform === "linux" && process.getuid?.() === 0 ? ["--no-sandbox"] : []),
     "--remote-debugging-address=127.0.0.1",
     "--remote-debugging-port=0",
     `--user-data-dir=${root}`,

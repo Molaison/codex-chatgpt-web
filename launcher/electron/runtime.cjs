@@ -18,6 +18,7 @@ const { embeddedRuntimeInvocation, runtimeInvocation } = require("./runtime-comm
 const { redactText } = require("./logging.cjs");
 const { DETACH_OWNED_CHILD, terminateOwnedProcessTree } = require("./process-tree.cjs");
 const { windowsTrustEnvironment } = require("./windows-trust.cjs");
+const { compareVersions } = require("./update.cjs");
 
 const MAX_CAPTURE_BYTES = 8 * 1024 * 1024;
 const MAX_RUNTIME_LOG_LINE_CHARS = 64 * 1024;
@@ -1275,32 +1276,6 @@ class RuntimeHost {
     return { ...result, enabled };
   }
 
-  async setUseSavedChats(enabled) {
-    if (typeof enabled !== "boolean") throw new Error("Saved chat preference must be a boolean");
-    const current = this.runtimeConfigSnapshot();
-    if (!current.configured) throw new Error("Initialize the runtime before changing saved chats");
-    const development = this.launcherProfile === "development";
-    const args = [
-      ...(development ? ["dev", "setup"] : ["setup"]),
-      current.mode === "full" ? "--full" : "--browser-only",
-      "--browser-host-descriptor", this.browserDescriptorPath,
-      ...this.browserInteractionArgs(),
-      "--acknowledge-unofficial",
-      ...(development ? [] : ["--replace-codex-route", "--restart-service"]),
-      enabled ? "--saved-chats" : "--temporary-chats",
-    ];
-    if (current.config?.autoApproveToolCalls === true) args.push("--auto-approve-tool-calls");
-    const options = {
-      message: enabled ? "Enabling saved ChatGPT conversations" : "Restoring Temporary Chat",
-      successMessage: enabled ? "Saved ChatGPT conversations enabled" : "Temporary Chat restored",
-      timeoutMs: CORE_SETUP_TIMEOUT_MS,
-    };
-    const result = development
-      ? await this.runDevSetup("use-saved-chats", args, options)
-      : await this.runSetup("use-saved-chats", args, options);
-    return { ...result, enabled };
-  }
-
   async setZeroRiskPro(enabled) {
     const current = this.runtimeConfigSnapshot();
     if (!current.configured) {
@@ -1367,6 +1342,12 @@ class RuntimeHost {
         && !tunnelProfileMigrationRequired)) {
       return { updated: false };
     }
+    if (compareVersions(currentVersion, existing.config.releaseVersion) < 0) {
+      throw new Error(
+        `This launcher is version ${currentVersion}, but a newer runtime ${existing.config.releaseVersion} is already installed. `
+        + `Open Codex Web GPT ${existing.config.releaseVersion} or newer to continue.`,
+      );
+    }
     const args = [
       "setup",
       existing.mode === "full" ? "--full" : "--browser-only",
@@ -1378,6 +1359,9 @@ class RuntimeHost {
       "--acknowledge-unofficial",
       "--restart-service",
     ];
+    if (interactionMode === "automatic" && existing.config?.autoApproveToolCalls === true) {
+      args.push("--auto-approve-tool-calls");
+    }
     args.push("--preserve-disconnected-route");
     const result = await this.runSetup("runtime-upgrade", args, {
       message: tunnelProfileMigrationRequired

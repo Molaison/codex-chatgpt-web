@@ -32,7 +32,7 @@ const formats = new Map([
 export async function preserveChatGptResponseImages(
   page: Page,
   images: readonly ChatGptResponseImage[],
-  options: { directory: string; traceId: string; downloadDirectory?: string; downloadBaseUrl?: string; signal?: AbortSignal },
+  options: { directory: string; traceId: string; downloadDirectory?: string; downloadBaseUrl?: string; signal?: AbortSignal; recoveryScope?: string },
 ): Promise<SavedChatGptImage[]> {
   if (!images.length) return [];
   if (!/^[A-Za-z0-9_-]{1,160}$/.test(options.traceId)) throw new Error("Invalid image archive turn identity");
@@ -112,7 +112,8 @@ export async function preserveChatGptResponseImages(
       chmodSync(path, 0o600);
       // The durable copy survives the gateway's 24-hour link expiry and cleanup.
       const url = options.downloadDirectory && options.downloadBaseUrl
-        ? storeGeneratedFile(options.downloadDirectory, options.downloadBaseUrl, filename, captured.mime, bytes)
+        ? storeGeneratedFile(options.downloadDirectory, options.downloadBaseUrl, filename, captured.mime, bytes,
+          Date.now(), { recoveryScope: options.recoveryScope })
         : pathToFileURL(path).href;
       saved.push({ filename, path, url, mime: captured.mime, size: bytes.length, ...dimensions, sha256 });
       // Save each success immediately; a later partial failure must not lose earlier results.

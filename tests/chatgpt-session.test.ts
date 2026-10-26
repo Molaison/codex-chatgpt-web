@@ -9,6 +9,7 @@ import {
   activateChatGptEffortMenu,
   assertNewChatPage,
   chatGptNewChatUrl,
+  CHATGPT_NEW_CHAT_URL,
   detectChatGptAccountCapabilities,
 } from "../src/chatgpt-session";
 
@@ -22,29 +23,50 @@ function effortTestPage<T extends object>(page: T, initial = { width: 1280, heig
       `(${callback.toString()})()`,
       { innerWidth: viewport.width, innerHeight: viewport.height },
     ),
+    waitForFunction: async (callback: Function, argument: unknown) => {
+      const ready = runInNewContext(`(${callback.toString()})(argument)`, {
+        argument, innerWidth: viewport.width, innerHeight: viewport.height,
+      });
+      if (!ready) throw new Error("Fixture viewport is not operational");
+    },
     setViewportSize: async (size: { width: number; height: number }) => { viewport = { ...size }; },
   };
 }
 
-test("saved chats start empty and cannot reuse an arbitrary conversation or a Temporary Chat", async () => {
-  expect(chatGptNewChatUrl()).toBe("https://chatgpt.com/?temporary-chat=true");
-  expect(chatGptNewChatUrl(true)).toBe("https://chatgpt.com/");
+test("new chats default to ordinary and reject a previous conversation or unexpected Temporary Chat", async () => {
+  expect(CHATGPT_NEW_CHAT_URL).toBe("https://chatgpt.com/");
   const prepare = (ChatGptBrowserWorker.prototype as any).prepareChatSurface;
-  for (const saved of [false, true]) {
-    let url = "https://chatgpt.com/c/previous-task";
+  for (const initial of ["https://chatgpt.com/c/previous-task", "https://chatgpt.com/?temporary-chat=true", "about:blank", CHATGPT_NEW_CHAT_URL]) {
+    let url = initial;
     const navigations: string[] = [];
     const absent: any = { filter: () => absent, last: () => absent, isVisible: async () => false };
     const composer: any = { count: async () => 1, nth: () => composer, isVisible: async () => true };
-    const page: any = {
+    const page: any = effortTestPage({
       url: () => url,
       goto: async (next: string) => { url = next; navigations.push(next); },
       locator: (selector: string) => selector === CHATGPT_COMPOSER_SELECTOR ? composer : absent,
-    };
-    expect(await prepare.call({ activeComposer: async () => composer }, page, undefined, saved)).toBe(composer);
-    expect(navigations).toEqual([chatGptNewChatUrl(saved)]);
-    await expect(assertNewChatPage(page, !saved)).rejects.toThrow("requested new");
-    url = "https://chatgpt.com/c/previous-task";
-    await expect(assertNewChatPage(page, saved)).rejects.toThrow("requested new");
+    });
+    expect(await prepare.call({ activeComposer: async () => composer }, page)).toBe(composer);
+    expect(navigations).toEqual(initial === CHATGPT_NEW_CHAT_URL ? [] : [CHATGPT_NEW_CHAT_URL]);
+    await expect(assertNewChatPage(page)).resolves.toBeUndefined();
+    for (const invalid of ["https://chatgpt.com/c/previous-task", "https://chatgpt.com/?temporary-chat=true", "https://example.com/"]) {
+      url = invalid;
+      await expect(assertNewChatPage(page)).rejects.toThrow("requested new chat");
+    }
+  }
+});
+
+test("explicit temporary and project URLs keep their session boundary", async () => {
+  const projectId = `g-p-${"a".repeat(32)}`;
+  const temporary = { temporary: true };
+  const project = { projectId };
+  expect(chatGptNewChatUrl(temporary)).toBe("https://chatgpt.com/?temporary-chat=true");
+  expect(chatGptNewChatUrl(project)).toBe(`https://chatgpt.com/g/${projectId}/project`);
+  expect(() => chatGptNewChatUrl({ ...temporary, ...project })).toThrow("ordinary chat");
+  expect(() => chatGptNewChatUrl({ projectId: "../other" })).toThrow("valid project id");
+  for (const options of [temporary, project]) {
+    await expect(assertNewChatPage({ url: () => chatGptNewChatUrl(options) } as any, options)).resolves.toBeUndefined();
+    await expect(assertNewChatPage({ url: () => CHATGPT_NEW_CHAT_URL } as any, options)).rejects.toThrow("requested new chat");
   }
 });
 
@@ -68,6 +90,16 @@ test("composer and effort selectors exclude unrelated editable fields and menu b
   const matches = (selector: string) => Array.from(document.querySelectorAll(selector)).map(element => element.id);
   expect(matches(CHATGPT_COMPOSER_SELECTOR)).toEqual(["composer-testid", "prompt-textarea", "composer-lexical", "power-editor"]);
   expect(matches(CHATGPT_EFFORT_CONTROL_SELECTOR)).toEqual(["effort", "model", "power-effort"]);
+});
+
+test.each(["Target page, context or browser has been closed", "Timeout 3000ms exceeded", "Element is not attached to the DOM"])("effort activation preserves unrelated click failure: %s", async message => {
+  const error = new Error(message);
+  const control = {
+    getAttribute: async () => "false",
+    click: async () => { throw error; },
+    dispatchEvent: async () => { throw new Error("must not try pointerdown"); },
+  };
+  await expect(activateChatGptEffortMenu(effortTestPage({}) as never, control as never, { settleMs: 0 })).rejects.toBe(error);
 });
 
 test("effort activation binds the owned menu after the control opens", async () => {
@@ -313,7 +345,7 @@ function reasoningPicker(options: { max?: string; locks?: Array<string | null>; 
   const modelRows = { count: async () => 3, first() { return this; }, waitFor: async () => {}, nth: () => { throw new Error("Model rows are not effort choices"); } };
   const menu = { filter() { return this; }, last() { return this; }, isVisible: async () => true, locator: () => modelRows };
   const page = {
-    url: () => "https://chatgpt.com/?temporary-chat=true",
+    url: () => "https://chatgpt.com/",
     evaluate: async () => true,
     locator: (selector: string) => {
       if (selector === CHATGPT_COMPOSER_SELECTOR) return composer;
@@ -347,6 +379,18 @@ test("an effort-control observation failure cannot become a Luna-only detection"
     selectorTimeoutMs: 100,
     stableAbsenceMs: 0,
   })).rejects.toThrow("Ambiguous effort controls");
+});
+
+test("cancelling a missing model-control probe does not return Luna capabilities", async () => {
+  const fixture = reasoningPicker();
+  fixture.control.isVisible = async () => false;
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 10);
+  try {
+    const failure = await detectChatGptAccountCapabilities(fixture.page as never, { signal: abort.signal })
+      .then(() => undefined, (error: unknown) => error);
+    expect(failure).toMatchObject({ name: "AbortError" });
+  } finally { clearTimeout(timer); }
 });
 
 test.each([0, 50])("capabilities wait for the visible container and read its hidden semantic input (delay=%s)", async delay => {

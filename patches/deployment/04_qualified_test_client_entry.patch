@@ -1,0 +1,49 @@
+From 445009ac17d4f19b6c70bf8a0acd0d6bb6ca6920 Mon Sep 17 00:00:00 2001
+From: molaison_cluster <sub2pro@foxmail.com>
+Date: Sun, 25 Oct 2026 21:20:16 +0800
+Subject: [PATCH] ops(recovery): pair isolated entry point with the verified
+ notice client
+
+---
+ .../170_codex_recovery42_before.sh                             | 3 +++
+ .../42_diagnostic_recovery_implementation/44_codex_recovery42  | 3 +++
+ .../168_saved_session_and_model_recovery.md                    | 3 +++
+ 3 files changed, 9 insertions(+)
+ create mode 100644 config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/170_codex_recovery42_before.sh
+ create mode 100755 config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/44_codex_recovery42
+
+diff --git a/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/170_codex_recovery42_before.sh b/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/170_codex_recovery42_before.sh
+new file mode 100644
+index 00000000..8fc44f52
+--- /dev/null
++++ b/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/170_codex_recovery42_before.sh
+@@ -0,0 +1,3 @@
++#!/usr/bin/env bash
++set -euo pipefail
++exec /xcf26/zpzeng/practice_arena/203_install_codex_proxy_rs_ywl/scratch/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/03_codex_notice_candidate/bundle/codex --no-daemon --profile recovery42 "$@"
+diff --git a/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/44_codex_recovery42 b/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/44_codex_recovery42
+new file mode 100755
+index 00000000..980dd0ad
+--- /dev/null
++++ b/config/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/44_codex_recovery42
+@@ -0,0 +1,3 @@
++#!/usr/bin/env bash
++set -euo pipefail
++exec /xcf26/zpzeng/practice_arena/200_process_codex_tools/runs/001_codex_patches/01_ordered_patch_series/01_draft_workflows/19_provider_notice_cli/codex --no-daemon --profile recovery42 "$@"
+diff --git a/work/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/168_saved_session_and_model_recovery.md b/work/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/168_saved_session_and_model_recovery.md
+index 29b9470a..20424b70 100644
+--- a/work/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/168_saved_session_and_model_recovery.md
++++ b/work/001_cpr_ywl_deployment/01_upstream_compose_isolated/42_diagnostic_recovery_implementation/168_saved_session_and_model_recovery.md
+@@ -42,6 +42,9 @@ ChatGPT先暴露 `local-chatgpt%3A…` 临时地址，正式保存地址可能
+ ## 运行与恢复
+ 
+ - 账号2测试API/provider继续沿既有recovery42入口，不新建CPR后端、不改dd。
++- `codex-recovery42` 的既有symlink仍指项目 `44_codex_recovery42`；该独立测试入口现只把客户端路径从03换为本轮实际验收的19号notice客户端，保留 `--no-daemon --profile recovery42` 和全部参数。版本入口退出0，runtime guards PASS；复用168同一19号二进制的真实工具/保存续聊/notice证据，不把--version当功能验收。日常Codex、共享AppServer及原等待idle的安装owner均未改。该wrapper不在yadm受管文件中，未新建另一份配置；原wrapper内容保留 `config/.../170_codex_recovery42_before.sh` 可按原入口恢复。
+ - 168维护状态：远端 `.migration/window-20261022/42_diagnostic_recovery_qualification/recovery42-real-e2e03/168_pre_send_model_recovery/state.json`；独立owner `web-recovery42-recovery168-deployment.service`。
+ - 两次独立启动在worker claim/Native状态保存前退出，原journal因权限不可读；核实prepared/无worker.claim或空Native输入后，补齐显式PATH继续并成功。按启动环境问题保留，不把未采集到的原始错误栈说成已证实，不当成模型执行或业务重放，失败unit保留。
+ - 不重投已完成部署。确需恢复时按同目录 `recovery.json` 的原124 owner入口处理当前phase，不手工拆做停启，不清未知记录。
++
++源码及真实验收摘要已推送GitHub `Molaison/codex-chatgpt-web` 的 `release/recovery-20261025`：功能提交 `a4de39e`。生产切换适配归档 `51af4bc`；最新隔离测试工程提交 `3a6bb66a` 以format-patch归档到同一产品分支。main与独立Mol185未覆盖。
+-- 
+2.43.7
+

@@ -83,9 +83,10 @@ export class SavedChatResponseAliases {
 
 export function supportsSavedChatAliases(provider: CodexProviderConfig, parsed: CodexParsedRequest): boolean {
   const config = provider.chatgptWeb;
+  const localToolsEnabled = parsed._chatgptLocalTools ?? config?.localToolsEnabled;
   return config?.browserHost === "launcher" && !!config.browserHostDescriptorPath
-    && config.browserInteractionMode !== "manual" && config.localToolsEnabled !== true
-    && config.useSavedChats !== false && config.experimentalFreshConversationPerTurn !== true
+    && config.browserInteractionMode !== "manual" && localToolsEnabled !== true
+    && parsed._chatgptSessionMode !== "temporary" && config.experimentalFreshConversationPerTurn !== true
     && !parsed._compactionRequest && parsed.modelId !== CHATGPT_WEB_LUNA_BACKEND_MODEL;
 }
 function context(provider: CodexProviderConfig, parsed: CodexParsedRequest) {

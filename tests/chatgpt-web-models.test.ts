@@ -1,3 +1,4 @@
+import { parseRequest } from "../src/responses/parser";
 import { describe, expect, test } from "bun:test";
 import { chatGptConversationKey } from "../src/adapters/chatgpt-web/conversation-key";
 import {
@@ -15,6 +16,7 @@ import {
   CHATGPT_WEB_ZERO_RISK_PRO_BACKEND_MODEL,
   CHATGPT_WEB_ZERO_RISK_PRO_MODEL_ROUTE,
   CHATGPT_WEB_MODEL_ROUTES,
+  CHATGPT_WEB_SELECTOR_ROUTES,
   requireChatGptWebModelRoute,
   resolveChatGptWebContextLimits,
   resolveChatGptWebTransportLimits,
@@ -69,9 +71,10 @@ describe("fixed ChatGPT Web model routes", () => {
   });
 
   test("Extra High stays routable without granting Pro or Pro-sized context", () => {
-    const config = { ...defaultConfig("full"), extraHighAvailable: true, proAvailable: false };
+    const config = { ...defaultConfig("full"), extraHighAvailable: true, proAvailable: false,
+      browserHost: "launcher" as const, mcpProvider: "external-http" as const };
     expect(availableChatGptWebModelRoutes(config).map(route => route.slug))
-      .toEqual(["chatgpt-web/gpt-6-sol-instant", "chatgpt-web/gpt-6-sol", "chatgpt-web/gpt-5.6-sol-instant", "chatgpt-web/gpt-5.6-sol"]);
+      .toEqual(CHATGPT_WEB_SELECTOR_ROUTES.map(route => route.slug));
     const request = parsed("chatgpt-web/extra-high", "low");
     expect(routeChatGptWebRequest(request, config).adapterEffort).toBe("xhigh");
     expect(request.options.reasoning).toBe("xhigh");
@@ -382,4 +385,27 @@ describe("fixed ChatGPT Web model routes", () => {
     }
     expect(new Set(keys).size).toBe(3);
   });
+});
+
+
+test("Full public efforts resolve session mode before validation without trusting client metadata", () => {
+  const config = { ...defaultConfig("full"), extraHighAvailable: true };
+  for (const [effort, base, mode] of [
+    [undefined, "high", "persistent"], ["high", "high", "persistent"],
+    ["high-temporary", "high", "temporary"], ["xhigh-temporary", "xhigh", "temporary"],
+    ["high-persistent", "high", "persistent"],
+  ] as const) {
+    const request = parseRequest({ model: "chatgpt-web/gpt-5.6-sol", input: "hello", reasoning: { effort },
+      client_metadata: { _chatgpt_session_mode: mode === "temporary" ? "persistent" : "temporary" } });
+    routeChatGptWebRequest(request, config);
+    expect(request.options.reasoning).toBe(base);
+    expect(request._chatgptSessionMode).toBe(mode);
+  }
+  expect(() => routeChatGptWebRequest(parsed("chatgpt-web/gpt-5.6-sol", "xhigh-temporary"), defaultConfig("full")))
+    .toThrow("does not support effort");
+  const qa = parsed("chatgpt-web/gpt-5.6-sol", "high");
+  qa._rawBody = { client_metadata: { _chatgpt_session_mode: "temporary" } };
+  routeChatGptWebRequest(qa, defaultConfig("browser-only"));
+  expect(qa._chatgptSessionMode).toBe("temporary");
+  expect(qa._rawBody).toEqual({ client_metadata: { _chatgpt_session_mode: "temporary" } });
 });

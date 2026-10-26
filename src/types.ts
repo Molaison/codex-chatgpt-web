@@ -1,3 +1,5 @@
+import type { ChatGptChartWidget } from "./adapters/chatgpt-web/rich-widget";
+
 export interface CodexParsedRequest {
   modelId: string;
   previousResponseId?: string;
@@ -9,10 +11,16 @@ export interface CodexParsedRequest {
   _chatgptModelFamily?: "5.6" | "6";
   /** True only for a routed Pro model (for example GPT-5.6 Pro or GPT-6 Pro). */
   _chatgptProModel?: boolean;
+  /** Session mode resolved from the selector, effort or pool metadata at the request boundary. */
+  _chatgptSessionMode?: "temporary" | "persistent";
+  /** Server-owned Chat/Tools selector, never inferred from caller metadata. */
+  _chatgptLocalTools?: boolean;
   /** Number of leading raw input items restored from local previous_response_id state. */
   _replayPrefixLen?: number;
   /** Server-verified durable alias; a fresh browser prompt must not replace the saved chat. */
   _chatgptSavedConversationContinuation?: boolean;
+  /** Journal-proven partial output receipt; only the trusted Web route/adapter may set this. */
+  _chatgptObserverRoundKey?: string;
   /**
    * Dedicated native compaction, identified by compaction_trigger or canonical responses/memento
    * metadata. Both run without local tools; their output contracts differ.
@@ -48,6 +56,8 @@ export interface CodexUserMessage {
   content: string | CodexContentPart[];
   /** 纯问答历史用的同一消息问答子集；由原生 content_item_kinds 决定，不从正文推断。 */
   qaContent?: string | CodexContentPart[];
+  /** Whether native part kinds proved this projection; unresolved never implies runtime origin. */
+  qaProvenance?: "native" | "unresolved";
   timestamp: number;
 }
 
@@ -202,9 +212,21 @@ export interface CodexProviderContinuationState {
   [provider: string]: Record<string, unknown> | undefined;
 }
 
-import type { ChatGptChartWidget } from "./adapters/chatgpt-web/rich-widget";
+export interface ProviderNotice {
+  version: 1;
+  id: string;
+  execution_id: string;
+  seq: number;
+  kind: "account_pinned" | "account_changed" | "conversation_restored" | "conversation_forked"
+    | "observer_detached" | "reconnecting" | "resumed" | "tool_waiting" | "needs_reconcile";
+  observed_at: string;
+  message: string;
+  source: "chatgpt-web";
+  evidence: "observed";
+}
 
 export type AdapterEvent =
+  | { type: "provider_notice"; notice: ProviderNotice }
   | { type: "heartbeat" }
   | { type: "text_delta"; text: string; phase?: CodexMessagePhase }
   | { type: "rich_widget"; widget: ChatGptChartWidget }
@@ -289,7 +311,7 @@ export interface CodexProviderConfig {
     imageOutputDirectory?: string;
     downloadDirectory?: string;
     downloadBaseUrl?: string;
-    /** ChatGPT custom connector attached to tool-capable temporary chats. */
+    /** ChatGPT custom connector attached to tool-capable chats. */
     appName?: string;
     /** Whether ChatGPT DOM interaction is automatic or explicitly driven by the user. */
     browserInteractionMode?: "automatic" | "manual";
@@ -305,6 +327,8 @@ export interface CodexProviderConfig {
     storageStatePath?: string;
     /** System Chrome executable. The runtime never downloads a browser. */
     chromeExecutablePath?: string;
+    /** Explicit sandbox selection; omission preserves the existing Playwright default. */
+    chromiumSandbox?: boolean;
     /** Unix socket bridging the turn-bound MCP capability into outer Codex tools. */
     brokerSocketPath?: string;
     /** Persisted, trusted Codex task authority used for follow-up turns that omit the envelope. */
@@ -340,7 +364,5 @@ export interface CodexProviderConfig {
     experimentalSkillAttachments?: boolean;
     /** Explicitly rebuild each automatic turn in a fresh browser conversation. */
     experimentalFreshConversationPerTurn?: boolean;
-    /** Save automatic QA chats by default. Explicit false selects Temporary Chat and disables durable mappings. */
-    useSavedChats?: boolean;
   };
 }

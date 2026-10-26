@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import {
   CHATGPT_WEB_ZERO_RISK_BACKEND_MODEL,
   CHATGPT_WEB_ZERO_RISK_PRO_BACKEND_MODEL,
+  chatGptWebLocalToolsEnabled,
 } from "./chatgpt-web-models";
 import type { CodexProviderConfig } from "./types";
 import { VERSION } from "./version";
@@ -97,6 +98,7 @@ export interface TunnelConfig {
 }
 
 export interface AppConfig {
+  releaseControl?: import("./release-admission").ReleaseControlConfig;
   version: 3;
   purpose?: "dev-harness";
   releaseVersion: string;
@@ -114,9 +116,13 @@ export interface AppConfig {
   browserInteractionMode: BrowserInteractionMode;
   browserHostDescriptorPath?: string;
   chromeExecutablePath: string;
+  /** Explicit opt-in for sandbox-qualified managed Chrome environments. */
+  chromiumSandbox?: boolean;
   storageStatePath: string;
   /** Stable profile name used to isolate browser state and retained conversations. */
   accountId?: string;
+  /** Original-owner enrollment metadata; never inferred from a first login. */
+  qaHealthPinPath?: string;
   /** Portable saved-chat mappings. Relative paths resolve under the account home. */
   conversationStoreDirectory?: string;
   /** Public base URL used for generated-file download links. */
@@ -130,7 +136,6 @@ export interface AppConfig {
   composerPredictionsEnabled: boolean;
   experimentalSkillAttachments: boolean;
   experimentalFreshConversationPerTurn: boolean;
-  useSavedChats: boolean;
   /** Explicitly install the additional Pro-sized model row while Zero Risk is active. */
   zeroRiskProEnabled: boolean;
   /** Optional adapter-silence budget for the Responses watchdog. */
@@ -141,6 +146,8 @@ export interface AppConfig {
   proConcurrencyLimit: number;
   autoApproveToolCalls: boolean;
   controlToken: string;
+  /** Optional, independent local API credential; the configuration contains only its path. */
+  nativeApiTokenFile?: string;
   runtimeCommand: string[];
   acknowledgedUnofficialAt?: string;
   tunnel?: TunnelConfig;
@@ -287,7 +294,6 @@ export function defaultConfig(mode: RuntimeMode = "browser-only"): AppConfig {
     composerPredictionsEnabled: true,
     experimentalSkillAttachments: false,
     experimentalFreshConversationPerTurn: false,
-    useSavedChats: true,
     zeroRiskProEnabled: false,
     standardConcurrencyLimit: 5,
     proConcurrencyLimit: 2,
@@ -444,7 +450,9 @@ export function loadConfigForSetup(): AppConfig {
 
 function parseConfig(value: unknown, path: string): AppConfig {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`Invalid configuration object in ${path}`);
-  const parsed = value as Partial<AppConfig>;
+  const parsed = { ...value } as Partial<AppConfig> & { useSavedChats?: unknown };
+  // Retire the old chat-mode preference without invalidating existing installations.
+  delete parsed.useSavedChats;
   if (parsed.version !== 3) throw new Error(`Unsupported configuration version in ${path}; rerun setup to migrate it`);
   if (parsed.purpose !== undefined && parsed.purpose !== "dev-harness") {
     throw new Error(`Invalid configuration purpose in ${path}`);
@@ -474,11 +482,13 @@ function parseConfig(value: unknown, path: string): AppConfig {
   if (!Number.isSafeInteger(parsed.contextWindow) || parsed.contextWindow! <= 0) {
     throw new Error(`Invalid contextWindow in ${path}`);
   }
+  if (parsed.chromiumSandbox !== undefined && typeof parsed.chromiumSandbox !== "boolean") throw new Error(`Invalid chromiumSandbox in ${path}`);
   if (typeof parsed.headed !== "boolean") throw new Error(`Invalid headed in ${path}`);
   if (parsed.accountId !== undefined
     && (typeof parsed.accountId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(parsed.accountId))) {
     throw new Error(`Invalid accountId in ${path}`);
   }
+  if (parsed.qaHealthPinPath !== undefined && (typeof parsed.qaHealthPinPath !== "string" || !isAbsolute(parsed.qaHealthPinPath))) throw new Error("Invalid qaHealthPinPath");
   if (parsed.conversationStoreDirectory !== undefined
     && (typeof parsed.conversationStoreDirectory !== "string"
       || !parsed.conversationStoreDirectory.trim() || parsed.conversationStoreDirectory.includes("\0"))) {
@@ -533,6 +543,11 @@ function parseConfig(value: unknown, path: string): AppConfig {
     throw new Error(`brokerSocketPath must be an absolute Unix socket path in ${path}`);
   }
   if (!/^[A-Za-z0-9_-]{40,}$/.test(parsed.controlToken!)) throw new Error(`Invalid controlToken in ${path}`);
+  if (parsed.nativeApiTokenFile !== undefined
+    && (typeof parsed.nativeApiTokenFile !== "string" || !parsed.nativeApiTokenFile.trim()
+      || !isAbsolute(expandUserPath(parsed.nativeApiTokenFile)))) {
+    throw new Error(`nativeApiTokenFile must be an absolute private file path in ${path}`);
+  }
   const validateTunnel = (tunnel: TunnelConfig | undefined, label: string): void => {
     if (!tunnel || typeof tunnel !== "object") throw new Error(`${label} is missing in ${path}`);
     for (const key of ["binaryPath", "tunnelId", "runtimeKeyFile", "profileDir", "profileName", "alias"] as const) {
@@ -617,10 +632,6 @@ function parseConfig(value: unknown, path: string): AppConfig {
     throw new Error(`Invalid experimentalFreshConversationPerTurn in ${path}`);
   }
   const experimentalFreshConversationPerTurn = parsed.experimentalFreshConversationPerTurn === true;
-  if (parsed.useSavedChats !== undefined && typeof parsed.useSavedChats !== "boolean") {
-    throw new Error(`Invalid useSavedChats in ${path}`);
-  }
-  const useSavedChats = parsed.useSavedChats ?? browserInteractionMode !== "manual";
   if (browserInteractionMode === "manual" && experimentalSkillAttachments) {
     throw new Error(`Zero Risk does not support Skills as files in ${path}`);
   }
@@ -648,7 +659,6 @@ function parseConfig(value: unknown, path: string): AppConfig {
     composerPredictionsEnabled,
     experimentalSkillAttachments,
     experimentalFreshConversationPerTurn,
-    useSavedChats,
     zeroRiskProEnabled,
   } as AppConfig;
 }
@@ -701,20 +711,20 @@ export function providerConfig(config: AppConfig): CodexProviderConfig {
       browserHostDescriptorPath: config.browserHostDescriptorPath,
       storageStatePath: config.storageStatePath,
       chromeExecutablePath: config.chromeExecutablePath,
+      ...(config.chromiumSandbox === undefined ? {} : { chromiumSandbox: config.chromiumSandbox }),
       brokerSocketPath: config.brokerSocketPath,
       threadEnvironmentStatePath: join(getConfigDir(), "runtime", "thread-environments.json"),
       lunaCheckpointStatePath: join(getConfigDir(), "runtime", "luna-checkpoints.json"),
       headed: config.headed,
       // Explicit external HTTP Full mode uses the existing automatic native harness. Preserve
       // this fork's official-provider behavior and Zero Risk's separate manual control channel.
-      localToolsEnabled: config.mode === "full" && (manual || config.mcpProvider === "external-http"),
+      localToolsEnabled: chatGptWebLocalToolsEnabled(config),
       solAvailable: manual ? false : config.solAvailable,
       extraHighAvailable: !manual && config.extraHighAvailable === true,
       proAvailable: manual ? false : config.proAvailable,
       experimentalBiggerContext: manual ? false : config.experimentalBiggerContext,
       experimentalSkillAttachments: manual ? false : config.experimentalSkillAttachments,
       experimentalFreshConversationPerTurn: !manual && config.experimentalFreshConversationPerTurn === true,
-      useSavedChats: config.useSavedChats ?? !manual,
       standardConcurrencyLimit: config.standardConcurrencyLimit,
       proConcurrencyLimit: config.proConcurrencyLimit,
       ...(config.stallTimeoutSec !== undefined ? { stallTimeoutSec: config.stallTimeoutSec } : {}),

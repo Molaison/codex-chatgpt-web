@@ -4,6 +4,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createQaPool, type QaPoolConfig } from "../src/qa-pool";
+import { installReadyQaHealthFixture } from "./qa-pool-health-fixture";
+
+installReadyQaHealthFixture();
 
 // Real pool and SQLite with a CPU-only controlled upstream. These tests prove
 // observer-listener lifecycle at the pool boundary, not physical browser sends,

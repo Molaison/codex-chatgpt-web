@@ -91,6 +91,8 @@ export function bridgeToResponsesSSE(
   heartbeatMs = 2_000,
   options?: {
     responseId?: string;
+    /** Stable execution/round identity supplied by replay-capable routes. */
+    replayIdentity?: string;
     stallTimeoutSec?: number;
     hideThinkingSummary?: boolean;
     /**
@@ -148,7 +150,7 @@ export function bridgeToResponsesSSE(
     try { const o = JSON.parse(args); return o && typeof o === "object" ? o : {}; } catch { return {}; }
   };
   const encoder = new TextEncoder();
-  const responseId = options?.responseId ?? `resp_${uuid()}`;
+  const responseId = options?.responseId ?? `resp_${options?.replayIdentity ?? uuid()}`;
   let seq = 0;
   // Set once the client is gone (cancel) or an enqueue throws on a torn-down controller, so we
   // never enqueue again and never throw a second time inside start() — the RC2 double-throw that
@@ -170,10 +172,10 @@ export function bridgeToResponsesSSE(
   let emittedFrames = 0;
   let gated = false;
   let stepping = false;
-  const emit = (name: string, data: Record<string, unknown>) => {
+  const emit = (name: string, data: Record<string, unknown>, sequenced = true) => {
         if (closed) return;
         try {
-          controller.enqueue(encoder.encode(sseEvent(name, { type: name, sequence_number: seq++, ...data })));
+          controller.enqueue(encoder.encode(sseEvent(name, { type: name, ...(sequenced ? { sequence_number: seq++ } : {}), ...data })));
           emittedFrames++;
         } catch {
           closed = true;
@@ -191,6 +193,9 @@ export function bridgeToResponsesSSE(
 
       const createdAt = Math.floor(Date.now() / 1000);
       let outputIndex = 0;
+      const outputItemId = (prefix: string): string => options?.replayIdentity !== undefined
+        ? `${prefix}_${options.replayIdentity}_${outputIndex}`
+        : `${prefix}_${uuid()}`;
       const finishedItems: OutputItem[] = [];
       const finishedRichWidgets: Array<Extract<AdapterEvent, {type: "rich_widget"}>["widget"]> = [];
 
@@ -237,7 +242,7 @@ export function bridgeToResponsesSSE(
         const encrypted = takeReasoningEnvelope(hiddenThinkingText || undefined);
         hiddenThinkingText = "";
         if (!encrypted) return;
-        const itemId = `rs_${uuid()}`;
+        const itemId = outputItemId("rs");
         const item = { type: "reasoning", id: itemId, summary: [] as never[], encrypted_content: encrypted };
         emit("response.output_item.added", { output_index: outputIndex, item });
         emit("response.output_item.done", { output_index: outputIndex, item });
@@ -254,7 +259,7 @@ export function bridgeToResponsesSSE(
         if (!hiddenRawReasoningText) return;
         const encrypted = encodeReasoningEnvelope({ txt: hiddenRawReasoningText });
         hiddenRawReasoningText = "";
-        const itemId = `rs_${uuid()}`;
+        const itemId = outputItemId("rs");
         const item = { type: "reasoning", id: itemId, summary: [] as never[], encrypted_content: encrypted };
         emit("response.output_item.added", { output_index: outputIndex, item });
         emit("response.output_item.done", { output_index: outputIndex, item });
@@ -427,8 +432,12 @@ export function bridgeToResponsesSSE(
           adapterEventCount += 1;
           stallWarned = false;
           reportFirstOutput(event);
-          // Compaction turns emit ONLY the synthetic compaction item + response.completed. The
-          // summary text is accumulated silently: emitting it as a normal assistant message would
+          if (event.type === "provider_notice") {
+            emit("response.provider_notice", { notice: event.notice }, false);
+            continue;
+          }
+          // Compaction content emits only its synthetic item; notices stay out of that content.
+          // The summary text is accumulated silently: emitting it as a normal assistant message would
           // duplicate the summary if this response is ever replayed via previous_response_id
           // expansion (rememberResponseState stores input + output). Codex ignores extra items but
           // its compaction UI renders nothing mid-turn, so nothing is lost visually.
@@ -460,7 +469,7 @@ export function bridgeToResponsesSSE(
               if (currentToolCall) closeCurrentToolCall();
               if (currentMsg && currentMsg.phase !== event.phase) closeCurrentMessage();
               if (!currentMsg) {
-                const itemId = `msg_${uuid()}`;
+                const itemId = outputItemId("msg");
                 const item = {
                   type: "message", id: itemId, status: "in_progress", role: "assistant",
                   content: [] as { type: string; text: string; annotations: never[] }[],
@@ -487,7 +496,7 @@ export function bridgeToResponsesSSE(
               flushHiddenRawReasoning();
               if (currentToolCall) closeCurrentToolCall();
               if (!currentReasoning) {
-                const itemId = `rs_${uuid()}`;
+                const itemId = outputItemId("rs");
                 const item = { type: "reasoning", id: itemId, summary: [] as { type: string; text: string }[] };
                 emit("response.output_item.added", { output_index: outputIndex, item });
                 emit("response.reasoning_summary_part.added", {
@@ -521,7 +530,7 @@ export function bridgeToResponsesSSE(
               if (currentReasoning) closeCurrentReasoning();
               if (currentToolCall) closeCurrentToolCall();
               if (!currentRawReasoning) {
-                const itemId = `rs_${uuid()}`;
+                const itemId = outputItemId("rs");
                 const item = { type: "reasoning", id: itemId, summary: [] as never[], content: [] as { type: string; text: string }[] };
                 emit("response.output_item.added", { output_index: outputIndex, item });
                 currentRawReasoning = { itemId, outputIndex, text: "" };
@@ -544,7 +553,7 @@ export function bridgeToResponsesSSE(
               const ns = mapped?.namespace;
               const toolSearch = toolSearchToolNames?.has(realName) ?? false;
               const freeform = !toolSearch && (freeformToolNames?.has(realName) ?? false);
-              const itemId = `${toolSearch ? "tsc" : freeform ? "ctc" : "fc"}_${uuid()}`;
+              const itemId = outputItemId(toolSearch ? "tsc" : freeform ? "ctc" : "fc");
               const item = toolSearch
                 ? { type: "tool_search_call", id: itemId, call_id: event.id, execution: "client", arguments: {}, status: "in_progress" }
                 : freeform
@@ -598,10 +607,10 @@ export function bridgeToResponsesSSE(
               // Redacted-only turns (or hidden thinking without a trailing signature event) still
               // need their envelope-only reasoning item so the blocks replay next turn.
               flushHiddenReasoningEnvelope();
-              if (options?.compaction) {
+              if (options?.compaction && event.stopReason !== "max_tokens" && event.stopReason !== "content_filter") {
                 // Exactly one compaction item per turn; codex-rs takes the first and fatals on 0.
                 const item = {
-                  type: "compaction", id: `cmp_${uuid()}`,
+                  type: "compaction", id: outputItemId("cmp"),
                   encrypted_content: encodeCompactionSummary(compactionText),
                 };
                 emit("response.output_item.done", { output_index: outputIndex, item });
@@ -858,6 +867,7 @@ export function buildResponseJSON(
   events: AdapterEvent[],
   modelId: string,
   options?: {
+    replayIdentity?: string;
     hideThinkingSummary?: boolean;
     toolNsMap?: Map<string, { namespace: string; name: string }>;
     freeformToolNames?: Set<string>;
@@ -867,8 +877,11 @@ export function buildResponseJSON(
     onProviderState?: (state: CodexProviderContinuationState) => void;
   },
 ): Record<string, unknown> {
-  const responseId = `resp_${uuid()}`;
+  const responseId = `resp_${options?.replayIdentity ?? uuid()}`;
+  const itemId = (prefix: string) => options?.replayIdentity
+    ? `${prefix}_${options.replayIdentity}_${output.length}` : `${prefix}_${uuid()}`;
   const output: OutputItem[] = [];
+  const richWidgets: Array<Extract<AdapterEvent, { type: "rich_widget" }>["widget"]> = [];
   let usage: CodexUsage | undefined;
   let errorEvent: Extract<AdapterEvent, { type: "error" }> | undefined;
   let incompleteEvent: Extract<AdapterEvent, { type: "incomplete" }> | undefined;
@@ -898,7 +911,7 @@ export function buildResponseJSON(
   const flushText = () => {
     if (!currentText) return;
     output.push({
-      type: "message", id: `msg_${uuid()}`, role: "assistant", status: "completed",
+      type: "message", id: itemId("msg"), role: "assistant", status: "completed",
       content: [{ type: "output_text", text: currentText, annotations: [] }],
       ...(currentTextPhase ? { phase: currentTextPhase } : {}),
     });
@@ -917,7 +930,7 @@ export function buildResponseJSON(
     batchRedacted = [];
     if (hidden && !encrypted) { currentSummaryReasoning = ""; return; }
     output.push({
-      type: "reasoning", id: `rs_${uuid()}`,
+      type: "reasoning", id: itemId("rs"),
       summary: !hidden && currentSummaryReasoning ? [{ type: "summary_text", text: currentSummaryReasoning }] : [],
       ...(encrypted ? { encrypted_content: encrypted } : {}),
     });
@@ -928,14 +941,14 @@ export function buildResponseJSON(
     if (options?.hideThinkingSummary === true) {
       // Same contract as the streaming path: no visible reasoning, txt-only envelope round-trip.
       output.push({
-        type: "reasoning", id: `rs_${uuid()}`, summary: [],
+        type: "reasoning", id: itemId("rs"), summary: [],
         encrypted_content: encodeReasoningEnvelope({ txt: currentRawReasoning }),
       });
       currentRawReasoning = "";
       return;
     }
     output.push({
-      type: "reasoning", id: `rs_${uuid()}`, summary: [],
+      type: "reasoning", id: itemId("rs"), summary: [],
       content: [{ type: "reasoning_text", text: currentRawReasoning }],
     });
     currentRawReasoning = "";
@@ -949,19 +962,19 @@ export function buildResponseJSON(
     const freeform = !toolSearch && (options?.freeformToolNames?.has(realName) ?? false);
     if (toolSearch) {
       output.push({
-        type: "tool_search_call", id: `tsc_${uuid()}`,
+        type: "tool_search_call", id: itemId("tsc"),
         call_id: currentToolCallId, execution: "client",
         arguments: parseArgsObj(currentToolCallArgs), status: "completed",
       });
     } else if (freeform) {
       output.push({
-        type: "custom_tool_call", id: `ctc_${uuid()}`,
+        type: "custom_tool_call", id: itemId("ctc"),
         call_id: currentToolCallId, name: realName,
         input: freeformInput(currentToolCallArgs), status: "completed",
       });
     } else {
       output.push({
-        type: "function_call", id: `fc_${uuid()}`,
+        type: "function_call", id: itemId("fc"),
         call_id: currentToolCallId, name: realName,
         arguments: currentToolCallArgs || "{}", status: "completed",
         ...(ns ? { namespace: ns } : {}),
@@ -974,7 +987,14 @@ export function buildResponseJSON(
   };
 
   for (const e of events) {
+    if (options?.compaction) {
+      if (e.type === "text_delta") { compactionText += e.text; continue; }
+      if (e.type !== "done" && e.type !== "incomplete" && e.type !== "error") continue;
+    }
     switch (e.type) {
+      case "rich_widget":
+        richWidgets.push(e.widget);
+        break;
       case "assistant_boundary":
         flushText();
         flushSummaryReasoning();
@@ -986,13 +1006,8 @@ export function buildResponseJSON(
         if (currentSummaryReasoning) flushSummaryReasoning();
         if (currentRawReasoning) flushRawReasoning();
         if (currentToolCallId) flushToolCall();
-        // Compaction turns keep the summary out of normal message output (replay dedup — see
-        // bridgeToResponsesSSE); it ships only inside the synthetic compaction item below.
-        if (options?.compaction) compactionText += e.text;
-        else {
-          currentTextPhase = e.phase;
-          currentText += e.text;
-        }
+        currentTextPhase = e.phase;
+        currentText += e.text;
         break;
       case "thinking_delta":
         if (currentText) flushText();
@@ -1044,9 +1059,12 @@ export function buildResponseJSON(
         usage = e.usage;
         endTurn = e.endTurn;
         if (e.providerState) options?.onProviderState?.(e.providerState);
-        if (e.stopReason === "max_tokens") stopReason = "max_tokens";
+        if (e.stopReason === "max_tokens" || e.stopReason === "content_filter") stopReason = e.stopReason;
         break;
     }
+    // The producer may finish cleanup after reporting its terminal result. Late callbacks
+    // cannot change the result already observed by a streaming client.
+    if (e.type === "done" || e.type === "incomplete" || e.type === "error") break;
   }
   flushText();
   flushSummaryReasoning();
@@ -1059,14 +1077,14 @@ export function buildResponseJSON(
   }
   // A truncated turn must never become replacement history. Emit a compaction item only after
   // authoritative turn completion.
-  if (options?.compaction && !errorEvent && !incompleteEvent && stopReason !== "max_tokens") {
-    output.push({ type: "compaction", id: `cmp_${uuid()}`, encrypted_content: encodeCompactionSummary(compactionText) });
+  if (options?.compaction && !errorEvent && !incompleteEvent && !stopReason) {
+    output.push({ type: "compaction", id: itemId("cmp"), encrypted_content: encodeCompactionSummary(compactionText) });
   }
 
   const failure = errorEvent ? adapterFailureFromEvent(errorEvent) : undefined;
   const status = errorEvent
     ? "failed"
-    : incompleteEvent || stopReason === "max_tokens"
+    : incompleteEvent || stopReason
       ? "incomplete"
       : "completed";
   return {
@@ -1074,6 +1092,7 @@ export function buildResponseJSON(
     created_at: Math.floor(Date.now() / 1000),
     status,
     model: modelId, output,
+    ...(richWidgets.length ? { rich_widgets: richWidgets } : {}),
     ...(endTurn !== undefined ? { end_turn: endTurn } : {}),
     ...(failure ? { error: failure.error, last_error: failure.error } : {}),
     ...(errorEvent?.retryable !== undefined ? { retryable: errorEvent.retryable } : {}),
@@ -1083,8 +1102,8 @@ export function buildResponseJSON(
         ...(incompleteEvent.message ? { message: incompleteEvent.message } : {}),
         ...(incompleteEvent.retryable !== undefined ? { retryable: incompleteEvent.retryable } : {}),
       },
-    } : stopReason === "max_tokens" ? {
-      incomplete_details: { reason: "max_output_tokens" },
+    } : stopReason ? {
+      incomplete_details: { reason: stopReason === "max_tokens" ? "max_output_tokens" : "content_filter" },
     } : {}),
     usage: responsesUsage(incompleteEvent?.usage ?? usage),
   };

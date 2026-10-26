@@ -1,8 +1,12 @@
+import { ReleaseAdmission, releaseTrackedResponse, type ReleaseControlConfig } from "../../release-admission";
+import { McpAdmissionBook } from "./mcp-admission";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { CancelledNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import { randomUUID } from "node:crypto";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { connectChatGptMcpServer, type ChatGptMcpServerOptions } from "./mcp-server";
+import { callTurnBroker } from "./turn-broker";
+import { mcpRequestRef } from "./mcp-observation";
 
 // Bound encoded HTTP input independently of the tool schema (JSON escapes count toward this cap).
 export const MCP_HTTP_MAX_BODY_BYTES = 24 * 1024 * 1024;
@@ -14,6 +18,7 @@ const BODY_TIMEOUT_MS = 30_000;
 
 export interface ChatGptMcpHttpOptions extends ChatGptMcpServerOptions {
   port?: number;
+  releaseControl?: ReleaseControlConfig;
   /** One explicitly trusted HTTPS origin whose Host a reverse proxy may preserve. */
   publicOrigin?: string;
 }
@@ -75,19 +80,24 @@ async function readBody(request: Request): Promise<unknown> {
 
 /** SDK 1.30 ignores cancellation requestId=0. Give its protocol nonempty, type-tagged IDs
  * while preserving the exact original IDs at the HTTP boundary, including string/number pairs. */
-const normalizedRequestId = (id: string | number) => JSON.stringify([typeof id, id]);
-
-function normalizedRequestIds(inner: WebStandardStreamableHTTPServerTransport): Transport {
-  const encode = normalizedRequestId;
-  const decode = (id: string | number) => {
+const normalizedRequestId = (id: string | number, scope?: string) => JSON.stringify(scope
+  ? ["mcp-http-session", scope, typeof id, id] : [typeof id, id]);
+const originalRequestId = (id: string | number) => {
     if (typeof id !== "string") return id;
     try {
       const value = JSON.parse(id);
+      if (Array.isArray(value) && value.length === 4 && value[0] === "mcp-http-session"
+        && typeof value[1] === "string" && typeof value[3] === value[2]
+        && (value[2] === "string" || value[2] === "number")) return value[3] as string | number;
       if (Array.isArray(value) && value.length === 2 && typeof value[1] === value[0]
         && (value[0] === "string" || value[0] === "number")) return value[1] as string | number;
     } catch { /* Preserve server-originated IDs that are not client request IDs. */ }
     return id;
-  };
+};
+
+function normalizedRequestIds(inner: WebStandardStreamableHTTPServerTransport, scope: string): Transport {
+  const encode = (id: string | number) => normalizedRequestId(id, scope);
+  const decode = originalRequestId;
   const wrapped: Transport = {
     start: () => inner.start(), close: () => inner.close(),
     get sessionId() { return inner.sessionId; },
@@ -110,10 +120,12 @@ function normalizedRequestIds(inner: WebStandardStreamableHTTPServerTransport): 
 }
 
 interface HttpSession {
+  scope: string;
   transport: WebStandardStreamableHTTPServerTransport;
   mcp: Awaited<ReturnType<typeof connectChatGptMcpServer>>;
   requests: Map<string | number, AbortController>;
   lastUsed: number;
+  release: McpAdmissionBook;
 }
 
 /**
@@ -129,24 +141,37 @@ export function startChatGptMcpHttpServer(options: ChatGptMcpHttpOptions) {
   const sessions = new Map<string, HttpSession>();
   let pendingSessions = 0;
   let closing = false;
+  const release = options.releaseControl ? new ReleaseAdmission("mcp", options.releaseControl, () => ({
+    active_requests: active.size, open_sessions: sessions.size, pending_sessions: pendingSessions,
+    durable_inventory_errors: 1,
+    active_tool_calls: [...sessions.values()].reduce((sum, s) => sum + s.release.pending, 0),
+    native_continuations: [...sessions.values()].reduce((sum, s) => sum + s.release.continuations, 0),
+    uncertain_requests: [...sessions.values()].reduce((sum, s) => sum + s.release.uncertain, 0),
+  })) : undefined;
+  async function durableReleaseCounters(): Promise<Record<string, number>> {
+    try {
+      const status=await callTurnBroker<Record<string, unknown>>(options.brokerSocketPath,{method:"owner_release_status"},5_000);
+      const keys=["durable_live_turns","durable_unknown_calls","durable_native_continuations","durable_active_mcp_requests","durable_inventory_errors"];
+      if (status.contract!=="broker-durable-release-v1" || keys.some(key=>!Number.isSafeInteger(status[key]) || Number(status[key])<0)) {
+        throw new Error("Durable release status is unavailable");
+      }
+      return Object.fromEntries(keys.map(key=>[key,Number(status[key])]));
+    } catch { return {durable_inventory_errors:1}; }
+  }
   const closeSession = async (session: HttpSession) => {
-    if (session.transport.sessionId) sessions.delete(session.transport.sessionId);
+    for (const [id, value] of sessions) if (value === session) sessions.delete(id);
     for (const request of session.requests.values()) request.abort();
     await session.mcp.close();
   };
   const prune = () => {
     const cutoff = Date.now() - SESSION_IDLE_MS;
     for (const session of sessions.values()) {
-      if (session.requests.size === 0 && session.lastUsed < cutoff) void closeSession(session);
+      if (session.requests.size === 0 && (!release || session.release.canClose) && session.lastUsed < cutoff) void closeSession(session);
     }
   };
   const idleTimer = setInterval(prune, 30_000);
   idleTimer.unref();
-  const http = Bun.serve({
-    hostname: "127.0.0.1", port,
-    maxRequestBodySize: MCP_HTTP_MAX_BODY_BYTES,
-    idleTimeout: 150,
-    async fetch(request, server): Promise<Response> {
+  async function fetchMcp(request: Request, server: {port: number | undefined}): Promise<Response> {
       const localHosts = [`127.0.0.1:${server.port}`, `localhost:${server.port}`];
       const allowedHosts = new Set([...localHosts, ...(publicOrigin ? [publicOrigin.host] : [])]);
       // Never trust Forwarded/X-Forwarded-Host or arbitrary browser origins.
@@ -154,6 +179,13 @@ export function startChatGptMcpHttpServer(options: ChatGptMcpHttpOptions) {
       const origin = request.headers.get("origin");
       const allowedOrigins = new Set([...localHosts.map(host => `http://${host}`), ...(publicOrigin ? [publicOrigin.origin] : [])]);
       if (origin !== null && !allowedOrigins.has(origin)) return reply(403, "Origin is not allowed");
+      if (release && new URL(request.url).pathname.startsWith("/admin/release/")) {
+        const refused=release.authorizeControl(request);
+        if (refused) return refused;
+        const durable=await durableReleaseCounters();
+        const control=release.control(request,durable);
+        if (control) return control;
+      }
       if (new URL(request.url).pathname !== "/mcp") return reply(404, "Not found");
       if (request.method !== "POST" && request.method !== "DELETE") {
         const response = reply(405, "Use POST for MCP or DELETE to close a session");
@@ -166,6 +198,7 @@ export function startChatGptMcpHttpServer(options: ChatGptMcpHttpOptions) {
       if (sessionId && !session) return reply(404, "MCP session not found; initialize again");
       if (request.method === "DELETE") {
         if (!session) return reply(400, "Mcp-Session-Id is required");
+        if (release && (!session.release.canClose || session.requests.size)) return reply(409, "Accepted MCP work is still live; retain this session owner");
         const response = await session.transport.handleRequest(request);
         if (response.ok) await closeSession(session);
         return response;
@@ -182,6 +215,10 @@ export function startChatGptMcpHttpServer(options: ChatGptMcpHttpOptions) {
       let requestId: string | number | undefined;
       let newSession = false;
       let stage = "body";
+      let receiptMessage: Record<string, any> | undefined;
+      let noteDeliveryLoss: (() => Promise<void>) | undefined;
+      let publicAbort: (() => void) | undefined;
+      let deliveryLoss: Promise<void> | undefined;
       try {
         const body = await readBody(request);
         // MCP 2025-11-25 requires one JSON-RPC message per POST. Reject batching before dispatch.
@@ -194,6 +231,11 @@ export function startChatGptMcpHttpServer(options: ChatGptMcpHttpOptions) {
         const knownMethods = new Set(["initialize", "notifications/initialized", "notifications/cancelled", "tools/list", "tools/call", "ping"]);
         stage = typeof message.method === "string" && knownMethods.has(message.method) ? message.method : "other";
         if (!session) {
+          // A reconnect is protocol setup, not new tool admission. Existing native
+          // processes may need a fresh MCP session to deliver their next empty poll.
+          if (release?.draining && ![...sessions.values()].some(s => s.release.continuations || s.release.pending)) {
+            return reply(503, "MCP admission is fenced; existing sessions are preserved");
+          }
           if (message.method !== "initialize") return reply(400, "Initialize an MCP session first");
           prune();
           if (sessions.size + pendingSessions >= MAX_SESSIONS) return reply(503, "MCP HTTP session capacity reached");
@@ -204,12 +246,55 @@ export function startChatGptMcpHttpServer(options: ChatGptMcpHttpOptions) {
               enableJsonResponse: true,
               onsessioninitialized: id => { sessions.set(id, session!); },
             });
-            const mcp = await connectChatGptMcpServer(options, normalizedRequestIds(transport));
-            session = { transport, mcp, requests: new Map(), lastUsed: Date.now() };
+            const scope = randomUUID();
+            const admission = new McpAdmissionBook((token, sessionId) => {
+              for (const value of sessions.values()) value.release.noteProcessClosed(token, sessionId);
+            }, options.contract !== "safe");
+            const mcp = await connectChatGptMcpServer({ ...options,
+              onClaimNotDispatched: (id, proof) => { admission.noteClaimNotDispatched(originalRequestId(id), proof); },
+              onToolNotDispatched: id => { admission.noteLocalNotDispatched(originalRequestId(id)); },
+            }, normalizedRequestIds(transport, scope));
+            session = { scope, transport, mcp, requests: new Map(), lastUsed: Date.now(), release: admission };
             newSession = true;
           } finally { pendingSessions -= 1; }
         }
         session.lastUsed = Date.now();
+        if (message.method === "tools/call") {
+          if (requestId === undefined) return reply(400, "Tool calls require a request identity");
+          const duplicate = session.release.duplicate(message);
+          if (duplicate) return await duplicate;
+          if (!session.release.allowed(message, release?.draining === true)
+            && ![...sessions.values()].some(s => s.release.allowed(message, true))) {
+            return reply(503, "New MCP work is fenced; continue only previously accepted handles");
+          }
+          if (!session.release.begin(message)) return reply(503, "MCP receipt capacity reached; accepted identities retained");
+          receiptMessage = message;
+          // A lost HTTP response is not cancellation of accepted native work.
+          request.signal.removeEventListener("abort", abort);
+          clearTimeout(timer);
+          if (options.contract !== "safe") {
+            const params = message.params as Record<string, any> | undefined;
+            const args = params?.arguments;
+            if (typeof args?.turn_token === "string") {
+              noteDeliveryLoss = async () => {
+                const observed = await callTurnBroker<{ recorded: boolean }>(options.brokerSocketPath, {
+                  method: "public_delivery_lost", token: args.turn_token,
+                  rpcId: normalizedRequestId(requestId!, session!.scope),
+                }, 5_000);
+                console.error(`[chatgpt-web-mcp-http] delivery_lost=${JSON.stringify({
+                  request_ref: mcpRequestRef(normalizedRequestId(requestId!, session!.scope)),
+                  recorded: observed.recorded, native_cancelled: false })}`);
+              };
+              publicAbort = () => {
+                deliveryLoss = noteDeliveryLoss!().catch(() => {
+                  console.error("[chatgpt-web-mcp-http] delivery loss proof unavailable; execution retained");
+                });
+              };
+              request.signal.addEventListener("abort", publicAbort, { once: true });
+              if (request.signal.aborted) publicAbort();
+            }
+          }
+        }
         if (requestId !== undefined) {
           if (session.requests.has(requestId)) return reply(409, "Duplicate in-flight MCP request ID");
           session.requests.set(requestId, lifetime);
@@ -220,7 +305,7 @@ export function startChatGptMcpHttpServer(options: ChatGptMcpHttpOptions) {
               session!.transport.onmessage?.({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId } });
               // SDK aborts the handler but does not complete its JSON HTTP response on cancellation.
               // Sending through the transport releases its request/response correlation too.
-              void session!.mcp.server.transport!.send({ jsonrpc: "2.0", id: normalizedRequestId(requestId), error: { code: -32800, message: "Request cancelled" } }).catch(() => {});
+              void session!.mcp.server.transport!.send({ jsonrpc: "2.0", id: normalizedRequestId(requestId, session!.scope), error: { code: -32800, message: "Request cancelled" } }).catch(() => {});
             } else if (newSession) {
               void closeSession(session!);
             }
@@ -229,7 +314,11 @@ export function startChatGptMcpHttpServer(options: ChatGptMcpHttpOptions) {
           lifetime.signal.addEventListener("abort", finishAbort, { once: true });
           if (lifetime.signal.aborted) finishAbort();
         });
-        const response = await Promise.race([session.transport.handleRequest(request, { parsedBody: body }), ended]);
+        const ownerRequest = receiptMessage ? new Request(request.url, {method: request.method, headers: request.headers, signal: lifetime.signal}) : request;
+        let response = await Promise.race([session.transport.handleRequest(ownerRequest, { parsedBody: body }), ended]);
+        if (receiptMessage) response = await session.release.complete(receiptMessage, response);
+        // Retry only recording evidence after the handler settles, never the Native action.
+        if (request.signal.aborted && noteDeliveryLoss) await noteDeliveryLoss();
         // Only route a schema-valid cancellation after the SDK accepted its HTTP/protocol envelope.
         if (cancellation && response.status === 202) {
           const parsed = CancelledNotificationSchema.safeParse(body);
@@ -238,14 +327,23 @@ export function startChatGptMcpHttpServer(options: ChatGptMcpHttpOptions) {
           }
         }
         response.headers.set("Cache-Control", "no-store");
-        console.error(`[chatgpt-web-mcp-http] ${JSON.stringify({ stage, status: response.status })}`);
+        console.error(`[chatgpt-web-mcp-http] ${JSON.stringify({ stage, status: response.status,
+          ...(requestId !== undefined ? { request_ref: mcpRequestRef(normalizedRequestId(requestId)) } : {}),
+          turn_release: "not_requested",
+        })}`);
         return response;
       } catch (error) {
         // Never log request bodies, headers, URLs, paths, or arbitrary SDK errors here.
         const status = error instanceof InvalidBody ? error.status : 500;
-        console.error(`[chatgpt-web-mcp-http] ${JSON.stringify({ stage, status })}`);
-        return reply(status, error instanceof InvalidBody ? error.message : "MCP HTTP request failed");
+        console.error(`[chatgpt-web-mcp-http] ${JSON.stringify({ stage, status,
+          ...(requestId !== undefined ? { request_ref: mcpRequestRef(normalizedRequestId(requestId)) } : {}),
+          turn_release: "not_requested",
+        })}`);
+        const failed = reply(status, error instanceof InvalidBody ? error.message : "MCP HTTP request failed");
+        return receiptMessage && session ? await session.release.complete(receiptMessage, failed, true) : failed;
       } finally {
+        if (publicAbort) request.signal.removeEventListener("abort", publicAbort);
+        await deliveryLoss;
         clearTimeout(timer);
         request.signal.removeEventListener("abort", abort);
         if (finishAbort) lifetime.signal.removeEventListener("abort", finishAbort);
@@ -256,11 +354,22 @@ export function startChatGptMcpHttpServer(options: ChatGptMcpHttpOptions) {
         }
         active.delete(lifetime);
       }
+  }
+  const http = Bun.serve({hostname: "127.0.0.1", port, maxRequestBodySize: MCP_HTTP_MAX_BODY_BYTES, idleTimeout: 150,
+    async fetch(request, server): Promise<Response> {
+      if (new URL(request.url).pathname.startsWith("/admin/release/")) return fetchMcp(request, server);
+      if (release?.sealed) return new Response("Native ingress sealed", {status:503});
+      const lease = release?.enter();
+      try {
+        const response = await fetchMcp(request, server);
+        return lease ? releaseTrackedResponse(response, lease.finish, request.signal) : response;
+      } catch (error) { lease?.finish(); throw error; }
     },
   });
   return {
     url: new URL(`http://127.0.0.1:${http.port}/mcp`),
     async close() {
+      if (release && !release.status(await durableReleaseCounters()).safe_to_stop) throw Error("MCP native work/sessions or durable receipts are not drained; preserve original owner");
       closing = true;
       clearInterval(idleTimer);
       for (const request of active) request.abort();

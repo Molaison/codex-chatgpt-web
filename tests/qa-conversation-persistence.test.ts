@@ -26,9 +26,9 @@ describe("saved-chat URL validation", () => {
     expect(canonicalSavedChatUrl(`https://chatgpt.com/g/${id}-project-name/c/abc`)).toBe(url);
     expect(canonicalSavedChatUrl(`https://chatgpt.com/g/${id}-何慧杰/c/abc`)).toBe(url);
     expect(canonicalSavedChatUrl(`https://chatgpt.com/g/${id}-%E4%BD%95%E6%85%A7%E6%9D%B0/c/abc`)).toBe(url);
-    await assertNewChatPage({ url: () => `https://chatgpt.com/g/${id}/project` } as any, true, id);
-    await expect(assertNewChatPage({ url: () => "https://chatgpt.com/" } as any, true, id)).rejects.toThrow();
-    await expect(assertNewChatPage({ url: () => `https://chatgpt.com/g/${id}/project` } as any, false, id)).rejects.toThrow();
+    await assertNewChatPage({ url: () => `https://chatgpt.com/g/${id}/project` } as any, { projectId: id });
+    await expect(assertNewChatPage({ url: () => "https://chatgpt.com/" } as any, { projectId: id })).rejects.toThrow();
+    await expect(assertNewChatPage({ url: () => `https://chatgpt.com/g/${id}/project` } as any, { temporary: true, projectId: id })).rejects.toThrow();
     const store = new ChatGptConversationStore(root, "project-account");
     store.bind("project-thread", store.reserve("project-thread"), url);
     expect(new ChatGptConversationStore(root, "project-account").lookup("project-thread")?.url).toBe(url);

@@ -204,7 +204,7 @@ export function previousResponseReplayPrefixLength(body: unknown): number {
 export function rememberResponseState(
   requestBody: unknown,
   response: { id?: unknown; output?: unknown; status?: unknown; incomplete_details?: unknown },
-  opts?: { force?: boolean },
+  opts?: { force?: boolean; replaceObservedItems?: boolean },
 ): void {
   if (!requestBody || typeof requestBody !== "object" || Array.isArray(requestBody)) return;
   const request = requestBody as Record<string, unknown>;
@@ -220,10 +220,23 @@ export function rememberResponseState(
     if (!details || typeof details !== "object" || Array.isArray(details)
       || (details as { reason?: unknown }).reason !== "max_output_tokens") return;
   } else if (response.status !== undefined && response.status !== "completed") return;
+  let input = inputItems(request.input);
+  if (opts?.replaceObservedItems) {
+    // Only the Web journal-proven reconnect caller enables this: Native supplied
+    // partial receipts, and the completed output replaces those SAME item IDs.
+    const observed = (value: unknown): value is { id: string; type: "message" | "reasoning" } => {
+      if (!value || typeof value !== "object") return false;
+      const item = value as Record<string, unknown>;
+      return typeof item.id === "string"
+        && (item.type === "reasoning" || (item.type === "message" && item.role === "assistant"));
+    };
+    const replaced = new Set(response.output.filter(observed).map(item => `${item.type}:${item.id}`));
+    input = input.filter(item => !observed(item) || !replaced.has(`${item.type}:${item.id}`));
+  }
   ensureLoaded();
   setEntry(response.id, {
     createdAt: now(),
-    items: [...inputItems(request.input), ...response.output],
+    items: [...input, ...response.output],
   });
   pruneResponses();
   schedulePersist();

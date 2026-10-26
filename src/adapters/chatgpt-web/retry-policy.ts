@@ -2,7 +2,8 @@ import { ChatGptWebAdapterError } from "./adapter-error";
 
 /** Maximum number of automatic browser-turn retries after the initial send. */
 export const MAX_CHATGPT_WEB_TURN_RETRIES = 3;
-const RETRY_BUDGET_TTL_MS = 30 * 60_000;
+export const CHATGPT_RECOVERY_TIME_ALLOWANCE_MS = 30 * 60_000;
+const RETRY_BUDGET_TTL_MS = CHATGPT_RECOVERY_TIME_ALLOWANCE_MS;
 
 interface RetryBudgetEntry {
   retries: number;

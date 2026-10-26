@@ -8,6 +8,7 @@ export type Surface = "browser" | "setup" | "mcp" | "activity" | "limits" | "set
 
 export interface LauncherState {
   version: 1;
+  maintenanceDelivery?: { event: HealthMaintenanceEvent; attempts: number; acknowledgedAt: number | null };
   language: Language | null;
   onboardingComplete: boolean;
   githubOpened: boolean;
@@ -22,7 +23,6 @@ export interface LauncherState {
   composerPredictionsEnabled: boolean;
   experimentalSkillAttachments: boolean;
   experimentalFreshConversationPerTurn: boolean;
-  useSavedChats: boolean;
   zeroRiskProEnabled: boolean;
   sidebarOpen: boolean;
   sidebarWidth: number;
@@ -98,7 +98,14 @@ export interface DoctorReport {
   checks: DoctorCheck[];
 }
 
+export interface HealthMaintenanceEvent {
+  eventId: string; accountKey: string;
+  state: "ready" | "signed_out" | "unknown" | "runtime_unavailable" | "binding_mismatch" | "draining";
+  observedAt: number;
+}
+
 export interface OperationState {
+  maintenance?: HealthMaintenanceEvent;
   name: string;
   status: "running" | "completed" | "failed";
   message: string;
@@ -138,6 +145,7 @@ export interface LauncherSnapshot {
 }
 
 export interface LauncherApi {
+  acknowledgeMaintenance(value: { eventId: string }): Promise<boolean>;
   snapshot(): Promise<LauncherSnapshot>;
   getLimits(): Promise<LimitsSnapshot>;
   setupLimits(): Promise<LimitsSnapshot>;
@@ -180,7 +188,6 @@ export interface LauncherApi {
   setSkillAttachments(enabled: boolean): Promise<LauncherState>;
   setAutoApproveToolCalls(enabled: boolean): Promise<LauncherState>;
   setFreshConversationPerTurn(enabled: boolean): Promise<LauncherState>;
-  setUseSavedChats(enabled: boolean): Promise<LauncherState>;
   setZeroRiskPro(enabled: boolean): Promise<LauncherState>;
   setBrowserInteractionMode(mode: BrowserInteractionMode): Promise<{
     state: LauncherState;

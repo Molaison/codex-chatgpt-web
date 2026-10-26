@@ -1,4 +1,5 @@
-import { activateChatGptEffortMenu, parseChatGptEffortSliderState, parseChatGptModelAnnouncement, readChatGptModelAnnouncements } from "../../chatgpt-session";
+import { readNativeComposerModelIdentity41, nativeComposerModelMatches41 } from "./41_native_model_identity";
+import { CHATGPT_COMPOSER_SELECTOR, activateChatGptEffortMenu, parseChatGptEffortSliderState, parseChatGptModelAnnouncement, readChatGptModelAnnouncements } from "../../chatgpt-session";
 import type { ChatGptWebAdapterEffort, ChatGptWebModelFamily } from "../../chatgpt-web-models";
 import { ChatGptWebAdapterError } from "./adapter-error";
 
@@ -74,13 +75,14 @@ export function chatGptModelFamilyMatches(
   // GPT-6 uses Sol below Pro and Astra at Pro. An old Latest picker can still use
   // 5.6 at lower efforts; that is not proof of an explicitly requested GPT-6 turn.
   const expectedName = family === "6" && effort === "max" ? "astra" : "sol";
+  const expectedMode = { low: "instant", medium: "medium", high: "high", xhigh: "extra high", max: "pro" }[effort];
   const states = descriptions.flatMap(text => {
     const state = parseChatGptModelAnnouncement(text);
     return state ? [state] : [];
   });
   return states.length > 0 && states.every(state => state.version === family
     && (!state.name || state.name === expectedName)
-    && (effort === "max" ? /^Pro$/i.test(state.mode) : !/^Pro$/i.test(state.mode)));
+    && state.mode.toLowerCase() === expectedMode);
 }
 
 export async function assertChatGptModelFamily(
@@ -99,7 +101,12 @@ export async function assertChatGptModelFamily(
       await menu.slider.getAttribute("aria-valuenow"),
     );
     const descriptions = await readChatGptModelAnnouncements(menu.slider);
-    if (checked && state && state.value === state.min + effortIndex && chatGptModelFamilyMatches(descriptions, family, effort)) return;
+    const nativeIdentity = family === "6" && checked && state && state.value === state.min + effortIndex
+      && !descriptions.some(parseChatGptModelAnnouncement)
+      ? await readNativeComposerModelIdentity41(menu.slider, CHATGPT_COMPOSER_SELECTOR) : null;
+    if (checked && state && state.value === state.min + effortIndex
+      && (chatGptModelFamilyMatches(descriptions, family, effort)
+        || nativeComposerModelMatches41(nativeIdentity, family, effort))) return;
     if (Date.now() >= deadline) break;
     await new Promise(resolve => setTimeout(resolve, 50));
   } while (true);

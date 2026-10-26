@@ -8,6 +8,9 @@ import { createQaPool, type QaPoolConfig } from "../src/qa-pool";
 import { ChatGptConversationStore } from "../src/adapters/chatgpt-web/conversation-persistence";
 import { chatGptQuestionAnswerKey, chatGptQuestionAnswerNamespace } from "../src/adapters/chatgpt-web/qa-conversation-key";
 import { poolSessionHash } from "../src/paper-registry";
+import { installReadyQaHealthFixture } from "./qa-pool-health-fixture";
+
+installReadyQaHealthFixture();
 
 test("paper protocol persists reservations and saved identity, strips repeats, serializes turns and refuses unsafe migration", async () => {
   const root = mkdtempSync(join(tmpdir(),"paper-registry-"));
@@ -65,7 +68,6 @@ test("paper protocol persists reservations and saved identity, strips repeats, s
     expect(calls).toHaveLength(0);
     hold=true;
     const uploading=await request(meta,input);
-    expect(calls[0].client_metadata._chatgpt_defer_text_until_complete).toBe(true);
     expect((await request(meta,input)).status).toBe(409);
     expect((await resolve(id,{paper_upload_token:first.upload_token})).status).toBe("pending");
     streamController!.enqueue(new TextEncoder().encode('data: '+JSON.stringify({type:"response.completed",response:{id:"response-1",status:"completed",output:[]}})+'\n\n'));
@@ -81,7 +83,6 @@ test("paper protocol persists reservations and saved identity, strips repeats, s
     expect((await resolve("sha256:"+sha)).thread_id).toBe(ready.thread_id);
     const repeat=await request({paper_id:"sha256:"+sha,paper_operation:"chat",thread_id:"another-device"},[{role:"user",content:"old"},{role:"assistant",content:"old answer"},...input]);
     await repeat.text();
-    expect(calls[1].client_metadata._chatgpt_defer_text_until_complete).toBe(true);
     expect(calls[1].input).toHaveLength(1);expect(calls[1].input[0].content).toEqual([{type:"input_text",text:"new question"}]);
     expect(JSON.parse(calls[1].client_metadata["x-codex-turn-metadata"]).thread_id).toBe(JSON.parse(calls[0].client_metadata["x-codex-turn-metadata"]).thread_id);
     const before=calls.length;

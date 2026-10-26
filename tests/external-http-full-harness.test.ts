@@ -9,8 +9,9 @@ import { ChatGptBrowserWorker, type BrowserTurn } from "../src/adapters/chatgpt-
 import { createChatGptWebAdapter, type ChatGptZeroRiskManualControl } from "../src/adapters/chatgpt-web/index";
 import { startChatGptMcpHttpServer } from "../src/adapters/chatgpt-web/mcp-http";
 import { CHATGPT_WEB_MODEL_ID } from "../src/adapters/chatgpt-web/model";
-import { TurnBroker } from "../src/adapters/chatgpt-web/turn-broker";
+import { callTurnBroker, TurnBroker } from "../src/adapters/chatgpt-web/turn-broker";
 import type { AdapterEvent, CodexParsedRequest } from "../src/types";
+import { writePromptTestDescriptor } from "./44_prompt_fixture";
 
 // Real SDK HTTP, adapter and OS broker; browser/model and outer Codex are fixtures.
 // No account, public endpoint, shell command supplied by MCP, or manual Sent flow.
@@ -31,6 +32,7 @@ async function fixture() {
     accountId: root,
   };
   const provider = providerConfig(config);
+  writePromptTestDescriptor(config.browserHostDescriptorPath);
   Object.assign(provider.chatgptWeb!, {
     threadEnvironmentStatePath: join(root, "thread-environments.json"),
     lunaCheckpointStatePath: join(root, "luna-checkpoints.json"),
@@ -82,7 +84,7 @@ async function fixture() {
     await adapter.runTurn!(input, { headers: new Headers(), abortSignal }, event => events.push(event));
     return events;
   };
-  return { root, provider, client, worker, request, run };
+  return { root, provider, broker, client, worker, request, run };
 }
 
 async function observeBatch(turn: BrowserTurn) {
@@ -176,42 +178,89 @@ test("automatic Full completes two HTTP tool rounds and replays without manual h
   expect(tokens[0]).not.toBe(tokens[1]);
 }, 20_000);
 
-test("MCP cancellation retires automatic Full's pending tool and token", async () => {
-  const { client, worker, request, run } = await fixture();
+test("MCP cancellation detaches automatic Full's observer and preserves its original tool result", async () => {
+  const { broker, client, worker, request, run } = await fixture();
   const caller = new AbortController();
+  const arguments_ = { cmd: "fixture-never-executed" };
   let token = "";
+  let browserStarts = 0;
+  let sendActivations = 0;
   let reached!: () => void;
   const pending = new Promise<void>(resolve => { reached = resolve; });
   let callOutcome: Promise<unknown> | undefined;
   let browserSignal: AbortSignal | undefined;
+  let browserFailure: unknown;
   worker.run = async turn => {
+    browserStarts++;
     browserSignal = turn.abortSignal;
     const prepared = await turn.prepare();
     try {
       token = prepared.text.match(/turn_token (turn_[A-Za-z0-9_-]+)/)![1]!;
+      sendActivations++;
       turn.onSendActivated?.();
       turn.onSubmitted?.();
       callOutcome = client.callTool(
-        { name: "codex_exec", arguments: { turn_token: token, cmd: "fixture-never-executed" } },
+        { name: "codex_exec", arguments: { turn_token: token, ...arguments_ } },
         undefined, { signal: caller.signal },
       ).then(() => undefined, error => error);
-      await observeBatch(turn);
+      const batchRevision = await observeBatch(turn);
       reached();
       await callOutcome;
-      return await new Promise<string>((_resolve, reject) => {
-        const aborted = () => reject(turn.abortSignal?.reason ?? new DOMException("Fixture cancelled", "AbortError"));
-        if (turn.abortSignal?.aborted) aborted();
-        else turn.abortSignal?.addEventListener("abort", aborted, { once: true });
-      });
+      // The browser captures the original tool boundary after its MCP observer detached.
+      // Only the outer Codex result may settle this call; no replacement is requested.
+      await turn.externalProgress!.acknowledgeToolBatch(batchRevision);
+      let snapshot = turn.externalProgress!.snapshot();
+      while (snapshot.activeToolCalls > 0) {
+        snapshot = await turn.externalProgress!.waitForChange(snapshot.revision, turn.abortSignal);
+      }
+      expect(turn.abortSignal?.aborted).toBeFalse();
+      // Result delivery and SDK activity cleanup settle independently after cancellation.
+      // The real browser waits for both before committing its observed final answer.
+      let revision = await turn.completionFence!.begin();
+      for (let attempt = 0; revision === undefined && attempt < 200; attempt++) {
+        await Bun.sleep(10);
+        revision = await turn.completionFence!.begin();
+      }
+      expect(typeof revision).toBe("number");
+      expect(await turn.completionFence!.commit(revision!)).toBeTrue();
+      turn.onTextDelta("Original tool completed after observer cancellation");
+      return "Original tool completed after observer cancellation";
+    } catch (error) {
+      browserFailure = error;
+      throw error;
     } finally { prepared.release(); }
   };
-  const execution = run(request("full-cancelled"));
+  let input = request("full-observer-cancelled");
+  const execution = run(input);
   await pending;
   caller.abort(new DOMException("Fixture cancelled", "AbortError"));
   const events = await execution;
-  expect(events.some(event => event.type === "tool_call_start")).toBeFalse();
-  expect(events.at(-1)).toMatchObject({ type: "error", code: "chatgpt_submitted_turn_failed" });
-  expect(browserSignal?.aborted).toBeTrue();
   expect(await callOutcome!).toMatchObject({ message: expect.stringContaining("Fixture cancelled") });
+  expect(browserSignal?.aborted).toBeFalse();
+  expect(events.filter(event => event.type === "tool_call_start")).toHaveLength(1);
+  expect(broker.releaseStatus().durable_unknown_calls).toBe(1);
+  const inspection = await callTurnBroker<{ bindingId: string; activityId: string }>(
+    broker.socketPath, { method: "claim", token },
+  );
+  expect(inspection).toMatchObject({ bindingId: expect.any(String) });
+  // The capability check is itself an MCP activity; release this fixture's own claim so it
+  // cannot keep the browser completion fence open after the real original call settles.
+  await callTurnBroker(broker.socketPath, { method: "activity_complete", token, activityId: inspection.activityId });
+  expect(await broker.beginCompletionFence(token)).toBeUndefined();
+  const replay = await run(input);
+  expect(replay.filter(event => event.type === "tool_call_start"))
+    .toEqual(events.filter(event => event.type === "tool_call_start"));
+  expect(browserStarts).toBe(1);
+  expect(sendActivations).toBe(1);
+  input = continueWithResult(input, events, arguments_, JSON.stringify({ exit_code: 0, output: "ORIGINAL_RESULT" }), false);
+  const final = await run(input);
+  expect(browserFailure).toBeUndefined();
+  expect(final.at(-1)).toMatchObject({ type: "done", stopReason: "stop", endTurn: true });
+  expect(final.filter(event => event.type === "text_delta").map(event => event.text).join(""))
+    .toBe("Original tool completed after observer cancellation");
+  expect(final.some(event => event.type === "tool_call_start")).toBeFalse();
+  expect((await run(input)).at(-1)).toMatchObject({ type: "done", endTurn: true });
+  expect(browserStarts).toBe(1);
+  expect(sendActivations).toBe(1);
   expect((await client.callTool({ name: "codex_exec", arguments: { turn_token: token, cmd: "fixture-stale" } })).isError).toBeTrue();
 }, 20_000);

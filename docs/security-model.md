@@ -99,22 +99,26 @@ turn; it never chooses another model, starts another transport, or returns a fab
 The launcher keeps ChatGPT login, identity-provider navigation, and model turns in one private
 Electron partition. Allowed login popups are adopted into an in-launcher `WebContentsView` that
 shares that partition; unrelated external links remain outside it. A visible composer alone is not
-authentication evidence: the launcher also requires a valid server session and an exact Temporary
-Chat URL before setup can continue. No cookies, local storage, or browser profile are copied from an
+authentication evidence: the launcher also requires a valid server session and an ordinary new-chat
+URL before setup can continue. No cookies, local storage, or browser profile are copied from an
 external browser.
 
 ### Cross-turn data leakage
 
 Browser turns use at most five independent task-bound tabs in one private login partition. Every
-outer Codex task owns an exact launcher surface lease and retains its Temporary Chat only across
+outer Codex task owns an exact launcher surface lease and retains its ChatGPT conversation only across
 sequential messages in the same model/effort/compaction epoch; chats are never reused across tasks.
 Closing a running tab destroys its page and terminates that turn. The five-tab limit bounds parallel
 account traffic. Tool calls remain in the same ChatGPT response. The
 bounded local continuation cache is private, expires, and exists only to implement Codex
 `previous_response_id` replay. Full-mode context compaction accepts a checkpoint only through its
 one-shot MCP control capability in the exact retained source chat. If that chat no longer exists, a
-fresh tool-free Temporary Chat receives the canonical Codex history; the bridge never parses ordinary
+fresh tool-free chat receives the canonical Codex history; the bridge never parses ordinary
 assistant prose as a structured handoff.
+
+Task conversations are always saved in ChatGPT history and may use ChatGPT memory and custom
+instructions. The retired saved-chat preference is discarded when loading older configuration.
+Connector verification and account inspection also use ordinary chats.
 
 ## Network exposure
 

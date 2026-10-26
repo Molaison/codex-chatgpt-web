@@ -30,9 +30,19 @@ export function receiptIdentity(payload: Record<string, unknown>, native: Record
 }
 
 export function createReceiptStore(db: Database) {
-  db.exec("CREATE TABLE IF NOT EXISTS qa_request_receipts (session_hash TEXT PRIMARY KEY, identity_hash TEXT NOT NULL, digest TEXT, response_json TEXT, expires_at INTEGER NOT NULL, state TEXT NOT NULL)");
+  db.transaction(() => {
+    db.exec("CREATE TABLE IF NOT EXISTS qa_request_receipts (session_hash TEXT NOT NULL, identity_hash TEXT NOT NULL, digest TEXT, response_json TEXT, expires_at INTEGER NOT NULL, state TEXT NOT NULL, PRIMARY KEY (session_hash, identity_hash))");
+    const columns = db.query<{ name: string; pk: number }, []>("PRAGMA table_info(qa_request_receipts)").all();
+    if (columns.find(column => column.name === "identity_hash")?.pk === 0) {
+      // Older pools retained only the latest receipt per session. Preserve that
+      // receipt, including uncertain work, while allowing every request its own fence.
+      db.exec("CREATE TABLE qa_request_receipts_migration (session_hash TEXT NOT NULL, identity_hash TEXT NOT NULL, digest TEXT, response_json TEXT, expires_at INTEGER NOT NULL, state TEXT NOT NULL, PRIMARY KEY (session_hash, identity_hash))");
+      db.exec("INSERT INTO qa_request_receipts_migration SELECT session_hash, identity_hash, digest, response_json, expires_at, state FROM qa_request_receipts");
+      db.exec("DROP TABLE qa_request_receipts; ALTER TABLE qa_request_receipts_migration RENAME TO qa_request_receipts");
+    }
+  }).immediate();
   const get = db.query<{ digest: string | null; response_json: string | null; expires_at: number; state: string }, [string, string]>("SELECT digest, response_json, expires_at, state FROM qa_request_receipts WHERE session_hash=? AND identity_hash=?");
-  const insert = db.query("INSERT OR REPLACE INTO qa_request_receipts VALUES (?, ?, ?, NULL, ?, 'pending')");
+  const insert = db.query("INSERT INTO qa_request_receipts VALUES (?, ?, ?, NULL, ?, 'pending')");
   const finish = db.query("UPDATE qa_request_receipts SET response_json=?, state=?, expires_at=? WHERE session_hash=? AND identity_hash=? AND state='pending'");
   const forget = db.query("UPDATE qa_request_receipts SET digest=NULL, response_json=NULL, state='completed_unretained' WHERE session_hash=?");
   const remove = db.query("DELETE FROM qa_request_receipts WHERE session_hash=? AND identity_hash=? AND state='pending'");

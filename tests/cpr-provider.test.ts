@@ -19,7 +19,8 @@ const AUTH = { authorization: "Bearer provider-secret" };
 const JSON_HEADERS = { ...AUTH, "content-type": "application/json" };
 const FULL_CATALOG = [
   { slug: "gpt-5.6-sol", display_name: "5.6 Sol", description: "native", context_window: 300000, supported_in_api: true },
-  { slug: "chatgpt-web/gpt-5.6-sol", display_name: "5.6 Sol Web", context_window: 400000 },
+  { slug: "chatgpt-web/gpt-5.6-sol", display_name: "5.6 Sol Web", context_window: 400000,
+    supported_reasoning_levels: [{ effort: "high", description: "High" }, { effort: "xhigh", description: "Extra High" }] },
 ];
 
 type UpstreamCall = { path: string; body: any; authorization?: string; acceptEncoding?: string };
@@ -109,6 +110,8 @@ providerTest("Full 模式只发布 -tools 别名并显示 tools 语义", async (
     expect(body.models[0].display_name).toBe("5.6 Sol-tools");
     expect(body.models[0].description).toContain("Local tools");
     expect(body.models[0].context_window).toBe(300000);
+    expect(body.models[1].supported_reasoning_levels.map((level: { effort: string }) => level.effort))
+      .toEqual(["high", "xhigh", "high-temporary", "xhigh-temporary"]);
     expect(models.text).not.toContain('"slug":"gpt-5.6-sol"');
   } finally { await scenario.close(); }
 });
@@ -121,7 +124,7 @@ providerTest("Full 模式接受别名、上游收到原名、响应 JSON 回显�
     const response = await socketRequest(scenario.socketPath, "/v1/responses", {
       method: "POST",
       headers: JSON_HEADERS,
-      body: JSON.stringify({ model: "chatgpt-web/gpt-5.6-sol-tools", stream: false, instructions, tools }),
+      body: JSON.stringify({ model: "chatgpt-web/gpt-5.6-sol-tools", stream: false, instructions, tools, reasoning: { effort: "high-temporary" } }),
     });
     expect(response.status).toBe(200);
     expect(scenario.calls).toHaveLength(1);
@@ -129,6 +132,7 @@ providerTest("Full 模式接受别名、上游收到原名、响应 JSON 回显�
     expect(scenario.calls[0]!.body.model).toBe("chatgpt-web/gpt-5.6-sol");
     expect(scenario.calls[0]!.body.instructions).toBe(instructions);
     expect(scenario.calls[0]!.body.tools).toEqual(tools);
+    expect(scenario.calls[0]!.body.reasoning).toEqual({ effort: "high-temporary" });
     const body = JSON.parse(response.text);
     expect(body.model).toBe("chatgpt-web/gpt-5.6-sol-tools");
     expect(body.metadata.model).toBe("chatgpt-web/gpt-5.6-sol");

@@ -1,6 +1,7 @@
+const { readHealthPin } = require("./health-identity.cjs");
 const fs = require("node:fs");
 const path = require("node:path");
-const { createHash, randomBytes } = require("node:crypto");
+const { createHash, randomBytes, randomUUID } = require("node:crypto");
 const { clipboard, WebContentsView, powerMonitor, powerSaveBlocker, shell } = require("electron");
 const { writePrivateFileAtomic } = require("./atomic-file.cjs");
 const {
@@ -11,8 +12,10 @@ const { validateConnectorName } = require("./connector-identity.cjs");
 const { processRunning } = require("./process-tree.cjs");
 const { validatePasskeyLoginState } = require("./passkey-login-state.cjs");
 const { configureChatGptAnnouncementDismissal } = require("./browser-announcements.cjs");
+const { PassiveSessionHealth, hostHealthIdentity, sameHealthHost, HOST_VERSION, HOST_CLOSURE_DIGEST } = require("./passive-session-health.cjs");
 const { readChatGptAuthSession } = require("./chatgpt-auth-session.cjs");
 const { runBrowserPageScript } = require("./browser-page-script.cjs");
+const { NativeSubmissionObserver, validSlot, sameBinding, validScope, sameScope, sameHost, sameLease } = require("./native-submission-observer.cjs");
 const {
   refreshTurnLeasesAfterSuspension,
   shouldBlockSleepForTurns,
@@ -27,7 +30,23 @@ const {
   shellZoomActionForInput,
 } = require("./browser-state.cjs");
 
-const TEMPORARY_CHAT_URL = "https://chatgpt.com/?temporary-chat=true";
+function browserWriterConflict(message = "The browser tab or conversation already has another writer") {
+  const error = new Error(message);
+  error.code = "browser_writer_conflict";
+  return error;
+}
+
+function savedConversationId(value) {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    if (url.origin !== "https://chatgpt.com" || url.username || url.password
+      || url.searchParams.get("temporary-chat") === "true") return undefined;
+    return url.pathname.match(/^(?:\/g\/g-p-[a-f0-9]{32}(?:-[^/]+)?)?\/c\/([A-Za-z0-9][A-Za-z0-9_-]{0,127})\/?$/)?.[1];
+  } catch { return undefined; }
+}
+
+const NEW_CHAT_URL = "https://chatgpt.com/";
 const CHATGPT_ORIGIN = "https://chatgpt.com";
 const IDLE_BROWSER_URL = "data:text/html;charset=utf-8,%3C!doctype%20html%3E%3Chtml%3E%3Chead%3E%3Cmeta%20charset%3D%22utf-8%22%3E%3Ctitle%3ECodex%20Web%20GPT%3C%2Ftitle%3E%3C%2Fhead%3E%3Cbody%3E%3C%2Fbody%3E%3C%2Fhtml%3E#codex-web-gpt-browser-host";
 const PRIMARY_VIEW_BOOTSTRAP_TIMEOUT_MS = 10_000;
@@ -182,7 +201,7 @@ function isAbortedNavigationError(error) {
   return error instanceof Error && /\bERR_ABORTED\b/.test(error.message);
 }
 
-function isTemporaryChatUrl(value) {
+function isNewChatUrl(value) {
   let parsed;
   try {
     parsed = new URL(value);
@@ -191,7 +210,7 @@ function isTemporaryChatUrl(value) {
   }
   return parsed.origin === CHATGPT_ORIGIN
     && parsed.pathname === "/"
-    && parsed.searchParams.get("temporary-chat") === "true";
+    && parsed.searchParams.get("temporary-chat") !== "true";
 }
 
 function isChatGptBackendUrl(value) {
@@ -331,7 +350,9 @@ class BrowserHost {
     showWindow = () => {},
     clipboardApi = clipboard,
     getBrowserInteractionMode = () => "automatic",
-    getUseSavedChats = () => false,
+    getAccountId = () => undefined,
+    getHealthPinPath = () => undefined,
+    publishHealth = () => {},
   }) {
     if (typeof getConnectorName !== "function") {
       throw new Error("Browser host connector-name resolver is unavailable");
@@ -355,13 +376,16 @@ class BrowserHost {
       ? "persist:codex-web-gpt-dev-chatgpt"
       : "persist:codex-web-gpt-chatgpt";
     if (partition !== expectedPartition) throw new Error("Browser host partition does not match its profile");
+    this.observationInstanceId = randomBytes(24).toString("base64url");
     this.partition = partition;
     this.profile = profile;
     this.publishState = publishState;
     this.showWindow = showWindow;
     this.clipboard = clipboardApi;
     this.getBrowserInteractionMode = getBrowserInteractionMode;
-    this.getUseSavedChats = getUseSavedChats;
+    this.getAccountId = getAccountId;
+    this.getHealthPinPath = getHealthPinPath;
+    this.publishHealth = publishHealth;
     this.runBrowserHelperOperation = runBrowserHelperOperation;
     this.verifyConnectorWithBrowserHelper = verifyConnectorWithBrowserHelper;
     this.surfaceId = randomBytes(24).toString("base64url");
@@ -369,6 +393,7 @@ class BrowserHost {
     this.surfaceActive = true;
     this.turnTabs = new Map();
     this.closedTurnOwners = new Map();
+    this.nativeReleaseReceipts = new Map();
     this.userCancelledTurnOwners = new Map();
     this.manualTerminalSignals = new Map();
     this.manualCompletionSignals = new Map();
@@ -466,6 +491,7 @@ class BrowserHost {
     }
     this.writeDescriptor();
     this.logger.info("browser.initialized", { url: this.view.webContents.getURL() });
+    void this.prepareStandbyView();
   }
 
   currentOperation() {
@@ -479,6 +505,7 @@ class BrowserHost {
   }
 
   async withInteractionModeChange(mode, action) {
+    this.discardStandbyView();
     if (mode !== "automatic" && mode !== "manual") {
       throw new Error("Browser interaction mode must be automatic or manual");
     }
@@ -567,7 +594,62 @@ class BrowserHost {
     return this.turnTabs.get(this.selectedTabId) || null;
   }
 
-  async createTurnTab(traceId, helperPid, conversationKey, connectorIdentity, signal) {
+  // One account-owned, empty document, never a turn or a capability. No message is sent.
+  async prepareStandbyView() {
+    if (this.destroyed || this.standbyView || this.reauthenticationRequired || this.manualOperation
+      || Date.now() - (this.lastStandbyFailureAt ?? 0) < 30_000
+      || browserInteractionModeFor(this) !== "automatic"
+      || this.turnTabs.size >= MAX_BROWSER_TABS || typeof WebContentsView !== "function") return;
+    const view = new WebContentsView({ webPreferences: {
+      partition: this.partition, contextIsolation: true, nodeIntegration: false,
+      sandbox: true, spellcheck: true, backgroundThrottling: false,
+    } });
+    const standby = { view, ready: false, startedAt: Date.now() };
+    this.standbyView = standby;
+    view.webContents.on("render-process-gone", () => {
+      if (this.standbyView === standby) this.discardStandbyView();
+    });
+    view.webContents.on("destroyed", () => {
+      if (this.standbyView === standby) this.standbyView = null;
+    });
+    this.window.contentView.addChildView(view);
+    view.setBounds(this.hiddenTurnBounds());
+    view.setVisible(true);
+    try {
+      await loadCommittedBrowserSurface(view.webContents, "https://chatgpt.com/");
+      const deadline = Date.now() + 60_000;
+      while (Date.now() < deadline && this.standbyView === standby && !this.destroyed) {
+        if (view.webContents.isDestroyed()) throw new Error("Standby renderer closed");
+        const empty = await view.webContents.executeJavaScript(`(() => {
+          const p = [...document.querySelectorAll(${JSON.stringify(COMPOSER_SELECTOR)})].find(p => p.getClientRects().length > 0);
+          return location.origin === 'https://chatgpt.com' && location.pathname === '/'
+            && !location.search && !!p && p.getAttribute('contenteditable') === 'true'
+            && !p.textContent.trim() && !document.querySelector('[data-message-author-role]');
+        })()`);
+        if (empty) {
+          standby.ready = true;
+          this.logger.info("browser.standby_ready", { durationMs: Date.now() - standby.startedAt });
+          return;
+        }
+        await sleep(250);
+      }
+      throw new Error("Standby empty composer was not ready");
+    } catch (error) {
+      this.lastStandbyFailureAt = Date.now();
+      this.logger.warn("browser.standby_unavailable", { message: String(error) });
+      if (this.standbyView === standby) this.discardStandbyView();
+    }
+  }
+
+  discardStandbyView() {
+    const standby = this.standbyView;
+    this.standbyView = null;
+    if (!standby) return;
+    try { this.window.contentView.removeChildView(standby.view); } catch {}
+    if (!standby.view.webContents.isDestroyed()) standby.view.webContents.close();
+  }
+
+  async createTurnTab(traceId, helperPid, conversationKey, connectorIdentity, signal, conversationId, leaseFencing) {
     signal?.throwIfAborted();
     if (this.turnTabs.size >= MAX_BROWSER_TABS
       && !BrowserHost.prototype.evictOldestReclaimableTurnTab.call(this)) {
@@ -580,7 +662,14 @@ class BrowserHost {
     const ordinal = Array.from({ length: MAX_BROWSER_TABS }, (_unused, index) => index + 1)
       .find(candidate => ![...this.turnTabs.values()].some(tab => tab.ordinal === candidate));
     if (!ordinal) throw new Error("ChatGPT Web browser tab allocation is inconsistent");
-    const view = new WebContentsView({
+    let standby = this.standbyView;
+    if (standby && (!standby.ready || standby.view.webContents.isDestroyed()
+      || standby.view.webContents.getURL() !== "https://chatgpt.com/")) {
+      this.discardStandbyView();
+      standby = null;
+    }
+    this.standbyView = null; // Claim exactly once before any await.
+    const view = standby?.view ?? new WebContentsView({
       webPreferences: {
         partition: this.partition,
         contextIsolation: true,
@@ -595,6 +684,8 @@ class BrowserHost {
       surfaceId,
       traceId,
       conversationKey,
+      conversationId,
+      leaseFencing,
       connectorIdentity,
       connectorBound: false,
       helperPid,
@@ -617,12 +708,72 @@ class BrowserHost {
     };
     this.turnTabs.set(id, tab);
     this.syncPowerSaveBlocker();
-    this.window.contentView.addChildView(view);
+    if (!standby) this.window.contentView.addChildView(view);
     this.presentTurnView(tab, false);
     view.webContents.setZoomFactor(this.state.zoomFactor);
     this.bindShellZoomShortcuts(view.webContents);
     this.bindTurnContents(tab);
-    await this.initializeTurnTab(tab, signal);
+    if (standby) {
+      let documentChanged = false;
+      const onClaimNavigation = (_event, _url, inPlace, mainFrame) => {
+        if (mainFrame === true && !inPlace) documentChanged = true;
+      };
+      const onClaimRendererGone = () => { documentChanged = true; };
+      const assertClaim = () => {
+        signal?.throwIfAborted();
+        if (documentChanged || this.turnTabs.get(id) !== tab || tab.status !== "running" || tab.surfaceId !== surfaceId
+          || tab.helperPid !== helperPid || tab.traceId !== traceId || tab.view !== view
+          || view.webContents.isDestroyed() || view.webContents.getURL() !== "https://chatgpt.com/") {
+          throw browserWriterConflict("The claimed standby document is no longer ready");
+        }
+      };
+      view.webContents.on("did-start-navigation", onClaimNavigation);
+      view.webContents.on("render-process-gone", onClaimRendererGone);
+      let onClaimAbort;
+      const aborted = new Promise((_, reject) => {
+        onClaimAbort = () => reject(signal.reason);
+        signal?.addEventListener("abort", onClaimAbort, { once: true });
+      });
+      try {
+        await Promise.race([(async () => {
+        signal?.throwIfAborted();
+        await this.markTurnTabSurface(tab);
+        assertClaim();
+        // The standby completed loading before bindTurnContents installed its listeners.
+        // Revalidate its current owned document; no later load event will grant readiness.
+        const ready = await view.webContents.executeJavaScript(`(() => {
+          const p = [...document.querySelectorAll(${JSON.stringify(COMPOSER_SELECTOR)})].find(p => p.getClientRects().length > 0);
+          return location.href === 'https://chatgpt.com/' && document.readyState !== 'loading'
+            && globalThis.__CODEX_WEB_GPT_SURFACE_ID__ === ${JSON.stringify(surfaceId)}
+            && !!p && p.getAttribute('contenteditable') === 'true' && !p.textContent.trim()
+            && !document.querySelector('[data-message-author-role]');
+        })()`);
+        assertClaim();
+        if (ready !== true) {
+          throw browserWriterConflict("The claimed standby document is no longer ready");
+        }
+        })(), aborted]);
+        // The abort/document event may run after the inner await's proof but before
+        // Promise.race returns. Commit readiness only at this final synchronous fence.
+        assertClaim();
+        tab.url = "https://chatgpt.com/";
+        tab.loading = false;
+        tab.bootstrapReady = true;
+        tab.rendererReady = true;
+      } catch (error) {
+        if (this.turnTabs.get(id) === tab) this.removeTurnTab(tab, true);
+        throw error;
+      } finally {
+        signal?.removeEventListener("abort", onClaimAbort);
+        view.webContents.off("did-start-navigation", onClaimNavigation);
+        view.webContents.off("render-process-gone", onClaimRendererGone);
+      }
+      tab.initializingSurface = false;
+      this.logger.info("browser.standby_claimed", { traceId, tabId: id, ageMs: Date.now() - standby.startedAt });
+    } else {
+      await this.initializeTurnTab(tab, signal);
+    }
+    void this.prepareStandbyView();
     return tab;
   }
 
@@ -691,7 +842,7 @@ class BrowserHost {
       ordinal,
       label: `ChatGPT ${ordinal}`,
       pageTitle: "ChatGPT",
-      url: this.getUseSavedChats() ? "https://chatgpt.com/" : TEMPORARY_CHAT_URL,
+      url: NEW_CHAT_URL,
       loading: true,
       message: "Paste the copied prompt, add any images yourself because Zero Risk cannot transfer them, choose a model and effort, then press Sent",
       interactionMode: "manual",
@@ -816,11 +967,7 @@ class BrowserHost {
 
   bindTurnContents(tab) {
     const contents = tab.view.webContents;
-    // CDP/window closure can destroy WebContents without render-process-gone.
-    // Electron may then remove view.webContents entirely; retire its lease now.
-    contents.once("destroyed", () => {
-      if (!this.destroyed && this.turnTabs.get(tab.id) === tab) this.removeTurnTab(tab, true);
-    });
+    this.bindTurnContentsDestruction(tab, contents);
     contents.setWindowOpenHandler(({ url }) => {
       if (allowedAuthUrl(url)) {
         this.markTurnAuthenticationRequired(tab);
@@ -933,6 +1080,7 @@ class BrowserHost {
     tab.loading = false;
     tab.message = "ChatGPT requested sign-in. Open sign in in the launcher, then retry.";
     this.reauthenticationRequired = true;
+    this.discardStandbyView();
     // Invalidate any session read that started before this explicit redirect.
     this.authenticationRevision = (this.authenticationRevision ?? 0) + 1;
     this.setState({ authenticated: false, status: "signed-out", message: tab.message });
@@ -970,6 +1118,7 @@ class BrowserHost {
 
   bindManualTurnContents(tab) {
     const contents = tab.view.webContents;
+    this.bindTurnContentsDestruction(tab, contents);
     const invalidateConversation = (url, inPlace) => {
       // History state updates and anchor scrolling keep the same document/context.
       if (inPlace && url.split("#", 1)[0] === tab.url?.split("#", 1)[0]) return;
@@ -1054,6 +1203,18 @@ class BrowserHost {
         exitCode: details.exitCode,
       });
       this.signalManualTerminal(tab, "failed");
+      this.removeTurnTab(tab, true);
+    });
+  }
+
+  bindTurnContentsDestruction(tab, contents) {
+    contents.once("destroyed", () => {
+      // CDP or native window teardown can close the page without closeTab().
+      // Electron then clears WebContentsView.webContents; retire this exact owner
+      // before lease expiry, view synchronization or reuse can touch the dead page.
+      if (this.destroyed || this.turnTabs.get(tab.id) !== tab) return;
+      this.logger.warn("browser.tab_closed_externally", { tabId: tab.id, traceId: tab.traceId });
+      if (tab.interactionMode === "manual") this.signalManualTerminal(tab, "failed");
       this.removeTurnTab(tab, true);
     });
   }
@@ -1308,17 +1469,92 @@ class BrowserHost {
 
   async refreshChatGptHomeDocument() {
     // A navigation from the idle host already creates a fresh ChatGPT document. Reload only an
-    // existing Temporary Chat document so the helper observes one authoritative SPA bootstrap.
-    if (isTemporaryChatUrl(this.view.webContents.getURL())) {
+    // existing ordinary new-chat document so the helper sees one fresh catalog.
+    const targetUrl = NEW_CHAT_URL;
+    if (this.view.webContents.getURL() === targetUrl) {
       await this.hardRefreshHome();
     } else {
-      await this.view.webContents.loadURL(TEMPORARY_CHAT_URL);
+      await this.view.webContents.loadURL(targetUrl);
     }
     await this.waitForAuthenticated(60_000);
   }
 
+  healthIdentity() { return hostHealthIdentity(this); }
+
+  async readPassiveHealth(request) {
+    if (typeof request?.accountId !== "string" || !request.accountId
+      || request.accountId !== this.getAccountId?.()
+      || !sameHealthHost(request.expectedHost, this.healthIdentity())) throw new Error("Health binding mismatch");
+    this.passiveHealth ??= new PassiveSessionHealth({
+      identity: () => ({ host: this.healthIdentity(), accountId: this.getAccountId() }),
+      pin: () => readHealthPin(this.getHealthPinPath?.(), { accountId: this.getAccountId(), host: this.healthIdentity() }),
+      session: () => this.view.webContents.session,
+      available: () => !this.destroyed && !this.view.webContents.isDestroyed()
+        && !this.primaryRendererRecoveryNeeded && !this.primaryRendererRecovery
+        && !this.reauthenticationRequired && !this.primaryNavigationError
+        && browserInteractionModeFor(this) === "automatic"
+        && !(this.nativeReleaseCleanups?.size > 0),
+      timeoutMs: CHATGPT_AUTH_SESSION_TIMEOUT_MS,
+    });
+    return this.passiveHealth.read();
+  }
+
+  reportHealthMaintenance(request) {
+    if (request?.accountId !== this.getAccountId?.() || !request.accountId
+      || !sameHealthHost(request.expectedHost, this.healthIdentity())
+      || !["ready", "signed_out", "unknown", "runtime_unavailable", "binding_mismatch", "draining"].includes(request.state)) {
+      throw new Error("Health maintenance binding mismatch");
+    }
+    return this.publishHealth({ accountId: request.accountId, state: request.state });
+  }
+
+  admitHealthAssignment(request) {
+    const { assignment, runtime, expectedProof } = request ?? {};
+    if (request?.accountId !== this.getAccountId?.() || !request.accountId
+      || !sameHealthHost(request.expectedHost, this.healthIdentity())
+      || !sameHealthHost(expectedProof?.host, request.expectedHost) || expectedProof?.accountId !== request.accountId
+      || !assignment || !/^[a-f0-9-]{36}$/.test(assignment.admissionId) || !/^[a-f0-9]{64}$/.test(assignment.sessionHash)
+      || runtime?.accountId !== request.accountId || runtime.mode !== "browser-only"
+      || !/^[a-f0-9-]{36}$/.test(runtime.instanceId) || !Number.isSafeInteger(runtime.pid) || runtime.pid < 1
+      || typeof runtime.version !== "string" || !runtime.version || !/^[a-f0-9]{64}$/.test(runtime.bundleId)) {
+      throw new Error("Selected health assignment binding mismatch");
+    }
+    const identity = { host: this.healthIdentity(), accountId: this.getAccountId() };
+    const admittedAt = Date.now();
+    this.healthAssignments ??= new Map();
+    for (const [id, receipt] of this.healthAssignments) {
+      if (receipt.host.expiresAt <= admittedAt) this.healthAssignments.delete(id);
+    }
+    const prior = this.healthAssignments.get(assignment.admissionId);
+    if (prior) {
+      if (prior.assignment.sessionHash !== assignment.sessionHash
+        || JSON.stringify(prior.runtime) !== JSON.stringify(runtime) || JSON.stringify(prior.host) !== JSON.stringify(expectedProof)) {
+        throw new Error("Selected health assignment identity conflict");
+      }
+      return structuredClone(prior); // Same admitted metadata, never a new observation.
+    }
+    if (this.healthAssignments.size >= 1024) throw new Error("Selected health assignment capacity unavailable");
+    const current = this.passiveHealth?.current(identity);
+    // No await, auth refresh or UI callback between observing cookieRevision and
+    // issuing this decision. Cookie events before this boundary revoke the proof;
+    // later events fence later assignments, not this already admitted owner.
+    if (!current || current.state !== "ready" || current.observedAt > admittedAt || current.expiresAt <= admittedAt
+      || JSON.stringify(current) !== JSON.stringify(expectedProof)
+      || current.principalDigest !== readHealthPin(this.getHealthPinPath?.(), identity)) {
+      throw new Error("Selected health assignment proof is no longer current");
+    }
+    const receipt = { version: 1, assignment: { admissionId: assignment.admissionId, sessionHash: assignment.sessionHash },
+      runtime: { instanceId: runtime.instanceId, pid: runtime.pid, version: runtime.version, bundleId: runtime.bundleId,
+        accountId: runtime.accountId, mode: runtime.mode }, host: current, admittedAt };
+    this.healthAssignments.set(assignment.admissionId, receipt);
+    return structuredClone(receipt);
+  }
+
   bindAuthenticationChanges() {
     this.authenticationCookieListener = (_event, cookie, cause, removed) => {
+      if (cookie.httpOnly && cookie.domain.replace(/^\./, "") === "chatgpt.com") this.passiveHealth?.invalidate();
+      // A passive auth request may renew cookies. It cannot initiate the legacy page probe.
+      if (this.passiveHealth?.pending) return;
       // HttpOnly cookie changes are a reason to check, never proof of sign-in.
       // Ignore analytics cookies and other sites in the shared browser partition.
       // Session verification can renew its own cookies. Do not recursively verify
@@ -1497,6 +1733,7 @@ class BrowserHost {
           ]
         : [homeTab],
       maxTabs: MAX_BROWSER_TABS,
+      nativeReleaseCleanup: this.nativeReleaseCleanupSnapshot(),
     };
   }
 
@@ -1510,7 +1747,7 @@ class BrowserHost {
     this.publishState?.(this.snapshot());
   }
 
-  heartbeatTurn(traceId, helperPid, refreshViewport = false, progress) {
+  heartbeatTurn(traceId, helperPid, refreshViewport = false, progress, surfaceId) {
     if (typeof refreshViewport !== "boolean") throw new Error("refreshViewport is invalid");
     const tab = [...this.turnTabs.values()].find(candidate => candidate.traceId === traceId);
     if (!tab) {
@@ -1518,6 +1755,8 @@ class BrowserHost {
       if (closedOwner === helperPid) throw new Error(`Browser turn ${traceId} was already released`);
       throw new Error(`Browser turn ownership mismatch: no browser tab owns ${traceId}`);
     }
+    if (tab.interactionMode === "automatic" && (tab.leaseFencing || surfaceId !== undefined)
+      && tab.surfaceId !== surfaceId) throw browserWriterConflict();
     if (tab.helperPid !== helperPid) {
       throw new Error(`Browser helper ownership mismatch: expected ${tab.helperPid}, received ${helperPid}`);
     }
@@ -1544,9 +1783,421 @@ class BrowserHost {
     return this.snapshot();
   }
 
-  setTurnApprovalPending(traceId, helperPid, pending) {
+  observeTurn(traceId, helperPid, surfaceId, observation, register = false) {
+    const tab = [...this.turnTabs.values()].find(candidate => candidate.traceId === traceId);
+    const c = observation;
+    const fail = () => { const error = new Error("The original read-only observation lease is unavailable");
+      error.code = "browser_writer_conflict"; throw error; };
+    if (!tab || !c || ![1, 2].includes(c.version) || !c.identity || !c.host || !c.lease || !c.conversation || !c.submission
+      || tab.interactionMode !== "automatic" || tab.status !== "running" || tab.failedAt !== undefined
+      || tab.authenticationRequired || this.userCancelledTurnOwners.has(traceId)
+      || tab.view.webContents.isDestroyed() || c.traceId !== traceId || c.host.pid !== process.pid
+      || c.host.instanceId !== this.observationInstanceId || c.host.profile !== this.profile || c.host.partition !== this.partition
+      || c.lease.helperPid !== tab.helperPid || c.lease.surfaceId !== tab.surfaceId || surfaceId !== tab.surfaceId
+      || c.lease.targetId !== tab.view.webContents.getOrCreateDevToolsTargetId()
+      || c.conversation.key !== tab.conversationKey || savedConversationId(c.conversation.url) !== savedConversationId(tab.view.webContents.getURL())
+      || !savedConversationId(c.conversation.url)) fail();
+    if (c.version === 1 && tab.nativeSubmissionWatch) fail();
+    if (c.version === 2) {
+      const native = c.submission.native;
+      if (c.toolChannel || c.submission.receipt !== undefined || !native || native.version !== 1
+        || native.phase !== "accepted" || !native.post || !native.dom
+        || !Number.isSafeInteger(native.revision) || native.revision < 4
+        || native.conflict !== undefined
+        || !["same-bound-assistant-progress", "same-bound-assistant-completed"].includes(native.dom.proof)
+        || !Number.isSafeInteger(native.post.observedAt) || native.post.observedAt <= 0
+        || !Number.isSafeInteger(native.dom.observedAt) || native.dom.observedAt < native.post.observedAt
+        || !/^[a-f0-9-]{36}$/i.test(native.post.userMessageId)
+        || !/^[a-f0-9]{64}$/.test(native.post.payloadSha256)
+        || native.dom.acceptedUserIdentity !== `group:user:${native.post.userMessageId}`
+        || native.dom.assistantIdentity !== `group:assistant:${native.post.userMessageId}`
+        || native.dom.acceptedUserIdentity !== c.submission.acceptedUserIdentity
+        || native.dom.assistantIdentity !== c.submission.assistantIdentity
+        || JSON.stringify(native.initialTurnIdentities) !== JSON.stringify(c.submission.initialTurnIdentities)
+        || JSON.stringify(native.dom.acceptedTurnIdentities) !== JSON.stringify(c.submission.acceptedTurnIdentities)) fail();
+      const watch = tab.nativeSubmissionWatch;
+      watch?.checkContents();
+      const live = watch?.snapshot();
+      const saved = native.hostWatch;
+      if (!sameScope(watch?.scope, { ...watch?.scope, operationId: c.identity.operationId,
+          executionKey: c.identity.executionKey, roundKey: c.identity.roundKey })) fail();
+      if (!live || !saved || native.sendId !== live.sendId || !live.active || live.gap || live.conflict
+        || live.currentSendId !== native.sendId || live.binding?.stage.kind !== "final"
+        || !sameBinding(native.binding, live.binding) || !sameBinding(saved.binding, live.binding)
+        || native.binding.roundKey !== c.identity.roundKey
+        || !live.flush.stable || live.flush.pending !== 0 || live.postCount !== 1 || live.identities.length !== 1
+        || live.boundConversationId !== savedConversationId(c.conversation.url)
+        || (native.expectedConversationId !== undefined
+          && (native.expectedConversationId !== live.initialConversationId
+            || native.expectedConversationId !== savedConversationId(c.conversation.url)))
+        || saved.version !== 1 || saved.sendId !== live.sendId || saved.traceId !== traceId
+        || saved.currentSendId !== live.currentSendId || saved.totalPostCount !== live.totalPostCount
+        || JSON.stringify(saved.segments) !== JSON.stringify(live.segments)
+        || JSON.stringify(saved.latePosts) !== JSON.stringify(live.latePosts)
+        || saved.sessionEpoch !== live.sessionEpoch || saved.documentEpoch !== live.documentEpoch
+        || !Number.isSafeInteger(saved.seq) || saved.seq < 0 || saved.seq > live.seq || !saved.active || saved.gap !== false || saved.conflict !== false
+        || saved.postCount !== 1 || saved.flush?.stable !== true || saved.flush?.pending !== 0
+        || saved.flush?.throughSeq !== saved.seq
+        || JSON.stringify(saved.host) !== JSON.stringify(live.host)
+        || JSON.stringify(saved.lease) !== JSON.stringify(live.lease)
+        || JSON.stringify(saved.identities) !== JSON.stringify(live.identities)) fail();
+      const post = live.identities[0];
+      for (const key of ["userMessageId", "payloadSha256", "parentMessageId", "conversationId", "action"]) {
+        if (JSON.stringify(native.post[key]) !== JSON.stringify(post[key])) fail();
+      }
+      const user = native.dom.acceptedUserIdentity, assistant = native.dom.assistantIdentity;
+      if (!Array.isArray(native.initialTurnIdentities) || !Array.isArray(native.dom.acceptedTurnIdentities)
+        || native.initialTurnIdentities.includes(user) || native.initialTurnIdentities.includes(assistant)
+        || new Set(native.dom.acceptedTurnIdentities).size !== native.dom.acceptedTurnIdentities.length
+        || !native.dom.acceptedTurnIdentities.includes(user) || !native.dom.acceptedTurnIdentities.includes(assistant)
+        || native.dom.acceptedTurnIdentities.some(id => !native.initialTurnIdentities.includes(id)
+          && id !== user && id !== assistant)) fail();
+    }
+    const digest = createHash("sha256").update(JSON.stringify(c)).digest("hex");
+    if (register) {
+      if (helperPid !== tab.helperPid || (tab.observationDigest && tab.observationDigest !== digest)) fail();
+      tab.observationDigest = digest;
+      if (c.version === 2) tab.nativeObservationSendId = c.submission.native.sendId;
+    } else if (tab.observationDigest !== digest) fail();
+    // Observation does not rotate the surface, replace helperPid, activate a writer or navigate.
+    tab.lastHeartbeatAt = Date.now();
+    return { ok: true };
+  }
+
+  async observeTurnWithNativeWatch(traceId, helperPid, surfaceId, observation, register = false) {
+    const tab = [...this.turnTabs.values()].find(candidate => candidate.traceId === traceId);
+    if (observation?.version === 2) await tab?.nativeSubmissionWatch?.read();
+    return this.observeTurn(traceId, helperPid, surfaceId, observation, register);
+  }
+
+  async endObservedTurn({ traceId, helperPid, surfaceId, observation, toolFence }) {
+    if (!Number.isSafeInteger(helperPid) || helperPid < 1 || observation?.version !== 1
+      || observation.traceId !== traceId || observation.lease?.surfaceId !== surfaceId
+      || Boolean(observation.toolChannel) !== Boolean(toolFence)
+      || toolFence && (!/^[a-f0-9]{64}$/.test(toolFence.digest)
+        || toolFence.bindingHash !== undefined && !/^[a-f0-9]{64}$/.test(toolFence.bindingHash))) {
+      throw browserWriterConflict("The original observed completion is unavailable");
+    }
+    const digest = createHash("sha256").update(JSON.stringify({ observation, toolFence })).digest("hex");
+    const released = this.observedTurnReleases?.get(traceId);
+    if (released) {
+      if (released !== digest) throw browserWriterConflict();
+      return { observedEnd: true };
+    }
+    this.observeTurn(traceId, helperPid, surfaceId, observation);
+    const result = await this.endTurn(traceId, observation.lease.helperPid, "completed", false, undefined,
+      true, Boolean(observation.toolChannel), surfaceId);
+    if (result.cancelledByUser || result.authenticationRequired) throw browserWriterConflict();
+    this.observedTurnReleases ??= new Map();
+    this.observedTurnReleases.set(traceId, digest);
+    while (this.observedTurnReleases.size > MAX_CANCELLED_TURN_TRACES) {
+      this.observedTurnReleases.delete(this.observedTurnReleases.keys().next().value);
+    }
+    return { observedEnd: true };
+  }
+
+  /** Settle a durably accepted generation without transferring its browser writer lease. */
+  async completeObservedNativeTurn(request) {
+    const { traceId, helperPid, surfaceId, observation, receipt, resultReady } = request;
+    const fail = () => { throw browserWriterConflict("The original observed completion is unavailable"); };
+    const accepted = observation?.submission?.native;
+    const record = receipt?.record;
+    const acknowledgement = receipt?.acknowledgement;
+    if (!Number.isSafeInteger(helperPid) || helperPid < 1 || observation?.version !== 2
+      || observation.traceId !== traceId || observation.lease?.surfaceId !== surfaceId
+      || accepted?.phase !== "accepted" || record?.phase !== "completed"
+      || record.revision !== accepted.revision + 1
+      || ["version", "sendId", "initialTurnIdentities", "expectedConversationId", "binding", "post", "dom"]
+        .some(key => JSON.stringify(record[key]) !== JSON.stringify(accepted[key]))
+      || acknowledgement?.sendId !== record.sendId || acknowledgement.revision !== record.revision
+      || acknowledgement.digest !== createHash("sha256").update(JSON.stringify(record)).digest("hex")
+      || !sameScope(resultReady?.scope, { ...observation.identity, traceId })) fail();
+    const observationDigest = createHash("sha256").update(JSON.stringify(observation)).digest("hex");
+    const sealed = this.nativeReleaseReceipts?.get(record.sendId);
+    if (sealed) {
+      if (sealed.observationDigest !== observationDigest || sealed.traceId !== traceId
+        || sealed.receipt.outcome !== "completed" || sealed.terminalDigest !== acknowledgement.digest
+        || !sameBinding(sealed.binding, record.binding)
+        || JSON.stringify(sealed.resultReady) !== JSON.stringify(resultReady)) fail();
+      this.retryNativeReleaseCleanup(record.sendId);
+      return { cancelledByUser: false, nativeRelease: structuredClone(sealed.receipt) };
+    }
+    // This proves the registered checkpoint against the same uninterrupted Host collector.
+    // It grants no Send, Stop, navigation, new tab or replacement helper ownership.
+    await this.observeTurnWithNativeWatch(traceId, helperPid, surfaceId, observation);
+    const tab = [...this.turnTabs.values()].find(candidate => candidate.traceId === traceId);
+    const watch = tab?.nativeSubmissionWatch;
+    if (!watch || tab.nativeSubmissionWriterEnded) fail();
+    try { watch.complete(receipt, resultReady); } catch { fail(); }
+    const job = tab.nativeReleaseCommit ??= this.prepareNativeRelease(tab, "completed", {
+      retain: true, connectorBound: false, hideAfterTurn: false,
+    });
+    if (job.metadata.terminalDigest !== acknowledgement.digest || job.metadata.receipt.outcome !== "completed") fail();
+    try { watch.finish("completed"); }
+    catch (error) {
+      if (!watch.finishConfirmed("completed", acknowledgement.digest)) fail();
+      watch.finishWarning("finish_callback", error);
+    }
+    return this.commitNativeRelease(job);
+  }
+
+  async nativeSubmissionWatch(request) {
+    const { traceId, helperPid, surfaceId, sendId, action, host, targetId, observation } = request;
+    const tab = [...this.turnTabs.values()].find(candidate => candidate.traceId === traceId);
+    const fail = (reason = "watch_state_rejected") => {
+      const error = browserWriterConflict("The original native submission watch is unavailable");
+      error.nativeWatchReason = reason;
+      throw error;
+    };
+    const ownerHelperPid = tab?.helperPid;
+    const valid = () => tab && this.turnTabs.get(tab.id) === tab && host && host.pid === process.pid
+      && host.instanceId === this.observationInstanceId && host.profile === this.profile && host.partition === this.partition
+      && tab.traceId === traceId && tab.helperPid === ownerHelperPid
+      && tab.interactionMode === "automatic" && tab.leaseFencing === true
+      && tab.surfaceId === surfaceId && !tab.view.webContents.isDestroyed()
+      && targetId === tab.view.webContents.getOrCreateDevToolsTargetId()
+      && !tab.authenticationRequired && !this.userCancelledTurnOwners.has(traceId);
+    if (!valid()) fail("owner_fence_rejected");
+    if (!["start", "read", "stage-complete", "final-complete", "cancel-request", "cancel-terminal"].includes(action) || !Number.isSafeInteger(helperPid) || helperPid < 1
+      || typeof sendId !== "string" || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(sendId)) fail("request_schema_rejected");
+    if (helperPid !== tab.helperPid) {
+      if (action !== "read" || observation?.version !== 2 || observation.submission?.native?.sendId !== sendId) fail();
+      // Metadata reads must still expose a later conflict/gap. Authenticate the immutable
+      // original checkpoint, without granting the reader DOM recovery or writer authority.
+      const digest = createHash("sha256").update(JSON.stringify(observation)).digest("hex");
+      if (tab.observationDigest !== digest || observation.traceId !== traceId
+        || observation.host?.instanceId !== this.observationInstanceId
+        || observation.lease?.helperPid !== tab.helperPid || observation.lease?.surfaceId !== surfaceId
+        || observation.lease?.targetId !== targetId) fail();
+    } else if (action !== "read") {
+      if (tab.bootstrapReady !== true) fail("bootstrap_unready");
+      if (tab.status !== "running" || tab.failedAt !== undefined || tab.expiryCancellation
+        || tab.nativeSubmissionWriterEnded) fail("turn_state_rejected");
+    }
+    let watch = tab.nativeSubmissionWatch;
+    if (action === "start" && (!validSlot(request.slot) || !validScope(request.scope)
+      || request.scope.traceId !== traceId || request.scope.roundKey !== request.slot.roundKey)) fail("scope_rejected");
+    if (watch && !watch.segments.has(sendId)) fail();
+    if (watch && action === "start" && (watch.segment.sendId !== sendId
+      || !sameScope(request.scope, watch.scope) || request.slot.roundKey !== watch.segment.slot?.roundKey
+      || JSON.stringify(request.slot.stage) !== JSON.stringify(watch.segment.slot?.stage))) fail();
+    if (action === "final-complete" && watch?.segment.sendId !== sendId) fail();
+    if (!watch) {
+      if (action !== "start") fail(); // Read never creates a zero-POST replacement collector.
+      if (request.slot.stage.kind === "part" && request.slot.stage.index !== 1) fail();
+      watch = new NativeSubmissionObserver(tab.view.webContents, {
+        traceId, sendId,
+        host: { pid: process.pid, instanceId: this.observationInstanceId, profile: this.profile, partition: this.partition },
+        lease: { helperPid: tab.helperPid, surfaceId: tab.surfaceId, targetId },
+      }, { slot: request.slot, scope: request.scope });
+      tab.nativeSubmissionWatch = watch; // Reserve synchronously before any attach/enable await.
+      await watch.start();
+    }
+    if (watch.starting) await watch.starting;
+    await watch.read();
+    if (!valid() || tab.nativeSubmissionWatch !== watch) fail();
+    try {
+      if (action === "stage-complete") {
+        if (request.receipt?.record?.sendId !== sendId) fail();
+        watch.rotate(sendId, request.receipt, request.next);
+      } else if (action === "final-complete") {
+        if (request.receipt?.record?.sendId !== sendId) fail();
+        watch.complete(request.receipt, request.resultReady);
+      } else if (action === "cancel-request") {
+        if (watch.segment.sendId !== sendId) fail();
+        watch.requestCancellation(request.intent, request.acknowledgement, request.dispatchAttempted);
+      } else if (action === "cancel-terminal") {
+        if (watch.segment.sendId !== sendId) fail();
+        watch.cancelTerminal(request.terminal, request.acknowledgement, request.notDispatchedReceipt);
+      }
+    } catch { fail(); }
+    // Include events arriving between the flush promise and this continuation; pending work
+    // is explicitly unstable and cannot be mistaken for a completed empty read.
+    return watch.snapshot(undefined, action === "stage-complete" ? request.next.sendId : sendId);
+  }
+
+  nativeReleaseRead(request) {
+    const fail = () => { throw browserWriterConflict("The original sealed release metadata is unavailable"); };
+    const { traceId, helperPid, surfaceId, sendId, host, targetId, binding, sessionEpoch, scope, authorization } = request;
+    if (!Number.isSafeInteger(helperPid) || helperPid < 1 || !host || host.pid !== process.pid
+      || host.instanceId !== this.observationInstanceId || host.profile !== this.profile || host.partition !== this.partition
+      || !sameHost(binding?.host, host) || binding?.lease?.surfaceId !== surfaceId || binding?.lease?.targetId !== targetId
+      || !validScope(scope) || scope.traceId !== traceId || scope.roundKey !== binding?.roundKey) fail();
+    const sealed = this.nativeReleaseReceipts?.get(sendId);
+    const tab = sealed ? undefined : [...this.turnTabs.values()].find(t => t.traceId === traceId);
+    const watch = tab?.nativeSubmissionWatch;
+    const meta = sealed || (watch?.segment.sendId === sendId ? {
+      traceId, scope: watch.scope, binding: watch.segment.binding, sessionEpoch: watch.sessionEpoch,
+      resultReadyDigest: watch.resultReady?.digest, observationDigest: tab.observationDigest,
+      cancelId: watch.cancellation?.cancelId, terminalDigest: watch.cancellation?.terminalDigest,
+    } : undefined);
+    if (!meta || meta.traceId !== traceId || !sameScope(meta.scope, scope)
+      || !sameBinding(meta.binding, binding) || meta.sessionEpoch !== sessionEpoch || !authorization) fail();
+    const keys = Object.keys(authorization);
+    if (keys.length === 1 && keys[0] === "resultReadyDigest") {
+      if (!meta.resultReadyDigest || authorization.resultReadyDigest !== meta.resultReadyDigest) fail();
+    } else if (keys.length === 1 && keys[0] === "observation") {
+      const c = authorization.observation;
+      if (!meta.observationDigest || c?.version !== 2 || c.traceId !== traceId || c.submission?.native?.sendId !== sendId
+        || createHash("sha256").update(JSON.stringify(c)).digest("hex") !== meta.observationDigest) fail();
+    } else if (keys.length === 3 && ["cancelId", "terminalDigest", "intentDigest"].every(k => keys.includes(k))) {
+      // Parent/replacement presents its own PID. This capability only reads an already sealed
+      // cancellation release; it never impersonates the writer or infers release from intent.
+      if (!sealed || sealed.receipt.outcome !== "cancelled" || !meta.cancelId || authorization.cancelId !== meta.cancelId
+        || !meta.intentDigest || authorization.intentDigest !== meta.intentDigest
+        || !meta.terminalDigest || authorization.terminalDigest !== meta.terminalDigest) fail();
+    } else if (keys.length === 2 && keys.includes("cancelId") && keys.includes("terminalDigest")) {
+      if (helperPid !== binding.lease.helperPid || !meta.cancelId || authorization.cancelId !== meta.cancelId
+        || !meta.terminalDigest || authorization.terminalDigest !== meta.terminalDigest) fail();
+    } else fail();
+    // No webContents/CDP/DOM access, no touch of liveness/ownership, no synthetic release.
+    return sealed ? structuredClone(sealed.receipt) : null;
+  }
+
+  prepareNativeRelease(tab, outcome, options) {
+    const watch = tab.nativeSubmissionWatch;
+    const binding = watch.segment.binding, sessionEpoch = watch.sessionEpoch, sendId = watch.segment.sendId;
+    const terminalDigest = watch.releaseWitness(outcome);
+    const receipt = { version: 1, releaseId: randomUUID(), sendId, roundKey: binding.roundKey, sessionEpoch,
+      host: structuredClone(binding.host), lease: structuredClone(binding.lease), documentEpoch: binding.documentEpoch,
+      outcome, terminalDigest };
+    const retained = outcome === "completed" && options.retain && !!tab.conversationKey
+      && (!tab.connectorIdentity || options.connectorBound);
+    const metadata = { traceId: tab.traceId, scope: structuredClone(watch.scope), binding: structuredClone(binding),
+      sessionEpoch, resultReadyDigest: watch.resultReady?.digest, resultReady: structuredClone(watch.resultReady),
+      observationDigest: tab.observationDigest,
+      cancelId: watch.cancellation?.cancelId, intentDigest: watch.cancellation?.intentDigest, terminalDigest, receipt,
+      cleanup: { state: "pending", disposition: retained ? "retained" : "removed", pending: [], failures: [], warnings: [] } };
+    const contents = tab.view.webContents;
+    const stillOwned = () => tab.traceId === metadata.traceId && tab.helperPid === binding.lease.helperPid
+      && tab.surfaceId === binding.lease.surfaceId && tab.nativeSubmissionWatch === watch;
+    const mayTouchContents = () => stillOwned() && (retained ? this.turnTabs.get(tab.id) === tab
+      : ![...this.turnTabs.values()].some(t => t.view === tab.view));
+    const ownedRemoval = () => {
+      if (!stillOwned() || [...this.turnTabs.values()].some(t => t.view === tab.view)) {
+        throw new Error("native_release_cleanup_view_reassigned");
+      }
+    };
+    const steps = new Map([
+      ["observer_listeners", () => watch.cleanupFinishedListeners()],
+      ["background_throttling", () => { if (mayTouchContents() && !contents.isDestroyed()) contents.setBackgroundThrottling(true); }],
+      ...(!retained ? [
+        ["view_detach", () => {
+          ownedRemoval();
+          const parent = this.window?.contentView;
+          if (parent?.children && !parent.children.includes(tab.view)) return;
+          parent?.removeChildView(tab.view);
+        }],
+        ["contents_close", () => {
+          ownedRemoval();
+          if (!contents.isDestroyed()) contents.close();
+          if (!contents.isDestroyed()) throw new Error("native_release_contents_close_pending");
+        }],
+        ["selected_view", () => {
+          if (this.selectedTabId === tab.id && !this.turnTabs.has(tab.id)) {
+            this.selectedTabId = [...this.turnTabs.keys()].at(-1) || "home";
+            if (this.selectedTabId === "home" && !this.activeTraceId
+              && this.view?.webContents?.getURL?.() === IDLE_BROWSER_URL) this.hide?.();
+          }
+        }],
+      ] : []),
+      ["power", () => this.syncPowerSaveBlocker()],
+      ["visibility", () => this.syncViewVisibility()],
+      ["publish", () => this.publishState?.(this.snapshot())],
+      ["descriptor", () => this.writeDescriptor()],
+      ["hide", () => { if (options.hideAfterTurn && !this.activeTraceId && mayTouchContents()) this.hide(); }],
+      ["log", () => this.logger.info("browser.native_release_committed", { traceId: metadata.traceId, sendId, releaseId: receipt.releaseId, outcome })],
+      ...(!retained ? [["standby", () => this.prepareStandbyView()]] : []),
+    ]);
+    metadata.cleanup.pending = [...steps.keys()];
+    this.nativeReleaseReceipts ??= new Map();
+    this.nativeReleaseCleanups ??= new Map();
+    return { metadata, tab, watch, retained, options, steps, running: new Map(), done: new Set() };
+  }
+
+  commitNativeRelease(job) {
+    const { tab, watch, metadata, retained, options } = job;
+    const { receipt } = metadata;
+    if (this.turnTabs.get(tab.id) !== tab || tab.nativeSubmissionWatch !== watch
+      || tab.traceId !== metadata.traceId || tab.helperPid !== metadata.binding.lease.helperPid
+      || tab.surfaceId !== metadata.binding.lease.surfaceId
+      || !watch.finishConfirmed(receipt.outcome, receipt.terminalDigest)) throw browserWriterConflict();
+    // Commit point: plain owned state / Map writes only, no Electron/UI/logger/file callbacks.
+    // The original terminal and owned detach are already confirmed. Host lease disposition
+    // and its sealed receipt become visible in one synchronous segment before cleanup can run.
+    tab.nativeSubmissionWriterEnded = true;
+    tab.status = receipt.outcome === "completed" ? "ready" : "aborted";
+    tab.approvalPending = false;
+    tab.turnProgress = undefined;
+    tab.activity = undefined;
+    tab.message = receipt.outcome === "completed" ? "Task completed" : "ChatGPT turn cancelled";
+    tab.loading = false;
+    if (retained) {
+      tab.connectorBound = options.connectorBound === true;
+      tab.lastHeartbeatAt = Date.now();
+    } else this.turnTabs.delete(tab.id);
+    this.nativeReleaseReceipts.set(receipt.sendId, metadata);
+    this.nativeReleaseCleanups.set(receipt.sendId, job);
+    delete tab.nativeReleaseCommit;
+    this.retryNativeReleaseCleanup(receipt.sendId);
+    return { cancelledByUser: receipt.outcome === "cancelled", nativeRelease: structuredClone(receipt) };
+  }
+
+  nativeReleaseCleanupSnapshot() {
+    return [...(this.nativeReleaseReceipts?.values() || [])].filter(m => m.cleanup).map(m => ({
+      sendId: m.receipt.sendId, releaseId: m.receipt.releaseId, ...structuredClone(m.cleanup),
+    }));
+  }
+
+  retryNativeReleaseCleanup(sendId) {
+    const jobs = sendId ? [this.nativeReleaseCleanups?.get(sendId)].filter(Boolean)
+      : [...(this.nativeReleaseCleanups?.values() || [])];
+    for (const job of jobs) {
+      const health = job.metadata.cleanup;
+      const update = () => {
+        health.pending = [...job.steps.keys()].filter(name => !job.done.has(name));
+        health.warnings = structuredClone(job.watch.finishWarnings);
+        health.state = health.pending.length ? "pending" : "complete";
+        if (!health.pending.length) this.nativeReleaseCleanups.delete(job.metadata.receipt.sendId);
+      };
+      const settled = (name, failed = false, error) => {
+        let failure = health.failures.find(f => f.step === name);
+        if (failed) {
+          if (!failure) { failure = { step: name, attempts: 0 }; health.failures.push(failure); }
+          failure.attempts++;
+          failure.errorType = typeof error?.name === "string" ? error.name : "Error";
+          failure.resolved = false;
+          try { this.logger.warn("browser.native_release_cleanup_pending", {
+            sendId: job.metadata.receipt.sendId, releaseId: job.metadata.receipt.releaseId,
+            step: name, errorType: failure.errorType,
+          }); } catch { /* The health record, not a logger callback, owns this failure. */ }
+        } else {
+          job.done.add(name);
+          if (failure) failure.resolved = true;
+        }
+        job.running.delete(name);
+        update();
+      };
+      for (const [name, action] of job.steps) {
+        if (job.done.has(name) || job.running.has(name)) continue;
+        // A synchronous Electron/UI callback can reenter end or the sweep before returning.
+        job.running.set(name, true);
+        try {
+          const result = action();
+          if (result && typeof result.then === "function") {
+            // Own both success and rejection; no detached prepareStandbyView promise.
+            const task = Promise.resolve(result).then(() => settled(name), error => settled(name, true, error));
+            job.running.set(name, task);
+          } else settled(name);
+        } catch (error) { settled(name, true, error); }
+      }
+      update();
+    }
+  }
+
+  setTurnApprovalPending(traceId, helperPid, pending, surfaceId) {
     if (typeof pending !== "boolean") throw new Error("Tool approval pending state must be a boolean");
-    this.heartbeatTurn(traceId, helperPid);
+    this.heartbeatTurn(traceId, helperPid, false, undefined, surfaceId);
     const tab = [...this.turnTabs.values()].find(candidate => candidate.traceId === traceId);
     if (tab.interactionMode !== "automatic") throw new Error("Tool approval requires an automatic browser turn");
     tab.approvalPending = pending;
@@ -1555,6 +2206,9 @@ class BrowserHost {
   }
 
   refreshTurnLeases(reason, now = Date.now()) {
+    for (const tab of this.turnTabs.values()) {
+      if (tab.nativeSubmissionWatch && !tab.nativeSubmissionWriterEnded) tab.nativeSubmissionWatch.gap("host_suspended");
+    }
     const refreshed = refreshTurnLeasesAfterSuspension(
       [...this.turnTabs.values()],
       now,
@@ -1582,6 +2236,11 @@ class BrowserHost {
   }
 
   reapExpiredTurnTabs(now = Date.now()) {
+    this.retryNativeReleaseCleanup();
+    // This recurring trigger must also own standby failure while retrying release cleanup.
+    void Promise.resolve().then(() => this.prepareStandbyView()).catch(error => {
+      try { this.logger.warn("browser.standby_prepare_failed", { errorType: error?.name || "Error" }); } catch {}
+    });
     const cancellations = [];
     const lastSweepAt = this.lastTurnSweepAt;
     this.lastTurnSweepAt = now;
@@ -1592,6 +2251,10 @@ class BrowserHost {
       return;
     }
     for (const tab of [...this.turnTabs.values()]) {
+      // Helper death/heartbeat loss is not browser completion. Preserve the original lease and
+      // continuous collector, including poisoned/unknown watches; no TTL may erase that evidence.
+      if (tab.nativeSubmissionWatch && !tab.nativeSubmissionWriterEnded
+        || tab.observationDigest && tab.status === "running" && tab.failedAt === undefined) continue;
       if (tab.failedAt !== undefined) {
         if (now - tab.failedAt < RETAINED_TURN_TAB_TTL_MS) continue;
         this.logger.info("browser.failed_tab_expired", { tabId: tab.id, traceId: tab.traceId });
@@ -1805,7 +2468,12 @@ class BrowserHost {
   }
 
   removeTurnTab(tab, abortRunning) {
-    if (!this.turnTabs.has(tab.id)) return;
+    if (this.turnTabs.get(tab.id) !== tab) return;
+    if (tab.nativeSubmissionWatch && !tab.nativeSubmissionWriterEnded
+      && !this.userCancelledTurnOwners.has(tab.traceId)) {
+      tab.nativeSubmissionWatch.gap("host_release_unproven");
+      return;
+    }
     this.turnTabs.delete(tab.id);
     if (tab.interactionMode === "manual") {
       if (tab.manualDeadlineTimer) clearTimeout(tab.manualDeadlineTimer);
@@ -2028,9 +2696,9 @@ class BrowserHost {
     this.syncViewVisibility();
     this.logger.info("browser.auth_surface_closed");
     if (refreshMain && this.manualOperation === "ChatGPT login" && !this.view.webContents.isDestroyed()) {
-      void this.view.webContents.loadURL(TEMPORARY_CHAT_URL).catch((error) => {
+      void this.view.webContents.loadURL(NEW_CHAT_URL).catch((error) => {
         this.logger.error("browser.auth_refresh_failed", {
-          origin: navigationOriginForLog(TEMPORARY_CHAT_URL),
+          origin: navigationOriginForLog(NEW_CHAT_URL),
           ...navigationErrorForLog(error),
         });
       });
@@ -2074,7 +2742,7 @@ class BrowserHost {
     if (inspectSession) requireAutomaticBrowserInspection(this, "ChatGPT session inspection");
     this.show();
     if (!this.selectedTurnTab() && this.view.webContents.getURL() === IDLE_BROWSER_URL) {
-      await this.view.webContents.loadURL(TEMPORARY_CHAT_URL);
+      await this.view.webContents.loadURL(NEW_CHAT_URL);
       if (inspectSession) await this.probeAuthentication();
     }
     return this.snapshot();
@@ -2517,8 +3185,11 @@ class BrowserHost {
     connectorIdentity,
     requireRetainedConversation = false,
     signal,
+    conversationUrl,
+    leaseFencing = false,
   ) {
     signal?.throwIfAborted();
+    if (typeof leaseFencing !== "boolean") throw new Error("Browser lease fencing flag is invalid");
     if (this.manualOperation) {
       throw new Error(`ChatGPT browser is busy with ${this.manualOperation}`);
     }
@@ -2532,7 +3203,22 @@ class BrowserHost {
         this.removeTurnTab(tab, true);
       }
     }
+    const conversationId = savedConversationId(conversationUrl);
+    if (conversationUrl !== undefined && !conversationId) throw new Error("Saved conversation identity is invalid");
+    if ([...this.turnTabs.values()].some(tab => tab.nativeSubmissionWatch && !tab.nativeSubmissionWriterEnded
+      && (tab.traceId === traceId || (conversationKey && tab.conversationKey === conversationKey)
+        || (conversationId && (tab.conversationId === conversationId
+          || savedConversationId(tab.view.webContents.getURL()) === conversationId))))) throw browserWriterConflict();
+    // BrowserHost is shared by QA and Full. Connector names must not partition writer ownership.
+    const conflict = [...this.turnTabs.values()].some(tab => tab.status === "running" && (
+      tab.traceId === traceId
+      || (conversationKey && tab.conversationKey === conversationKey)
+      || (conversationId && (tab.conversationId === conversationId || savedConversationId(tab.url) === conversationId))
+    ) && (tab.traceId !== traceId || tab.helperPid === helperPid
+      || processRunning(tab.helperPid) || tab.initializingSurface));
     const sameTrace = [...this.turnTabs.values()].find((tab) => tab.traceId === traceId);
+    if (conflict) throw browserWriterConflict(sameTrace && sameTrace.helperPid !== helperPid && processRunning(sameTrace.helperPid)
+      ? `ChatGPT browser turn ${traceId} is owned by another helper process` : undefined);
     if (sameTrace && sameTrace.interactionMode !== "automatic") {
       throw new Error(`Browser turn ${traceId} already belongs to Zero Risk interaction`);
     }
@@ -2557,18 +3243,33 @@ class BrowserHost {
     const existing = sameTrace?.status === "running" ? sameTrace : exactRetained;
     if (existing) {
       const reused = existing.status === "ready";
+      // A completed writer may start a genuinely new turn. Its old watch was sealed by /end;
+      // an unresolved watch cannot reach this branch.
+      if (existing.nativeSubmissionWriterEnded) {
+        delete existing.nativeSubmissionWatch;
+        delete existing.nativeSubmissionWriterEnded;
+        delete existing.nativeObservationSendId;
+      }
       if (existing.status === "running" && existing.helperPid !== helperPid) {
         if (processRunning(existing.helperPid)) {
           throw new Error(`ChatGPT browser turn ${traceId} is owned by another helper process`);
         }
-        this.logger.warn("browser.stale_turn_owner_replaced", {
-          tabId: existing.id,
-          traceId,
-          previousHelperPid: existing.helperPid,
-          helperPid,
-          evidence: "previous helper exited",
-        });
+        // The old helper may already have submitted this message. Its process
+        // exit supplies no proof of the current response or submission boundary.
+        // Never hand its running document to the fresh-prompt path.
+        const error = new Error("The browser helper exited while this ChatGPT turn was running. Check the existing ChatGPT tab before retrying; the message may already have been submitted.");
+        error.code = "turn_owner_lost";
+        throw error;
       }
+      // New clients fence every activation. Legacy helper/usage payloads keep their original
+      // surface contract; switching either direction still retires the previous nonce.
+      const rotateFence = leaseFencing || existing.leaseFencing;
+      if (rotateFence) {
+        existing.surfaceId = randomBytes(24).toString("base64url");
+        existing.observationDigest = undefined;
+      }
+      existing.leaseFencing = leaseFencing;
+      existing.conversationId = conversationId ?? existing.conversationId;
       existing.helperPid = helperPid;
       existing.traceId = traceId;
       existing.status = "running";
@@ -2584,6 +3285,20 @@ class BrowserHost {
       existing.lastHeartbeatAt = Date.now();
       if (!existing.view.webContents.isDestroyed()) {
         existing.view.webContents.setBackgroundThrottling(false);
+      }
+      if (rotateFence) {
+        const activationSurface = existing.surfaceId;
+        existing.initializingSurface = true;
+        try {
+          await this.markTurnTabSurface(existing);
+          signal?.throwIfAborted();
+          if (this.turnTabs.get(existing.id) !== existing || existing.status !== "running"
+            || existing.surfaceId !== activationSurface) throw browserWriterConflict();
+          existing.initializingSurface = false;
+        } catch (error) {
+          if (this.turnTabs.get(existing.id) === existing && existing.surfaceId === activationSurface) this.removeTurnTab(existing, true);
+          throw error;
+        }
       }
       this.selectedTabId = existing.id;
       if (reveal) this.show();
@@ -2605,7 +3320,10 @@ class BrowserHost {
     }
     // A retry may reuse the trace, but never the failed document or its incremental history.
     if (sameTrace?.failedAt !== undefined) this.removeTurnTab(sameTrace, false);
-    const tab = await this.createTurnTab(traceId, helperPid, conversationKey, connectorIdentity, signal);
+    const tab = await this.createTurnTab(traceId, helperPid, conversationKey, connectorIdentity, signal,
+      ...(conversationId || leaseFencing ? [conversationId, leaseFencing] : []));
+    signal?.throwIfAborted();
+    if (leaseFencing && (this.turnTabs.get(tab.id) !== tab || tab.status !== "running")) throw browserWriterConflict();
     this.selectedTabId = tab.id;
     if (reveal) this.show();
     else this.syncViewVisibility();
@@ -2623,7 +3341,19 @@ class BrowserHost {
     message,
     retain = false,
     connectorBound = false,
+    surfaceId,
+    nativeRelease,
   ) {
+    const sealed = nativeRelease && this.nativeReleaseReceipts?.get(nativeRelease.sendId);
+    if (sealed) {
+      if (sealed.traceId !== traceId || sealed.binding.lease.helperPid !== helperPid
+        || sealed.binding.lease.surfaceId !== surfaceId || !sameBinding(sealed.binding, nativeRelease.binding)
+        || sealed.sessionEpoch !== nativeRelease.sessionEpoch || sealed.terminalDigest !== nativeRelease.terminalDigest
+        || sealed.receipt.outcome !== status || sealed.binding.host.instanceId !== this.observationInstanceId)
+        throw browserWriterConflict();
+      this.retryNativeReleaseCleanup(sealed.receipt.sendId);
+      return { cancelledByUser: status === "cancelled", nativeRelease: structuredClone(sealed.receipt) };
+    }
     const tab = [...this.turnTabs.values()].find((candidate) => candidate.traceId === traceId);
     if (!tab) {
       const closedOwner = this.closedTurnOwners.get(traceId);
@@ -2634,19 +3364,46 @@ class BrowserHost {
       }
       throw new Error(`Browser turn ownership mismatch: no browser tab owns ${traceId}`);
     }
+    if (tab.interactionMode === "automatic" && (tab.leaseFencing || surfaceId !== undefined)
+      && tab.surfaceId !== surfaceId) throw browserWriterConflict();
     if (tab.helperPid !== helperPid) {
       throw new Error(
         `Browser helper ownership mismatch: expected ${tab.helperPid}, received ${helperPid}`,
       );
     }
-    const cancelledByUser = this.userCancelledTurnOwners.get(traceId) === helperPid;
+    let cancelledByUser = this.userCancelledTurnOwners.get(traceId) === helperPid;
+    const nativeWatch = tab.nativeSubmissionWatch;
+    if (nativeWatch) {
+      if (!["completed", "cancelled"].includes(status) || tab.authenticationRequired
+        || tab.failedAt !== undefined || !nativeRelease || nativeRelease.sendId !== nativeWatch.segment.sendId
+        || !sameBinding(nativeRelease.binding, nativeWatch.segment.binding)
+        || !sameHost(nativeRelease.binding.host, { pid: process.pid, instanceId: this.observationInstanceId, profile: this.profile, partition: this.partition })
+        || nativeRelease.sessionEpoch !== nativeWatch.sessionEpoch) throw browserWriterConflict();
+      if (!nativeWatch.finishConfirmed(status, nativeRelease.terminalDigest)) await nativeWatch.read();
+      if (this.nativeReleaseReceipts?.has(nativeRelease.sendId)) {
+        return this.endTurn(traceId, helperPid, status, hideAfterTurn, message, retain, connectorBound, surfaceId, nativeRelease);
+      }
+      if (this.turnTabs.get(tab.id) !== tab || tab.helperPid !== helperPid || tab.surfaceId !== surfaceId
+        || tab.nativeSubmissionWatch !== nativeWatch || tab.nativeSubmissionWriterEnded) throw browserWriterConflict();
+      if (nativeRelease.terminalDigest !== nativeWatch.releaseWitness(status)) throw browserWriterConflict();
+      const job = tab.nativeReleaseCommit ??= this.prepareNativeRelease(tab, status, { retain, connectorBound, hideAfterTurn });
+      if (job.metadata.receipt.outcome !== status || job.metadata.terminalDigest !== nativeRelease.terminalDigest) throw browserWriterConflict();
+      try { nativeWatch.finish(status); }
+      catch (error) {
+        if (!nativeWatch.finishConfirmed(status, nativeRelease.terminalDigest)) {
+          throw browserWriterConflict("Native submission terminal detach is unresolved");
+        }
+        nativeWatch.finishWarning("finish_callback", error);
+      }
+      return this.commitNativeRelease(job);
+    } else if (nativeRelease || status === "cancelled") throw browserWriterConflict();
     if (tab.failedAt !== undefined) {
       if (status !== "failed") throw new Error(`Browser turn ${traceId} already failed`);
       return { cancelledByUser };
     }
     const authenticationRequired = tab.authenticationRequired === true;
     if (authenticationRequired && status === "completed") status = "failed";
-    tab.status = status === "completed" ? "ready" : status === "aborted" ? "aborted" : "error";
+    tab.status = status === "completed" ? "ready" : (status === "aborted" || status === "cancelled") ? "aborted" : "error";
     tab.approvalPending = false;
     tab.turnProgress = undefined;
     tab.activity = undefined;
@@ -2686,6 +3443,7 @@ class BrowserHost {
     this.removeTurnTab(tab, false);
     if (hideAfterTurn && !this.activeTraceId) this.hide();
     this.logger.info("browser.tab_released", { tabId: tab.id, traceId, status: tab.status });
+    void this.prepareStandbyView();
     return { cancelledByUser, ...(authenticationRequired ? { authenticationRequired: true } : {}) };
   }
 
@@ -2732,7 +3490,7 @@ class BrowserHost {
         this.logger.info("browser.login_opened");
         const current = this.view.webContents.getURL();
         if (this.primaryNavigationError || this.reauthenticationRequired || !current.startsWith(CHATGPT_ORIGIN)) {
-          await this.view.webContents.loadURL(TEMPORARY_CHAT_URL);
+          await this.view.webContents.loadURL(NEW_CHAT_URL);
         }
         await this.probeAuthentication();
         const authenticated = await this.waitForAuthenticated(180_000, () => this.loginMode === "passkey");
@@ -2828,7 +3586,7 @@ class BrowserHost {
   async resetFailedPasskeyLogin() {
     await this.clearOwnedSessionForPasskey();
     const contents = this.view.webContents;
-    await contents.loadURL(TEMPORARY_CHAT_URL);
+    await contents.loadURL(NEW_CHAT_URL);
     const browser = await this.probeAuthentication();
     if (browser.authenticated) throw new Error("Partial passkey session remained authenticated after cleanup");
     this.setState({ authenticated: false, loading: false, status: "signed-out", message: "Sign in to ChatGPT" });
@@ -2853,7 +3611,7 @@ class BrowserHost {
       for (const cookie of state.cookies) await contents.session.cookies.set(cookie);
       contents.session.flushStorageData();
       await contents.session.cookies.flushStore();
-      await contents.loadURL(TEMPORARY_CHAT_URL);
+      await contents.loadURL(NEW_CHAT_URL);
       if (state.localStorage.length > 0) {
         const entries = javaScriptLiteral(state.localStorage);
         await contents.executeJavaScript(`(() => {
@@ -2862,7 +3620,7 @@ class BrowserHost {
           }
           for (const entry of ${entries}) localStorage.setItem(entry.name, entry.value);
         })()`, true);
-        await contents.loadURL(TEMPORARY_CHAT_URL);
+        await contents.loadURL(NEW_CHAT_URL);
       }
       result = await this.waitForAuthenticated(60_000);
       await this.runSessionInspection(false);
@@ -2913,7 +3671,7 @@ class BrowserHost {
         message: "Signing out of ChatGPT",
         status: "loading",
       });
-      await contents.loadURL(TEMPORARY_CHAT_URL);
+      await contents.loadURL(NEW_CHAT_URL);
       const browser = await this.probeAuthentication();
       if (browser.authenticated) {
         throw new Error("ChatGPT session remained authenticated after local session data was cleared");
@@ -2930,9 +3688,9 @@ class BrowserHost {
     if (this.sessionRefreshOperation) return this.sessionRefreshOperation;
     const operation = this.withManualOperation("session refresh", async () => {
       this.setState({ status: "loading", message: "Checking saved ChatGPT session" });
-      if (!isTemporaryChatUrl(this.view.webContents.getURL())) {
+      if (!isNewChatUrl(this.view.webContents.getURL())) {
         try {
-          await this.view.webContents.loadURL(TEMPORARY_CHAT_URL);
+          await this.view.webContents.loadURL(NEW_CHAT_URL);
         } catch (error) {
           // ChatGPT may replace the home navigation with its sign-in page. The
           // observed auth URL is a signed-out state, not a broken installation.
@@ -2988,16 +3746,16 @@ class BrowserHost {
         return this.snapshot();
       }
       const probe = (contents) => runBrowserPageScript(contents, `(async () => {
-        const expectedUrl = new URL(${JSON.stringify(TEMPORARY_CHAT_URL)});
+        const expectedUrl = new URL(${JSON.stringify(NEW_CHAT_URL)});
         const readSurface = () => {
           const composer = ${visibleElementScript(COMPOSER_SELECTOR)};
           const actualUrl = new URL(location.href);
           return {
             url: actualUrl.href,
             composer: Boolean(composer),
-            temporary: actualUrl.origin === expectedUrl.origin
+            newChat: actualUrl.origin === expectedUrl.origin
               && actualUrl.pathname === expectedUrl.pathname
-              && actualUrl.searchParams.get("temporary-chat") === "true",
+              && actualUrl.searchParams.get("temporary-chat") !== "true",
             readyState: document.readyState,
           };
         };
@@ -3009,30 +3767,30 @@ class BrowserHost {
       })()`).catch(() => ({
         url: "",
         composer: false,
-        temporary: false,
+        newChat: false,
         sessionAuthenticated: false,
         sessionCheckError: "ChatGPT session verification could not inspect the browser. Retry after the page finishes loading.",
         readyState: "unknown",
       }));
       let result = await probe(this.view.webContents);
       if (this.destroyed || revision !== this.authenticationRevision) return this.snapshot();
-      if (!(result.composer && result.temporary && result.sessionAuthenticated)
+      if (!(result.composer && result.newChat && result.sessionAuthenticated)
         && this.authView
         && !this.authView.webContents.isDestroyed()) {
         const authResult = await probe(this.authView.webContents);
         if (authResult.sessionAuthenticated) {
           const completedAuthView = this.authView;
           this.closeAuthView(completedAuthView, true, false);
-          await this.view.webContents.loadURL(TEMPORARY_CHAT_URL);
+          await this.view.webContents.loadURL(NEW_CHAT_URL);
           url = this.view.webContents.getURL();
           result = await probe(this.view.webContents);
         }
       }
       if (this.manualOperation === "ChatGPT login"
         && result.sessionAuthenticated
-        && !result.temporary
+        && !result.newChat
         && !this.view.webContents.isDestroyed()) {
-        await this.view.webContents.loadURL(TEMPORARY_CHAT_URL);
+        await this.view.webContents.loadURL(NEW_CHAT_URL);
         url = this.view.webContents.getURL();
         result = await probe(this.view.webContents);
       }
@@ -3181,7 +3939,7 @@ class BrowserHost {
       logger: this.logger,
     });
     const inspected = result?.value;
-    if (!inspected || inspected.authenticated !== true || inspected.temporary !== true || typeof inspected.url !== "string") {
+    if (!inspected || inspected.authenticated !== true || inspected.newChat !== true || typeof inspected.url !== "string") {
       throw new Error("Browser helper returned invalid ChatGPT session evidence");
     }
     if (detectCapabilities
@@ -3264,6 +4022,9 @@ class BrowserHost {
       surfaceId: this.surfaceId,
       surfaceTargets,
       createdAt: new Date().toISOString(),
+      observationInstanceId: this.observationInstanceId,
+      hostVersion: HOST_VERSION,
+      hostClosureDigest: HOST_CLOSURE_DIGEST,
     };
     writePrivateFileAtomic(this.descriptorPath, `${JSON.stringify(descriptor, null, 2)}\n`);
   }
@@ -3278,6 +4039,7 @@ class BrowserHost {
 
   destroy() {
     this.destroyed = true;
+    this.discardStandbyView();
     if (this.authenticationCookieListener) {
       this.view.webContents.session.cookies.off("changed", this.authenticationCookieListener);
     }
@@ -3314,7 +4076,8 @@ class BrowserHost {
         tab.manualTerminalWaiters?.clear();
       }
       try { this.window.contentView.removeChildView(tab.view); } catch {}
-      if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close();
+      const contents = tab.view.webContents;
+      if (contents && !contents.isDestroyed()) contents.close();
     }
     this.turnTabs.clear();
     if (this.view && !this.view.webContents.isDestroyed()) this.view.webContents.close();
@@ -3328,11 +4091,11 @@ module.exports = {
   CHATGPT_VIEWPORT_CSS,
   IDLE_BROWSER_URL,
   isChatGptCloudflareChallengeResponse,
-  isTemporaryChatUrl,
+  isNewChatUrl,
   loadCommittedBrowserSurface,
   MANUAL_SUBMIT_TIMEOUT_MS,
   MANUAL_COMPACTION_SUBMIT_TIMEOUT_MS,
   navigationErrorForLog,
   navigationOriginForLog,
-  TEMPORARY_CHAT_URL,
+  NEW_CHAT_URL,
 };

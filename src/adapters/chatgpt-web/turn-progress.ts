@@ -91,6 +91,10 @@ export class ChatGptExternalTurnProgress extends ChatGptTurnProgressBroadcaster 
   private retirementError?: Error;
   private readonly toolBatchObservationWaiters = new Set<ToolBatchObservationWaiter>();
 
+  retirementFailure(): Error | undefined {
+    return this.retirementError;
+  }
+
   snapshot(): ChatGptExternalTurnProgressSnapshot {
     return {
       revision: this.revision,

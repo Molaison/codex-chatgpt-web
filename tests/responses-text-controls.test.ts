@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ChatGptWebAdapterError } from "../src/adapters/chatgpt-web/adapter-error";
 import { ChatGptBrowserWorker, type BrowserTurn } from "../src/adapters/chatgpt-web/browser-worker";
 import { createChatGptWebAdapter } from "../src/adapters/chatgpt-web/index";
@@ -6,6 +9,10 @@ import { CHATGPT_WEB_MODEL_ID } from "../src/adapters/chatgpt-web/model";
 import { createChatGptStructuredOutputValidator } from "../src/adapters/chatgpt-web/output-validation";
 import { compileChatGptWebPrompt } from "../src/adapters/chatgpt-web/prompt";
 import { parseRequest } from "../src/responses/parser";
+import { defaultBrokerEndpoint } from "../src/config";
+import { TurnBroker } from "../src/adapters/chatgpt-web/turn-broker";
+import { chatGptTurnSessions } from "../src/adapters/chatgpt-web/turn-execution";
+import { writePromptTestDescriptor } from "./44_prompt_fixture";
 import type { AdapterEvent, CodexProviderConfig } from "../src/types";
 
 const capabilities = { localToolsEnabled: true, solAvailable: true, extraHighAvailable: true, proAvailable: true };
@@ -67,14 +74,19 @@ test("invalid strict schema fails before browser execution and compaction ignore
 
 
 async function runStrictAdapterAnswer(answer: string): Promise<AdapterEvent[]> {
+  const root = mkdtempSync(join(tmpdir(), "structured-output-"));
   const nonce = `${Date.now()}-${Math.random()}`;
   const threadId = `thread_structured_${nonce}`;
   const turnId = `turn_structured_${nonce}`;
   const provider: CodexProviderConfig = {
     adapter: "chatgpt-web",
     baseUrl: `browser://strict-output-${nonce}`,
-    chatgptWeb: { localToolsEnabled: false, solAvailable: true, extraHighAvailable: true, proAvailable: true },
+    chatgptWeb: { localToolsEnabled: true, solAvailable: true, extraHighAvailable: true, proAvailable: true,
+      browserHost: "launcher", browserHostDescriptorPath: join(root, "launcher.json"),
+      brokerSocketPath: defaultBrokerEndpoint(root), threadEnvironmentStatePath: join(root, "environment.json") },
   };
+  writePromptTestDescriptor(provider.chatgptWeb!.browserHostDescriptorPath!);
+  const broker = TurnBroker.forSocket(provider.chatgptWeb!.brokerSocketPath!);
   const worker = ChatGptBrowserWorker.forProvider(provider);
   const originalRun = worker.run.bind(worker);
   const request = parse({
@@ -102,13 +114,16 @@ async function runStrictAdapterAnswer(answer: string): Promise<AdapterEvent[]> {
   const currentUser = raw.input.find(item => item.type === "message" && item.role === "user");
   if (!currentUser) throw new Error("structured-output fixture has no user message");
   currentUser.internal_chat_message_metadata_passthrough = { turn_id: turnId };
+  const environment = `<environment_context><cwd>${root}</cwd><network_access>disabled</network_access><filesystem><workspace_roots><root>${root}</root></workspace_roots><permission_profile type="managed"><file_system type="restricted"><entry access="read"><special>:root</special></entry></file_system></permission_profile></filesystem></environment_context>`;
+  raw.input.unshift({ type: "message", role: "user", content: [{ type: "input_text", text: environment }],
+    internal_chat_message_metadata_passthrough: { turn_id: turnId } });
+  request.context.tools = [];
 
   const events: AdapterEvent[] = [];
   (worker as unknown as { run: (turn: BrowserTurn) => Promise<string> }).run = async turn => {
     const prepared = await turn.prepare();
-    expect(prepared.text).toBe("Return it.\n\nReply with one JSON value matching this schema, without Markdown fences:\n"
-      + JSON.stringify(request.options.outputFormat!.schema));
-    expect(prepared.text).not.toContain("codex_context_json");
+    expect(prepared.text).toContain('strict JSON-schema final answer named "adapter_payload"');
+    expect(prepared.text).toContain(JSON.stringify(request.options.outputFormat!.schema));
     prepared.release();
     const cut = Math.max(1, Math.floor(answer.length / 2));
     turn.onTextDelta(answer.slice(0, cut));
@@ -125,6 +140,9 @@ async function runStrictAdapterAnswer(answer: string): Promise<AdapterEvent[]> {
     return events;
   } finally {
     (worker as unknown as { run: (turn: BrowserTurn) => Promise<string> }).run = originalRun;
+    chatGptTurnSessions.clear();
+    await broker.close();
+    rmSync(root, { recursive: true, force: true });
   }
 }
 

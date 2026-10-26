@@ -1,3 +1,6 @@
+import { createRuntimeQaHealth } from "./qa-health";
+import { ReleaseAdmission, releaseTrackedResponse } from "./release-admission";
+import { parseChatGptSessionEffort } from "./chatgpt-session-effort";
 import {
   GENERATED_FILE_MAX_BYTES,
   refreshStoredGeneratedFile,
@@ -6,11 +9,12 @@ import {
   type GeneratedFileReplay,
 } from "./generated-files";
 import { fetchLauncherAuthenticatedBytes } from "./launcher-browser-host";
-import { chatGptWebTraceId, createChatGptWebAdapter } from "./adapters/chatgpt-web";
+import { chatGptWebTraceId, createChatGptWebAdapter, restoreChatGptObserverRound } from "./adapters/chatgpt-web";
 import { closeChatGptBrowserWorkers } from "./adapters/chatgpt-web/browser-worker";
+import { assertChatGptQuestionAnswerProvenance } from "./adapters/chatgpt-web/prompt";
 import { closeTurnBrokers, TurnBroker } from "./adapters/chatgpt-web/turn-broker";
-import { timingSafeEqual } from "node:crypto";
-import { chatGptTurnSessions } from "./adapters/chatgpt-web/turn-execution";
+import { bearerAuthorizer, loadNativeApiAuthorizer } from "./native-api-auth";
+import { chatGptTurnRoundKey, chatGptTurnSessions } from "./adapters/chatgpt-web/turn-execution";
 import {
   cancelAllStructuredCompactions,
   cancelStructuredCompactionNativeTurn,
@@ -22,6 +26,7 @@ import {
   extractChatGptTurnIdentity,
   extractCodexTurnIdentityFromBody,
   extractChatGptCompactionSourceRevision,
+  findChatGptCompactionSourceRevision,
   isCodexComposerPrediction,
 } from "./adapters/chatgpt-web/environment";
 import { assertComposerPredictionFits, configureComposerPrediction } from "./composer-predictions";
@@ -32,8 +37,9 @@ import { providerConfig } from "./config";
 import { AsyncEventQueue } from "./event-queue";
 import { readJsonRequestBody } from "./http-body";
 import { httpStatusFromTerminalError } from "./lib/errors";
-import { createHash } from "node:crypto";
-import { augmentNativeModelCatalog } from "./model-catalog";
+import { createHash, randomUUID } from "node:crypto";
+import { ExplicitNativeCancellation } from "./adapters/chatgpt-web/native-execution";
+import { augmentNativeModelCatalog, localChatGptWebModelCatalog } from "./model-catalog";
 import {
   readCodexModelContextOverride,
   readCodexSubagentProtocol,
@@ -41,6 +47,7 @@ import {
 } from "./codex-integration";
 import {
   CHATGPT_WEB_LUNA_BACKEND_MODEL,
+  chatGptWebLocalToolsEnabled,
   isChatGptWebModelSlug,
   requireChatGptWebModelRoute,
   type ChatGptWebModelRoute,
@@ -60,6 +67,7 @@ import { namespacedToolName, type AdapterEvent, type CodexParsedRequest } from "
 import type { CodexProviderConfig } from "./types";
 import type { ProviderAdapter } from "./adapters/base";
 import { VERSION } from "./version";
+import { runtimeEvidenceHeaders, runtimeReadinessEvidence, runtimeRequestEvidence } from "./adapters/chatgpt-web/release-evidence";
 
 type HttpTrackedEndpoint = "models" | "responses" | "compact" | "search" | "unspecified" | NativeImageEndpoint;
 
@@ -364,6 +372,29 @@ export class HttpTurnCounter {
 
 type ChatGptWebAdapterFactory = (provider: CodexProviderConfig) => ProviderAdapter;
 
+function coalesceAdapterDeltas(previous: AdapterEvent, next: AdapterEvent): AdapterEvent | undefined {
+  // Durable replay is synchronous. Bound each combined chunk while retaining all item,
+  // phase, tool and signature boundaries; never mutate the journal's original events.
+  const limit = 64 * 1024;
+  if (previous.type === "text_delta" && next.type === "text_delta" && previous.phase === next.phase
+    && previous.text.length + next.text.length <= limit) {
+    return { ...previous, text: previous.text + next.text };
+  }
+  if (previous.type === "thinking_delta" && next.type === "thinking_delta"
+    && previous.thinking.length + next.thinking.length <= limit) {
+    return { ...previous, thinking: previous.thinking + next.thinking };
+  }
+  if (previous.type === "reasoning_raw_delta" && next.type === "reasoning_raw_delta"
+    && previous.text.length + next.text.length <= limit) {
+    return { ...previous, text: previous.text + next.text };
+  }
+  if (previous.type === "tool_call_delta" && next.type === "tool_call_delta"
+    && previous.arguments.length + next.arguments.length <= limit) {
+    return { ...previous, arguments: previous.arguments + next.arguments };
+  }
+  return undefined;
+}
+
 export interface ResponseRequestOptions {
   /** DEV and other in-process harnesses can keep continuation state in their own canonical store. */
   rememberState?: boolean;
@@ -374,7 +405,29 @@ export interface ResponseRequestOptions {
 }
 
 export function routeChatGptWebRequest(parsed: CodexParsedRequest, config: AppConfig): ChatGptWebModelRoute {
-  const route = requireChatGptWebModelRoute(parsed.modelId, config, parsed.options.reasoning);
+  // Full resolves its server-owned session selection before model validation.
+  const selection = config.mode === "full" && config.browserInteractionMode !== "manual"
+    ? parseChatGptSessionEffort(parsed.options.reasoning) : undefined;
+  const route = requireChatGptWebModelRoute(parsed.modelId, config, selection ? selection.effort : parsed.options.reasoning);
+  if (route.sessionMode && selection?.explicit && route.sessionMode !== selection.mode) {
+    throw new Error("ChatGPT session mode conflicts with the selected model or effort");
+  }
+  const metadataMode = config.mode === "browser-only"
+    ? (parsed._rawBody as { client_metadata?: { _chatgpt_session_mode?: unknown } } | undefined)
+      ?.client_metadata?._chatgpt_session_mode
+    : undefined;
+  if (metadataMode !== undefined && metadataMode !== "temporary" && metadataMode !== "persistent") {
+    throw new Error("ChatGPT session mode must be temporary or persistent");
+  }
+  const explicitMode = route.sessionMode ?? (selection?.explicit ? selection.mode : undefined);
+  if (explicitMode && metadataMode && explicitMode !== metadataMode) {
+    throw new Error("ChatGPT session mode conflicts with the selected model or effort");
+  }
+  // Resolve the pool's per-request mode here so aliases, recovery and browser admission
+  // all see the same choice. Retired global saved-chat preferences no longer participate.
+  parsed._chatgptSessionMode = explicitMode ?? metadataMode ?? selection?.mode ?? "persistent";
+  parsed._chatgptLocalTools = route.toolAccess ? route.toolAccess === "tools"
+    : chatGptWebLocalToolsEnabled(config);
   if (route.interactionMode === "automatic" && route.modelFamily) parsed._chatgptModelFamily = route.modelFamily;
   else delete parsed._chatgptModelFamily;
   if (route.requiresPro) parsed._chatgptProModel = true;
@@ -434,6 +487,8 @@ export class ModelCatalogFetches {
     private readonly abandonedTimeoutMs = 30_000,
     private readonly unclaimedResultMs = 10_000,
   ) {}
+
+  activeCount(): number { return this.attempts.size; }
 
   async fetch(
     request: Request,
@@ -534,6 +589,7 @@ export async function modelsRequest(
 ): Promise<Response> {
   const cancelled = () => new Response(null, { status: 499 });
   if (clientSignal.aborted) return cancelled();
+  if (config.nativeApiTokenFile !== undefined) return Response.json(localChatGptWebModelCatalog(config));
   let upstream: Response;
   let sent = false;
   const forward = (request: Request, markSent: () => void) => forwardNativeCodexRequest(request, "models", input => {
@@ -624,6 +680,14 @@ function toolBridgeMaps(parsed: CodexParsedRequest): {
   return { toolNsMap, freeformToolNames, toolSearchToolNames };
 }
 
+function nativeUpstreamAuthUnavailable(): Response {
+  return Response.json({ error: {
+    type: "unsupported_operation", code: "native_upstream_auth_unavailable",
+    message: "This local API token authorizes ChatGPT Web only; native Codex passthrough requires separate upstream authentication",
+    submission_state: "not_submitted",
+  } }, { status: 501 });
+}
+
 export async function responseRequest(
   req: Request,
   config: AppConfig,
@@ -653,6 +717,7 @@ export async function responseRequest(
     return formatErrorResponse(400, "invalid_request_error", error instanceof Error ? error.message : String(error));
   }
   if (typeof requestedModel === "string" && !isChatGptWebModelSlug(requestedModel)) {
+    if (config.nativeApiTokenFile !== undefined) return nativeUpstreamAuthUnavailable();
     try {
       return await forwardNativeCodexRequest(nativeRequest, "responses", undefined, raw);
     } catch (error) {
@@ -726,7 +791,9 @@ export async function responseRequest(
     if (!compaction) {
       if (options.rememberState !== false) {
         rememberSavedChatResponseAlias(provider, parsed, response);
-        rememberResponseState(parsed._rawBody, response, { force: true });
+        rememberResponseState(parsed._rawBody, response, {
+          force: true, replaceObservedItems: !!parsed._chatgptObserverRoundKey,
+        });
       }
       return;
     }
@@ -749,11 +816,13 @@ export async function responseRequest(
     // Authenticate both exact producer-defined representations, never arbitrary rewrites.
     // Inspect the literal retained representation: an unchanged summary can match the
     // previous checkpoint, but must not substitute its recovered delegation here.
-    const v1Source = extractChatGptCompactionSourceRevision({
+    // A child can have only parent instructions and contextual user items. Use the canonical
+    // instruction classifier: retained user-role content need not contain a human source.
+    const v1Source = findChatGptCompactionSourceRevision({
       ...parsed,
       _rawBody: { ...body, input: buildCompactV1Output(extractCompactUserMessages(body.input), summary) },
     }, { recoverCheckpoint: false });
-    rememberCompactionContinuation(parsed, identity, [source, v1Source], summary);
+    rememberCompactionContinuation(parsed, identity, v1Source ? [source, v1Source] : [source], summary);
   };
   if (compaction && route.backendModel === CHATGPT_WEB_LUNA_BACKEND_MODEL && !config.experimentalBiggerContext) {
     return formatErrorResponse(
@@ -772,10 +841,27 @@ export async function responseRequest(
     parsed.context.messages.push({ role: "user", content: COMPACT_PROMPT, timestamp: Date.now() });
   }
 
+  if (parsed._chatgptLocalTools === false) {
+    try { assertChatGptQuestionAnswerProvenance(parsed); }
+    catch (error) {
+      if (!(error instanceof ChatGptWebAdapterError)) throw error;
+      return new Response(JSON.stringify({ error: { type: error.errorType, code: error.code,
+        message: error.message, retryable: error.retryable } }), {
+        status: error.status, headers: { "content-type": "application/json" },
+      });
+    }
+  }
   const provider = providerConfig(executionConfig);
   let traceId: string | undefined;
+  let replayIdentity: string | undefined;
   try {
     traceId = chatGptWebTraceId(provider, parsed);
+    restoreChatGptObserverRound(provider, parsed);
+    {
+      replayIdentity = createHash("sha256")
+        .update(JSON.stringify([traceId, chatGptTurnRoundKey(parsed)]))
+        .digest("hex").slice(0, 32);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (message === CHATGPT_TURN_REVISION_CONFLICT_MESSAGE
@@ -787,6 +873,7 @@ export async function responseRequest(
     // Requests without native identity have no trace tombstone; let the adapter validate them.
     if (!message.includes("requires native Codex turn_id metadata")) throw error;
   }
+  console.error(`[chatgpt-web-route] ${JSON.stringify(runtimeRequestEvidence(req.headers, executionConfig, traceId))}`);
   const cancelledError = traceId ? chatGptTurnSessions.cancelledError(traceId) : undefined;
   if (cancelledError) {
     // Codex retries unknown streamed response.failed codes. A replay after the user explicitly
@@ -805,25 +892,35 @@ export async function responseRequest(
     });
   }
   const adapter = adapterFactory(provider);
-  const queue = new AsyncEventQueue<AdapterEvent>();
+  const queue = new AsyncEventQueue<AdapterEvent>(10_000, coalesceAdapterDeltas);
+  const events: AdapterEvent[] = [];
+  let terminal: Extract<AdapterEvent, { type: "done" | "incomplete" | "error" }> | undefined;
+  const emit = (event: AdapterEvent): void => {
+    if (terminal) return;
+    if (parsed.stream) queue.push(event);
+    else events.push(event);
+    if (event.type === "done" || event.type === "incomplete" || event.type === "error") terminal = event;
+    options.onAdapterEvent?.(event);
+  };
   const abort = new AbortController();
   if (req.signal.aborted) abort.abort();
   else req.signal.addEventListener("abort", () => abort.abort(), { once: true });
   const run = async () => {
     try {
-      await adapter.runTurn!(parsed, { headers: req.headers, abortSignal: abort.signal }, event => {
-        options.onAdapterEvent?.(event);
-        queue.push(event);
-      });
+      await adapter.runTurn!(parsed, { headers: req.headers, abortSignal: abort.signal }, emit);
     } catch (error) {
-      const event: AdapterEvent = {
+      if (terminal) return;
+      const event: Extract<AdapterEvent, { type: "error" }> = {
         type: "error", message: error instanceof Error ? error.message : String(error),
         ...(error instanceof ChatGptWebAdapterError ? {
           status: error.status, errorType: error.errorType, code: error.code, retryable: error.retryable,
         } : {}),
       };
-      options.onAdapterEvent?.(event);
-      queue.push(event);
+      terminal = event;
+      if (parsed.stream) queue.close(event);
+      else events.push(event);
+      try { options.onAdapterEvent?.(event); }
+      catch { /* A failed observer hook cannot suppress the original terminal failure. */ }
     } finally {
       queue.close();
     }
@@ -832,7 +929,6 @@ export async function responseRequest(
   const responseModel = route.slug;
 
   if (parsed.stream) {
-    void run();
     const stream = bridgeToResponsesSSE(
       queue,
       responseModel,
@@ -842,6 +938,7 @@ export async function responseRequest(
       () => abort.abort(),
       2_000,
       {
+        replayIdentity,
         hideThinkingSummary: parsed.options.hideThinkingSummary,
         ...(provider.chatgptWeb?.stallTimeoutSec !== undefined
           ? { stallTimeoutSec: provider.chatgptWeb.stallTimeoutSec }
@@ -850,6 +947,7 @@ export async function responseRequest(
         onCompletedResponse: rememberCompletedResponse,
       },
     );
+    void run();
     return new Response(stream, {
       headers: {
         "Content-Type": "text/event-stream",
@@ -861,8 +959,8 @@ export async function responseRequest(
   }
 
   await run();
-  const events = await queue.collect();
   const json = buildResponseJSON(events, responseModel, {
+    replayIdentity,
     hideThinkingSummary: parsed.options.hideThinkingSummary,
     toolNsMap: maps.toolNsMap,
     freeformToolNames: maps.freeformToolNames,
@@ -875,7 +973,7 @@ export async function responseRequest(
     return Response.json({ error: { message: error.message, type: error.errorType,
       code: error.code, retryable: error.retryable } }, { status: error.status });
   }
-  const capacityRejected = events.some(event => event.type === "error" && event.code === "concurrency_limit_exceeded");
+  const capacityRejected = terminal?.type === "error" && terminal.code === "concurrency_limit_exceeded";
   return Response.json(json, { status: capacityRejected ? 429 : 200 });
 }
 
@@ -926,6 +1024,7 @@ export async function compactRequest(
     return formatErrorResponse(400, "invalid_request_error", "Compaction request requires a model");
   }
   if (!isChatGptWebModelSlug(raw.model)) {
+    if (config.nativeApiTokenFile !== undefined) return nativeUpstreamAuthUnavailable();
     try {
       return await forwardNativeCodexRequest(nativeRequest, "responses/compact", undefined, raw);
     } catch (error) {
@@ -1047,6 +1146,7 @@ export function startServer(
   if (config.purpose === "dev-harness") {
     throw new Error("DEV harness configuration cannot start a Responses listener");
   }
+  const nativeApiAuthorized = loadNativeApiAuthorizer(config);
   const startedAt = Date.now();
   const turnBroker = config.mode === "full" ? TurnBroker.forSocket(config.brokerSocketPath) : undefined;
   if (config.mode === "full") {
@@ -1070,20 +1170,14 @@ export function startServer(
     active_http_turns: httpTurns.count(),
     active_browser_turns: chatGptTurnSessions.activeCount() + (turnBroker?.externalOwnerActiveCount() ?? 0),
   });
-  const controlAuthorized = (req: Request): boolean => {
-    const header = req.headers.get("authorization") ?? "";
-    const expected = Buffer.from(`Bearer ${config.controlToken}`);
-    const actual = Buffer.from(header);
-    return actual.length === expected.length && timingSafeEqual(actual, expected);
-  };
-  const server = Bun.serve({
-    hostname: config.host,
-    port: config.port,
-    idleTimeout: 0,
-    async fetch(req) {
+  const releaseAdmission = config.releaseControl ? new ReleaseAdmission("web", config.releaseControl, () => ({...activity(), active_model_catalog: modelCatalogFetches.activeCount()})) : undefined;
+  if (releaseAdmission) { draining = releaseAdmission.draining; turnBroker?.setExternalOwnersAccepted(!draining); }
+  const controlAuthorized = bearerAuthorizer(config.controlToken);
+  const readQaHealth = createRuntimeQaHealth(config, () => !draining && !releaseAdmission?.sealed);
+  async function fetchWeb(req: Request): Promise<Response> {
       const url = new URL(req.url);
       // Loopback is reachable from any web page, cross-site or same-origin after DNS rebinding,
-      // and this route has no bearer secret. Browsers attach Origin to every such request that
+      // including usages without an API token. Browsers attach Origin to every such request that
       // can start or control work; Codex and the launcher are not browsers and never send it.
       if (req.method !== "GET" && req.headers.has("origin")) {
         return formatErrorResponse(
@@ -1091,6 +1185,10 @@ export function startServer(
           "invalid_request_error",
           "Browser-originated requests are not accepted by the local Codex route",
         );
+      }
+      if (nativeApiAuthorized && req.method === "POST"
+        && ["/v1/alpha/search", "/v1/images/generations", "/v1/images/edits"].includes(url.pathname)) {
+        return nativeUpstreamAuthUnavailable();
       }
       const downloadDirectory = providerConfig(config).chatgptWeb!.downloadDirectory!;
       const generatedFile = serveGeneratedFile(req, downloadDirectory);
@@ -1100,6 +1198,11 @@ export function startServer(
         return estuaryFile instanceof Response
           ? estuaryFile
           : await redownloadGeneratedFile(req, estuaryFile, config, downloadDirectory);
+      }
+      if (req.method === "POST" && url.pathname === "/admin/qa-health") {
+        if (!controlAuthorized(req)) return new Response("Unauthorized", { status: 401 });
+        try { return Response.json(await readQaHealth(await req.json()), { headers: { "cache-control": "no-store" } }); }
+        catch { return Response.json({ error: "qa_health_unavailable" }, { status: 503 }); }
       }
       if (req.method === "GET" && url.pathname === "/healthz") {
         return Response.json({
@@ -1115,12 +1218,14 @@ export function startServer(
           last_successful_model_catalog_request_at: lastSuccessfulModelCatalogRequestAt,
           model_catalog_requests: modelCatalogRequests,
           last_model_catalog_result: lastModelCatalogResult,
+          readiness: runtimeReadinessEvidence(),
           ...activity(),
         });
       }
       if (req.method === "POST" && (url.pathname === "/admin/drain" || url.pathname === "/admin/resume")) {
         if (!controlAuthorized(req)) return new Response("Unauthorized", { status: 401 });
         draining = url.pathname === "/admin/drain";
+        releaseAdmission?.fence(draining);
         turnBroker?.setExternalOwnersAccepted(!draining);
         return Response.json({ status: "ok", accepting_turns: !draining, ...activity() });
       }
@@ -1156,7 +1261,7 @@ export function startServer(
         // source being cancelled below from starting a fresh fallback during operator shutdown.
         const compactionCancellation = beginCancelStructuredCompactionTrace(traceId, reason);
         const browserCancellation = chatGptTurnSessions.beginCancelTrace(traceId, reason);
-        const cancelledBrokerTurns = turnBroker?.revokeTrace(traceId, reason) ?? 0;
+        const cancelledBrokerTurns = turnBroker?.revokeTrace(traceId, reason, { source: leaseFailure ? "launcher.lease" : "launcher.cancel", reason: leaseFailure ? "lease_expired" : "cancelled" }) ?? 0;
         const settlement = Promise.all([browserCancellation.settlement, compactionCancellation.settlement]);
         // Explicit tab close acknowledges revoked authority, then destroys its document. Waiting
         // for that document's helper first can deadlock the UI behind a stalled browser operation.
@@ -1189,7 +1294,8 @@ export function startServer(
             { status: 400 },
           );
         }
-        const reason = new DOMException("Codex turn interrupted", "AbortError");
+        const reason = new ExplicitNativeCancellation({version:1, cancelId:randomUUID(), source:"native_interrupt",
+          threadId:identity.threadId, turnId:identity.turnId, requestedAt:Date.now()});
         const browserCancellation = chatGptTurnSessions.cancelNativeTurn(
           identity.threadId,
           identity.turnId,
@@ -1370,9 +1476,47 @@ export function startServer(
         );
       }
       return new Response("Not found", { status: 404 });
+  }
+  const server = Bun.serve({hostname: config.host, port: config.port, idleTimeout: 0,
+    async fetch(req) {
+      const path = new URL(req.url).pathname;
+      if (nativeApiAuthorized && (path === "/v1" || path.startsWith("/v1/"))) {
+        if (!nativeApiAuthorized(req)) {
+          return Response.json({ error: { type: "authentication_error", message: "Invalid or missing API Bearer token" } }, {
+            status: 401,
+            headers: { "www-authenticate": "Bearer", "cache-control": "no-store" },
+          });
+        }
+        // A local API credential is not Codex OAuth and must never leave this boundary.
+        const headers = new Headers(req.headers);
+        headers.delete("authorization");
+        req = new Request(req, { headers });
+      }
+      const withEvidence = async (pending: Response | Promise<Response>): Promise<Response> => {
+        const response = await pending;
+        const headers = new Headers(response.headers);
+        for (const [name, value] of Object.entries(runtimeEvidenceHeaders())) headers.set(name, value);
+        const requestId = req.headers.get("x-request-id");
+        if (requestId !== null) headers.set("x-request-id", requestId);
+        return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+      };
+      const control = releaseAdmission?.control(req);
+      if (control) {
+        draining = releaseAdmission!.draining;
+        turnBroker?.setExternalOwnersAccepted(!draining);
+        return withEvidence(control);
+      }
+      if (releaseAdmission?.sealed && path !== "/healthz" && !path.startsWith("/admin/")) return withEvidence(new Response("Native ingress sealed", {status:503}));
+      if (!releaseAdmission || path === "/healthz" || path.startsWith("/admin/")) return withEvidence(fetchWeb(req));
+      const entry = releaseAdmission.enter();
+      try { return await withEvidence(releaseTrackedResponse(await fetchWeb(req), entry.finish, req.signal)); }
+      catch (error) { entry.finish(); throw error; }
     },
   });
   function shutdown(): void {
+    if (releaseAdmission && !releaseAdmission.status().safe_to_stop) {
+      console.error("Native release refuses shutdown: not drained"); return;
+    }
     if (shutdownPromise) return;
     draining = true;
     chatGptTurnSessions.clear();

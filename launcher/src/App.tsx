@@ -18,6 +18,7 @@ import { limitsCopyFor } from "./limits-copy";
 import { useLimits } from "./useLimits";
 import { describeTurnActivity } from "./turn-activity";
 import type {
+  HealthMaintenanceEvent,
   BrowserInteractionMode,
   BrowserState,
   DoctorReport,
@@ -39,6 +40,7 @@ const MCP_GUIDE_MEDIA = [
 ] as const;
 
 export function App() {
+  const [maintenance, setMaintenance] = useState<HealthMaintenanceEvent | null>(null);
   const [snapshot, setSnapshot] = useState<LauncherSnapshot | null>(null);
   const [browser, setBrowser] = useState<BrowserState | null>(null);
   const [operation, setOperation] = useState<OperationState | null>(null);
@@ -57,10 +59,11 @@ export function App() {
     void api.snapshot().then((next) => {
       if (cancelled) return;
       setSnapshot(next);
+      setMaintenance(next.state.maintenanceDelivery?.event ?? next.operation?.maintenance ?? null);
       setBrowser(next.browser);
       setLogs(next.logs);
       setOperation(next.operation);
-      if (next.operation?.status === "failed" && next.operation.name !== "mcp-verification") {
+      if (next.operation?.status === "failed" && !["mcp-verification", "qa-health"].includes(next.operation.name)) {
         if (next.operation.name === "catalog-verification") catalogError.current = next.operation.message;
         setError(next.operation.message);
       }
@@ -81,6 +84,7 @@ export function App() {
     const unsubscribeBrowser = api.onBrowserState(setBrowser);
     const unsubscribeOperation = api.onOperation((next) => {
       setOperation(next);
+      if (next.maintenance) setMaintenance({ ...next.maintenance });
       if (next.name === "catalog-verification") {
         if (next.status === "failed") catalogError.current = next.message;
         if (next.status === "completed") {
@@ -89,7 +93,7 @@ export function App() {
           catalogError.current = null;
         }
       }
-      if (next.status === "failed" && next.name !== "mcp-verification") setError(next.message);
+      if (next.status === "failed" && !["mcp-verification", "qa-health"].includes(next.name)) setError(next.message);
     });
     const unsubscribeLog = api.onLog((record) => setLogs((current) => [...current.slice(-299), record]));
     const unsubscribeUpdate = api.onUpdateState((update) => {
@@ -105,6 +109,12 @@ export function App() {
       unsubscribeUpdate();
     };
   }, []);
+
+  // A passive effect runs after React has committed the visible maintenance state.
+  // Receiving IPC or calling setState alone is not a delivery acknowledgement.
+  useEffect(() => {
+    if (api && snapshot && maintenance) void api.acknowledgeMaintenance({ eventId: maintenance.eventId }).catch(() => {});
+  }, [maintenance, Boolean(snapshot)]);
 
   const updateState = useCallback((state: LauncherState) => {
     setSnapshot((current) => current
@@ -131,6 +141,10 @@ export function App() {
       data-profile={snapshot.profile}
       data-theme="dark"
     >
+      {maintenance && <div role="status" data-maintenance-event={maintenance.eventId} className="health-maintenance-status">
+        <span>{maintenance.state === "ready" ? copy.accountHealthReady : copy.accountHealthPaused}</span>
+        <time dateTime={new Date(maintenance.observedAt).toISOString()}>{new Date(maintenance.observedAt).toLocaleTimeString(language)}</time>
+      </div>}
       <AnimatePresence mode="wait">
         {!snapshot.state.onboardingComplete ? (
           <Onboarding
@@ -350,9 +364,7 @@ function LauncherShell({
   snapshot: LauncherSnapshot;
   updateState: (state: LauncherState) => void;
 }) {
-  const interactionSetupComplete = snapshot.state.coreSetupComplete === true
-    && (snapshot.state.browserInteractionMode === "manual"
-      || snapshot.state.codexCatalogVerified === true);
+  const interactionSetupComplete = snapshot.state.coreSetupComplete === true;
   const firstRunZeroRiskSetup = snapshot.state.browserInteractionMode === "manual"
     && snapshot.state.coreSetupComplete !== true;
   const [surface, setSurface] = useState<Surface>(
@@ -381,7 +393,7 @@ function LauncherShell({
     && browser?.authenticated !== true;
   const needsSetup = !needsBrowser && !interactionSetupComplete;
   const mcpOptional = snapshot.state.browserInteractionMode === "automatic"
-    && snapshot.state.codexCatalogVerified === true
+    && snapshot.state.coreSetupComplete === true
     && snapshot.state.mcpSetupComplete !== true;
   const updateVisible = ["available", "downloading", "installing"].includes(snapshot.update.status);
   const updateBusy = snapshot.update.status === "downloading" || snapshot.update.status === "installing";
@@ -1258,7 +1270,7 @@ function SetupSurface({
           action={snapshot.state.coreSetupComplete
             ? devProfile ? copy.devReinstall : copy.reinstall
             : devProfile ? copy.devInstall : copy.install}
-          complete={snapshot.state.codexCatalogVerified === true}
+          complete={snapshot.state.coreSetupComplete === true}
           description={devProfile ? copy.devStepInstallBody : copy.stepInstallBody}
           disabled={busy || (!snapshot.smokePassed && snapshot.state.coreSetupComplete !== true)}
           index={manualInteraction ? 1 : 3}
@@ -1285,7 +1297,7 @@ function SetupSurface({
       <SectionHeading label="MCP" meta={manualInteraction ? copy.required : copy.optional} spaced />
       <button
         className="next-surface-row"
-        disabled={!manualInteraction && !snapshot.state.codexCatalogVerified}
+        disabled={!manualInteraction && !snapshot.state.coreSetupComplete}
         onClick={showMcp}
         type="button"
       >
@@ -1414,8 +1426,8 @@ function McpSurface({
       subtitle={devProfile ? copy.devMcpSubtitle : copy.mcpSubtitle}
       title={devProfile ? copy.devMcpTitle : "MCP"}
     >
-      {!manualInteraction && !configuringInactiveMode && !snapshot.state.codexCatalogVerified ? (
-        <NoticeRow icon="setup" tone="warning">{copy.mcpCatalogRequired}</NoticeRow>
+      {!manualInteraction && !configuringInactiveMode && !snapshot.state.coreSetupComplete ? (
+        <NoticeRow icon="setup" tone="warning">{copy.mcpSetupRequired}</NoticeRow>
       ) : null}
 
       <div className="wizard-stepper" aria-label={`${step + 1} / 3`}>
@@ -1529,9 +1541,9 @@ function McpSurface({
             ) : null}
             {step === 1 ? (
               <p className="mcp-step-two-hint">
-                {manualInteraction || configuringInactiveMode || snapshot.state.codexCatalogVerified
+                {manualInteraction || configuringInactiveMode || snapshot.state.coreSetupComplete
                   ? copy.mcpStepTwoHint
-                  : copy.mcpCatalogRequired}
+                  : copy.mcpSetupRequired}
               </p>
             ) : null}
             {step === 2 ? (
@@ -1576,7 +1588,7 @@ function McpSurface({
           <PrimaryButton
             disabled={
               busy
-              || (!manualInteraction && !configuringInactiveMode && !snapshot.state.codexCatalogVerified)
+              || (!manualInteraction && !configuringInactiveMode && !snapshot.state.coreSetupComplete)
               || ((!credentialsConfigured || replacingCredentials) && (!tunnelId || !runtimeKey))
             }
             onClick={() => void install()}
@@ -1823,17 +1835,6 @@ function SettingsSurface({
       setBusy(false);
     }
   };
-  const setUseSavedChats = async (enabled: boolean) => {
-    setBusy(true);
-    setError(null);
-    try {
-      updateState(await api!.setUseSavedChats(enabled));
-    } catch (cause) {
-      setError(messageOf(cause));
-    } finally {
-      setBusy(false);
-    }
-  };
   const setInteractionMode = async (mode: BrowserInteractionMode) => {
     setBusy(true);
     setError(null);
@@ -1967,13 +1968,6 @@ function SettingsSurface({
             checked={snapshot.state.browserInteractionMode !== "manual" && snapshot.state.autoApproveToolCalls}
             disabled={busy || snapshot.state.browserInteractionMode === "manual" || !snapshot.state.coreSetupComplete}
             onChange={(checked) => void setAutoApproveToolCalls(checked)}
-          />
-        </SettingRow>
-        <SettingRow body={copy.savedChatsBody} label={copy.savedChats}>
-          <Switch
-            checked={snapshot.state.useSavedChats}
-            disabled={busy || snapshot.state.coreSetupComplete !== true}
-            onChange={(checked) => void setUseSavedChats(checked)}
           />
         </SettingRow>
         <SettingRow body={copy.chooseLanguageHint} label={copy.language}>
@@ -2434,9 +2428,7 @@ function DoctorSummary({ copy, language, report }: { copy: Copy; language: Langu
         {visibleChecks.map((check) => (
           <p key={check.id}>
             <StateDot state={check.status === "ok" ? "ready" : check.status === "warning" ? "busy" : "error"} />
-            <span>{check.status === "ok"
-              ? localizeRuntimeMessage(copy, check.message, check.id, language)
-              : check.message}</span>
+            <span>{localizeRuntimeMessage(copy, check.message, check.id, language)}</span>
           </p>
         ))}
       </div>
@@ -2794,8 +2786,8 @@ function FatalMessage({ message }: { message: string }) {
 
 function browserTabTitleFromTitle(value: string | undefined, copy: Copy): string {
   const title = value?.trim();
-  if (!title || title === "about:blank" || title.includes("codex-web-gpt-browser-host")) return copy.temporaryChat;
-  return title.replace(/\s*[|–-]\s*ChatGPT\s*$/i, "") || copy.temporaryChat;
+  if (!title || title === "about:blank" || title.includes("codex-web-gpt-browser-host")) return copy.newChat;
+  return title.replace(/\s*[|–-]\s*ChatGPT\s*$/i, "") || copy.newChat;
 }
 
 function browserTabTone(status: BrowserState["tabs"][number]["status"]): "idle" | "ready" | "busy" | "error" {
@@ -2809,9 +2801,6 @@ function formatBrowserAddress(url: string | undefined, copy: Copy): string {
   if (!url || url.startsWith("about:blank")) return copy.browserAddress;
   try {
     const parsed = new URL(url);
-    if (parsed.hostname === "chatgpt.com" && parsed.searchParams.get("temporary-chat") === "true") {
-      return `chatgpt.com  /  ${copy.temporaryChat}`;
-    }
     return `${parsed.hostname}${parsed.pathname === "/" ? "" : parsed.pathname}`;
   } catch {
     return copy.browserAddress;

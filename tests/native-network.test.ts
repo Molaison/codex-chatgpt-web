@@ -26,8 +26,27 @@ test("native proxy selection preserves Chromium's first route and rejects protoc
 
 // Three negative network probes may each consume their two-second request deadline.
 test("native fetch reaches a proxy-only target, refreshes routing, and never retries a failed route", async () => {
+  if (process.env.CGW_NATIVE_NETWORK_TEST_ISOLATED !== "1") {
+    // Bun caches proxy settings at startup. Clearing process.env after importing fetch
+    // cannot isolate this test from a developer's HTTP_PROXY or NO_PROXY configuration.
+    const env: Record<string, string | undefined> = { ...process.env, CGW_NATIVE_NETWORK_TEST_ISOLATED: "1" };
+    for (const key of envKeys) delete env[key];
+    const child = Bun.spawn([process.execPath, "test", import.meta.path,
+      "--test-name-pattern", "^native fetch reaches a proxy-only target"], {
+      env, stdout: "pipe", stderr: "pipe",
+    });
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
+    ]);
+    expect({ code, diagnostics: code ? stdout + stderr : "" }).toEqual({ code: 0, diagnostics: "" });
+    return;
+  }
   for (const key of envKeys) delete process.env[key];
   const root = mkdtempSync(join(tmpdir(), "native-network-"));
+  // A closed loopback listener is unreachable even on networks that proxy unresolved DNS.
+  const unavailable = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response(null) });
+  const target = `${unavailable.url.origin}/responses`;
+  await unavailable.stop(true);
   const calls: { url: string; authorization: string | null; body: string }[] = [];
   const proxy = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(req) {
     calls.push({ url: req.url, authorization: req.headers.get("authorization"), body: await req.text() });
@@ -42,7 +61,7 @@ test("native fetch reaches a proxy-only target, refreshes routing, and never ret
     controlCalls++;
     expect(new URL(req.url).pathname).toBe("/v1/network/resolve-proxy");
     expect(req.headers.get("authorization")).toBe(`Bearer ${token}`);
-    expect(await req.json()).toEqual({ url: "http://native-proxy-regression.invalid/responses" });
+    expect(await req.json()).toEqual({ url: target });
     onResolve?.();
     return Response.json({ proxy: route }, { status });
   } });
@@ -55,7 +74,7 @@ test("native fetch reaches a proxy-only target, refreshes routing, and never ret
     surfaceId: "launcher_surface_id_0123456789AB", surfaceTargets: {}, createdAt: new Date().toISOString(),
   }), { mode: 0o600 });
   process.env.CODEX_CHATGPT_WEB_BROWSER_HOST_DESCRIPTOR = descriptor;
-  const request = () => new Request("http://native-proxy-regression.invalid/responses", {
+  const request = () => new Request(target, {
     method: "POST", body: "native request", headers: { authorization: "Bearer codex-test-only" },
     signal: AbortSignal.timeout(2000),
   });
@@ -83,7 +102,7 @@ test("native fetch reaches a proxy-only target, refreshes routing, and never ret
     // Explicit environment configuration remains authoritative, even with an unavailable launcher.
     const child = Bun.spawn([process.execPath, "-e", `
       const { fetchNativeCodex } = await import(${JSON.stringify(new URL("../src/native-network.ts", import.meta.url).href)});
-      console.log(await (await fetchNativeCodex(new Request("http://native-proxy-regression.invalid/responses"))).text());
+      console.log(await (await fetchNativeCodex(new Request(${JSON.stringify(target)}))).text());
     `], { env: { ...process.env, HTTP_PROXY: proxy.url.origin }, stdout: "pipe", stderr: "pipe" });
     const childOutput = await new Response(child.stdout).text();
     const childError = await new Response(child.stderr).text();

@@ -20,6 +20,9 @@ import { TurnBroker } from "../src/adapters/chatgpt-web/turn-broker";
 import { flushResponseState } from "../src/responses/state";
 import { receiptIdentity } from "../src/qa-pool-receipts";
 import { parseRequest } from "../src/responses/parser";
+import { installReadyQaHealthFixture } from "./qa-pool-health-fixture";
+
+installReadyQaHealthFixture();
 
 const MODEL = "chatgpt-web/gpt-5.6-sol-instant";
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
