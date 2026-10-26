@@ -1510,7 +1510,8 @@ export class TurnBroker implements TurnBrokerOwner {
     }
     if (request.method === "owner_invocation_receipt") {
       if (!request.bindingId || !request.invocationId || !request.wireName) throw new Error("The original binding, invocation and tool signature are required");
-      const live = this.bindings.get(request.bindingId)?.channel.durable;
+      const liveChannel = this.bindings.get(request.bindingId)?.channel;
+      const live = liveChannel?.durable;
       const link = this.journal.read<{ tokenHash: string }>(`binding:${operationDigest(request.bindingId)}`);
       const saved = live ?? (link && this.journal.read<DurableToolChannel>(link.tokenHash));
       if (!saved || (!live && !link)) throw new Error("The original invocation binding is unavailable; execution remains unknown");
@@ -1522,6 +1523,7 @@ export class TurnBroker implements TurnBrokerOwner {
       return { state: call.state, invocation_id: request.invocationId, traceId: saved.traceId,
         observerLost: call.observerLost === true, reconciliation: call.reconciliation ?? null,
         delivery: "unknown", retryable: false,
+        ...(liveChannel ? { brokerState: retirementDiagnostics(liveChannel) } : {}),
         ...(call.state === "completed" ? { result: call.result, resultHash: call.resultHash } : {}) };
     }
     this.prune();
@@ -1664,7 +1666,8 @@ export class TurnBroker implements TurnBrokerOwner {
         throw new Error(retiredTurn !== undefined
           ? `${contract === "safe" ? "This request_id" : "This turn_token"} was issued for ${retiredTurnLabel(retiredTurn)}, which has already finished.`
           + " This Codex Native action can no longer run."
-          : `${contract === "safe" ? "request id" : "turn token"} is invalid, expired, or revoked`);
+          : `${contract === "safe" ? "request id" : "turn token"} is invalid, expired, or revoked. `
+          + `Copy ${contract === "safe" ? "request_id" : "turn_token"} exactly from the current request; do not guess or reuse an earlier value.`);
       }
       if (activeChannel.safe) {
         if (contract !== "safe") throw new Error("Zero Risk request id requires the Zero Risk MCP contract");

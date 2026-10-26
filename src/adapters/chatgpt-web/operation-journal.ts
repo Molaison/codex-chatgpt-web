@@ -464,6 +464,8 @@ export class DurableOperation {
   recoveryAvailable(now = Date.now()): boolean {
     const budget = this.record.recoveryBudget;
     const clock = budget?.clock;
+    const retryablePreSend = this.record.submission === "prepared"
+      && this.record.error?.retryable === true && !hasNativeExecution(this.record);
     return !!clock && clock.allowanceMs === CHATGPT_RECOVERY_TIME_ALLOWANCE_MS
       && Number.isSafeInteger(clock.spentMs) && clock.spentMs >= 0 && clock.spentMs < clock.allowanceMs
       && Number.isSafeInteger(clock.epoch) && clock.epoch >= 0
@@ -476,7 +478,7 @@ export class DurableOperation {
       && (budget.deadlineAt === undefined || Number.isSafeInteger(budget.deadlineAt)
         && budget.deadlineAt > budget.startedAt && now < budget.deadlineAt)
       && Array.isArray(budget.attempts) && budget.attempts.length <= budget.used
-      && this.record.generation !== "final" && !this.record.physicalSettled
+      && this.record.generation !== "final" && (!this.record.physicalSettled || retryablePreSend)
       && this.record.error?.code !== "client_cancelled";
   }
   reserveRecovery(reason: RecoveryReason, now = Date.now()): void {

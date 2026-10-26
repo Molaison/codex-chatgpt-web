@@ -1,12 +1,12 @@
-import { afterAll, describe, expect, spyOn, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildResponseJSON } from "../src/bridge";
-import { ChatGptWebAdapterError, chatGptStoppedThinkingError, chatGptResponseIncompleteError } from "../src/adapters/chatgpt-web/adapter-error";
+import { ChatGptWebAdapterError, chatGptStoppedThinkingError, chatGptResponseIncompleteError, chatGptToolApprovalRequiredError } from "../src/adapters/chatgpt-web/adapter-error";
 import { ChatGptCompletionTracker, chatGptImageFilePayloads, chatGptPromptFilePayloads, chatGptTurnIsComplete } from "../src/adapters/chatgpt-web/browser-worker";
 import { ChatGptBrowserWorker, type BrowserTurn } from "../src/adapters/chatgpt-web/browser-worker";
 import { chatGptConversationKey } from "../src/adapters/chatgpt-web/conversation-key";
@@ -24,6 +24,8 @@ import { callTurnBroker, TurnBroker, RemoteTurnBroker, type BrokerToolResult } f
 import { ChatGptExternalTurnProgress, ChatGptMirroredTurnProgress, chatGptExternalProgressIsLive, chatGptExternalToolCallsAreInFlight } from "../src/adapters/chatgpt-web/turn-progress";
 import { CHATGPT_WEB_MCP_INVOCATION_TIMEOUT_MS, chatGptMcpInvocationTimeout } from "../src/adapters/chatgpt-web/mcp-server";
 import { defaultBrokerEndpoint, defaultConfig } from "../src/config";
+import { LAUNCHER_BROWSER_HOST_KIND, LAUNCHER_BROWSER_IDLE_URL } from "../src/launcher-browser-host";
+import { submissionIdentityUnproven } from "../src/adapters/chatgpt-web/submission-identity";
 import { responseRequest } from "../src/server";
 import { estimateChatGptWebUsage } from "../src/adapters/chatgpt-web/usage";
 import { decodeCompactionSummary, SUMMARY_PREFIX } from "../src/responses/compaction";
@@ -32,7 +34,39 @@ import type { AdapterEvent, CodexParsedRequest, CodexProviderConfig, CodexTool }
 
 const tempRoot = join(tmpdir(), `codex-chatgpt-web-harness-${process.pid}-${Date.now()}`);
 mkdirSync(tempRoot, { recursive: true });
-afterAll(() => rmSync(tempRoot, { recursive: true, force: true }));
+const caseRoots: string[] = [];
+let caseRoot: string;
+let inheritedWebHome: string | undefined;
+beforeEach(() => {
+  // Unrelated native turns may share an account, but fixtures must not inherit another test's
+  // unresolved durable owner. Within a case, reconnects retain this same journal and namespace.
+  caseRoot = mkdtempSync(join(tmpdir(), "cgwh-"));
+  caseRoots.push(caseRoot);
+  inheritedWebHome = process.env.CODEX_CHATGPT_WEB_HOME;
+  process.env.CODEX_CHATGPT_WEB_HOME = caseRoot;
+});
+afterEach(() => {
+  chatGptTurnSessions.clear();
+  if (inheritedWebHome === undefined) delete process.env.CODEX_CHATGPT_WEB_HOME;
+  else process.env.CODEX_CHATGPT_WEB_HOME = inheritedWebHome;
+});
+afterAll(() => {
+  rmSync(tempRoot, { recursive: true, force: true });
+  for (const root of caseRoots) rmSync(root, { recursive: true, force: true });
+});
+
+function retainedLauncherFixture(name: string): string {
+  const path = join(caseRoot, name);
+  // run() is stubbed by these adapter tests; retain the actual descriptor contract and ownership.
+  writeFileSync(path, JSON.stringify({
+    version: 3, kind: LAUNCHER_BROWSER_HOST_KIND, profile: "production", pid: process.pid,
+    endpoint: "http://127.0.0.1:39110", control: { endpoint: "http://127.0.0.1:39111", token: "t".repeat(64) },
+    helper: { executable: process.execPath, script: resolve(import.meta.dir, "../src/adapters/chatgpt-web/browser-helper-main.ts") },
+    partition: "persist:codex-web-gpt-chatgpt", idleUrl: LAUNCHER_BROWSER_IDLE_URL,
+    surfaceId: "s".repeat(32), surfaceTargets: { ["s".repeat(32)]: "harness-target" }, createdAt: new Date().toISOString(),
+  }), { mode: 0o600 });
+  return path;
+}
 
 test("current-turn MCP progress tracks active calls without claiming completion", async () => {
   const progress = new ChatGptExternalTurnProgress();
@@ -128,7 +162,7 @@ const browserOnlyCapabilities = { localToolsEnabled: false, solAvailable: true, 
 function brokerTestEndpoint(name: string): string {
   return process.platform === "win32"
     ? defaultBrokerEndpoint(join(tmpdir(), name), "win32")
-    : join(tmpdir(), `${name}.sock`);
+    : join(caseRoot, `${createHash("sha256").update(name).digest("hex").slice(0, 16)}.sock`);
 }
 
 async function invokeAfterBrowserBoundary<T>(
@@ -439,8 +473,9 @@ describe("ChatGPT outer-native harness v4", () => {
       adapter: "chatgpt-web",
       baseUrl: `browser://chatgpt-retained-messages-${Date.now()}`,
       chatgptWeb: {
+        appName: "Codex app",
         browserHost: "launcher",
-        browserHostDescriptorPath: join(tempRoot, "retained-launcher.json"),
+        browserHostDescriptorPath: retainedLauncherFixture("retained-launcher.json"),
         experimentalFreshConversationPerTurn: freshConversation,
         brokerSocketPath: socketPath,
         localToolsEnabled: true,
@@ -464,6 +499,7 @@ describe("ChatGPT outer-native harness v4", () => {
       }
       expect(turn.captureLunaCheckpoint).toBeUndefined();
       const prepared = browserMessages === 0 || freshConversation ? await turn.prepare() : await turn.prepareResume!();
+      expect(prepared.text).toContain('The selected local Codex plugin for this turn is "Codex app".');
       preparedPrompts.push(prepared.text);
       conversationKeys.push(turn.conversationKey!);
       sessionModes.push(turn.sessionMode);
@@ -482,7 +518,7 @@ describe("ChatGPT outer-native harness v4", () => {
     };
 
     const first = rawWireRequest(environmentXml);
-    first._chatgptSessionMode = "temporary";
+    first._chatgptSessionMode = freshConversation ? "temporary" : "persistent";
     const second = parsed();
     second.options.reasoning = "xhigh";
     second._chatgptSessionMode = "persistent";
@@ -530,7 +566,7 @@ describe("ChatGPT outer-native harness v4", () => {
         ? undefined : chatGptConversationKey(first, chatGptWebExecutionNamespace(provider))!);
       expect(conversationKeys[1]).toBe(conversationKeys[0]);
       expect(tokens[1]).not.toBe(tokens[0]);
-      expect(sessionModes).toEqual(["temporary", "persistent"]);
+      expect(sessionModes).toEqual([freshConversation ? "temporary" : "persistent", "persistent"]);
       expect(efforts[1]).toBe(luna ? "low" : "xhigh");
       expect(preparedPrompts[0]).toContain("Inspect the project");
       expect(preparedPrompts[1]).toContain("Continue in the same repository");
@@ -1502,7 +1538,14 @@ describe("ChatGPT outer-native harness v4", () => {
     (worker as unknown as { run: (turn: BrowserTurn) => Promise<string> }).run = async turn => {
       browserStarts += 1;
       turn.onSendActivated?.();
-      throw new Error("submission evidence disappeared after Send activation");
+      expect(turn.nativeSubmissionIdentity).toBeTrue();
+      await turn.onNativeSubmission!({
+        version: 1, sendId: randomUUID(), revision: 1, phase: "send_activated", initialTurnIdentities: [],
+        binding: { roundKey: turn.nativeSubmissionRoundKey!, stage: { kind: "final" }, documentEpoch: null,
+          host: { pid: process.pid, instanceId: "h".repeat(32), profile: "production", partition: "persist:codex-web-gpt-chatgpt" },
+          lease: { helperPid: process.pid, surfaceId: "s".repeat(32), targetId: "ambiguous-original" } },
+      });
+      throw submissionIdentityUnproven("submission evidence disappeared after Send activation");
     };
 
     try {
@@ -1510,13 +1553,9 @@ describe("ChatGPT outer-native harness v4", () => {
       const adapter = createChatGptWebAdapter(provider);
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const events: AdapterEvent[] = [];
-        await adapter.runTurn!(request, { headers: new Headers() }, event => events.push(event));
-        expect(events.at(-1)).toMatchObject({
-          type: "error",
-          code: "chatgpt_submission_ambiguous",
-          retryable: false,
-          message: "ChatGPT did not confirm that the prompt was sent. Check the ChatGPT tab before continuing.",
-        });
+        await expect(adapter.runTurn!(request, { headers: new Headers() }, event => events.push(event)))
+          .rejects.toMatchObject({ code: "chatgpt_submission_identity_unproven", retryable: false });
+        expect(events.some(event => event.type === "done")).toBeFalse();
       }
       expect(browserStarts).toBe(1);
     } finally {
@@ -1565,10 +1604,11 @@ describe("ChatGPT outer-native harness v4", () => {
   });
 
   test.each([
-    [chatGptStoppedThinkingError, "chatgpt_stopped_thinking", "usage limit may have been reached"],
+    [chatGptStoppedThinkingError, "chatgpt_stopped_thinking", "usage limit may have been reached", 502, "server_error"],
     [() => chatGptResponseIncompleteError("ChatGPT stopped showing generation or tool activity without a final answer."),
-      "chatgpt_response_incomplete", "without a final answer"],
-  ] as const)("browser failure preserves its exact explanation without an automatic retry (%s, %s)", async (failure, code, explanation) => {
+      "chatgpt_response_incomplete", "without a final answer", 502, "server_error"],
+    [chatGptToolApprovalRequiredError, "chatgpt_tool_approval_required", "Permissions → Allow all actions", 403, "permission_error"],
+  ] as const)("browser failure preserves its exact explanation without an automatic retry (%s, %s)", async (failure, code, explanation, status, errorType) => {
     const socketPath = brokerTestEndpoint(`cgw-${code}-${process.pid}-${Date.now()}`);
     const provider: CodexProviderConfig = {
       adapter: "chatgpt-web", baseUrl: `browser://${code}-${Date.now()}`,
@@ -1586,13 +1626,18 @@ describe("ChatGPT outer-native harness v4", () => {
       const events: AdapterEvent[] = [];
       await createChatGptWebAdapter(provider).runTurn!(rawWireRequest(environmentXml),
         { headers: new Headers() }, event => events.push(event));
-      expect(events.at(-1)).toMatchObject({ type: "error", code, status: 502, retryable: false });
+      expect(events.at(-1)).toMatchObject({ type: "error", code, status, retryable: false });
       const response = buildResponseJSON(events, CHATGPT_WEB_MODEL_ID);
       expect(response).toMatchObject({ status: "failed", retryable: false,
-        error: { type: "server_error", code } });
+        error: { type: errorType, code } });
       expect(JSON.stringify(response)).toContain(explanation);
       expect(browserStarts).toBe(1);
       expect(events.some(event => event.type === "done")).toBeFalse();
+      const replay: AdapterEvent[] = [];
+      await createChatGptWebAdapter(provider).runTurn!(rawWireRequest(environmentXml),
+        { headers: new Headers() }, event => replay.push(event));
+      expect(replay.at(-1)).toMatchObject({ type: "error", code, status, retryable: false });
+      expect(browserStarts).toBe(1);
     } finally {
       worker.run = originalRun;
       await TurnBroker.forSocket(socketPath).close();
@@ -1611,7 +1656,7 @@ describe("ChatGPT outer-native harness v4", () => {
     let browserStarts = 0;
     (worker as unknown as { run: (turn: BrowserTurn) => Promise<string> }).run = async turn => {
       browserStarts += 1;
-      turn.onSendActivated?.();
+      await turn.prepare(); // Pre-Send server failure: no native slot or Send activation.
       throw new ChatGptWebAdapterError("ChatGPT is temporarily unavailable. Try again in a few minutes.", {
         status: 502,
         errorType: "server_error",
@@ -1742,7 +1787,7 @@ describe("ChatGPT outer-native harness v4", () => {
       browserStarts += 1;
       const prepared = await turn.prepare();
       try {
-        expect(turn.captureLunaCheckpoint).toBeTrue();
+        expect(turn.captureLunaCheckpoint).toBeUndefined(); // Pure Chat never injects a private runtime checkpoint.
         const answer = "Luna completed the requested task.";
         turn.onTextDelta(answer);
         return answer;
@@ -1848,8 +1893,8 @@ describe("ChatGPT outer-native harness v4", () => {
     expect(compiled.text).not.toContain(imageUrl);
     expect(compiled.text).toContain('"attachment_ref":"codex-input-image-1"');
     expect(compiled.text).toContain('"version":3');
-    expect(compiled.text).toContain("use the attached Codex Native tools directly according to their declared descriptions and schemas");
-    expect(compiled.text).toContain("Use actual Codex Native results as evidence");
+    expect(compiled.text).toContain("attached tools' actual descriptions and schemas");
+    expect(compiled.text).toContain("Keep actual tool results associated with their call IDs");
     expect(compiled.text).toContain("Write the user-facing final answer only after the last required tool result has settled");
     expect(compiled.text.match(/turn_123456789012345678901234/g)).toHaveLength(1);
     expect(compiled.turnToken).toBe("turn_123456789012345678901234");
@@ -1947,7 +1992,7 @@ describe("ChatGPT outer-native harness v4", () => {
 
     const compiled = compileChatGptWebPrompt(request, browserOnlyCapabilities);
     expect(compiled.turnToken).toBeUndefined();
-    expect(compiled.text).toContain("ChatGPT Web Pro with no Codex Native bridge to the user's local computer");
+    expect(compiled.text).toContain("ChatGPT Web Pro with no local Codex bridge");
     expect(compiled.text).toContain("web search, browsing, research");
     expect(compiled.text).toContain("prepared workspace evidence");
     expect(compiled.text).toContain('"system":["system-rule","repo-rule"]');
@@ -2807,8 +2852,9 @@ describe("ChatGPT outer-native harness v4", () => {
       adapter: "chatgpt-web",
       baseUrl: `browser://chatgpt-active-compact-${Date.now()}`,
       chatgptWeb: {
+        appName: "Codex app",
         browserHost: "launcher",
-        browserHostDescriptorPath: join(tempRoot, "active-compact-launcher.json"),
+        browserHostDescriptorPath: retainedLauncherFixture("active-compact-launcher.json"),
         brokerSocketPath: socketPath,
         turnTimeoutMs: 30_000,
         localToolsEnabled: true,
@@ -2830,7 +2876,8 @@ describe("ChatGPT outer-native harness v4", () => {
         retainedCompactionMessages += 1;
         const prepared = await turn.prepareResume!();
         try {
-          const controlToken = prepared.text.match(/turn_token (control_[a-f0-9]{32})/)?.[1];
+          expect(prepared.text).toContain('selected ChatGPT plugin "Codex app"');
+          const controlToken = prepared.text.match(/turn_token (turn_[a-f0-9]{32})/)?.[1];
           const handoffId = prepared.text.match(/handoff_id (handoff_[a-f0-9]{32})/)?.[1];
           if (!controlToken || !handoffId) throw new Error("structured compaction binding missing");
           await callTurnBroker(socketPath, {
@@ -3196,13 +3243,23 @@ describe("ChatGPT outer-native harness v4", () => {
       }));
       // ChatGPT caches the complete tools/list contract under a connector identity.
       // An intentional hash change therefore requires an explicit connector refresh or identity migration.
+      // The exact native turn-token format and copying instructions require a connector refresh.
+      // R45 public ABI combines upstream's exact native token pattern/copying description
+      // with R44's reserved codex_native_receipt disclosure (read-only, never redispatch).
+      // Names, approvals, schemas and annotations remain checked below. Deployments must
+      // explicitly refresh the cached connector catalog or migrate its identity before use.
       expect(createHash("sha256").update(canonicalJson(publicConnectorAbi)).digest("hex"))
-        .toBe("f4c9b6d6cf5822028f139aa33749ea4d9f834d4f8ea27359b404a17ca93d068a");
+        .toBe("3c508646007c20f104c56401dace49440dde4dd0994c8e5a1bdede867885b1ab");
+      expect(listed.tools.find(tool => tool.name === "codex_tool_call")?.description)
+        .toContain("reserved codex_native_receipt with arguments {} reads this turn's retained native receipt without executing anything");
       expect(listed.tools.find(tool => tool.name === "codex_tool_call")?.description)
         .toContain("reserved codex.control.compaction_handoff operation, which is not listed by inventory");
       for (const tool of listed.tools) {
         const properties = tool.inputSchema.properties as Record<string, unknown>;
-        expect(properties.turn_token).toEqual({ type: "string", minLength: 20, maxLength: 256 });
+        expect(properties.turn_token).toEqual({
+          type: "string", pattern: "^turn_[A-Za-z0-9_-]{32}$",
+          description: expect.stringContaining("Copy the complete turn_token from the current request unchanged"),
+        });
         expect(properties).not.toHaveProperty("binding_id");
         expect(tool.outputSchema).toBeUndefined();
       }
@@ -3850,11 +3907,20 @@ describe("ChatGPT outer-native harness v4", () => {
     try {
       await client.connect(transport);
 
+      // The reported failures included a missing character and a different,
+      // correctly sized token. Neither may borrow the only registered turn.
+      const malformed = await call("codex_exec", { turn_token: token.slice(0, -1), cmd: "must not execute" });
+      expect(malformed.isError).toBe(true);
+      expect(JSON.stringify(malformed.content)).toContain("Copy turn_token exactly from the current request");
+      expect(JSON.stringify(malformed)).not.toContain(token);
+
       const invalid = await call("codex_tool_inventory", {
         turn_token: "turn_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       });
       expect(invalid.isError).toBe(true);
       expect(JSON.stringify(invalid.content)).toContain("turn token is invalid, expired, or revoked");
+      expect(JSON.stringify(invalid.content)).toContain("Copy turn_token exactly from the current request");
+      expect(JSON.stringify(invalid)).not.toContain(token);
 
       const execPromise = call("codex_exec", { turn_token: token, cmd: "pwd", workdir: tempRoot });
       const [execRequest] = await Promise.race([
@@ -4009,7 +4075,7 @@ describe("ChatGPT outer-native harness v4", () => {
       await expect(callTurnBroker(socketPath, { method: "claim", token: activeTimedOutToken }))
         .rejects.toThrow("already finished");
       expect(() => broker.completeTool(activeTimedOutToken, request!.callId, toolResult({ output: "late" })))
-        .toThrow("turn token is invalid or expired");
+        .toThrow("Tool execution retained; completion cannot authorize redispatch or replace an unknown result");
 
       const inventory = await client.callTool({
         name: "codex_tool_inventory",

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { CHATGPT_CONNECTOR_NAME, ZERO_RISK_CHATGPT_CONNECTOR_NAME } from "../../config";
 import { selectedSkillFile, skillFileTokens, type ChatGptSkillFile } from "./skill-attachments";
 import {
   CHATGPT_WEB_GPT6_INSTANT_BIGGER_CONTEXT_ERROR,
@@ -10,7 +11,11 @@ import {
   supportsChatGptWebBiggerContext,
 } from "../../chatgpt-web-models";
 import { ChatGptWebAdapterError } from "./adapter-error";
+import { parseCodexDelegation } from "../../responses/delegation";
+import { readNativeThreadDelegation } from "../../responses/native-context";
 import { CODEX_NATIVE_RECEIPT_WIRE_NAME } from "./native-terminal-receipt";
+import { restoreCompactionTaskMessages } from "./compaction-continuation";
+import { chatGptTurnUserRevisionHistory, extractChatGptTurnIdentity } from "./environment";
 import { estimateTokens } from "../../lib/token-estimate";
 import type { CodexAssistantContentPart, CodexContentPart, CodexFileContent, CodexMessage, CodexParsedRequest } from "../../types";
 import { isOnePixelPngDataUrl, isReadableCompactionSummaryText, SUMMARY_PREFIX } from "../../responses/compaction";
@@ -42,6 +47,8 @@ export interface CompiledChatGptWebPrompt {
 export interface CompileChatGptWebPromptOptions {
   /** Import Codex's runtime prompt and tool transcript. Disabled by the Codex-to-ChatGPT bridge. */
   importCodexPrompt?: boolean;
+  /** The same display name used to select the ChatGPT plugin for this turn. */
+  appName?: string;
   captureLunaCheckpoint?: boolean;
   experimentalSkillAttachments?: boolean;
   experimentalMultipartParts?: ChatGptWebMultipartPartCount;
@@ -97,6 +104,18 @@ function compileQuestionAnswerPrompt(
     });
   }
   assertChatGptQuestionAnswerProvenance(parsed);
+  const rawBody = parsed._rawBody;
+  const input = rawBody && typeof rawBody === "object" && "input" in rawBody && Array.isArray(rawBody.input)
+    ? rawBody.input : [];
+  // Only canonical native deliveries may survive Chat's filtering of agent traffic.
+  // Match both source and exact output; ordinary agent messages are not human questions.
+  const nativeDelegations = input.flatMap(value => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+    const item = value as Record<string, unknown>;
+    const native = readNativeThreadDelegation(item);
+    const instruction = parseCodexDelegation(item);
+    return native && instruction !== undefined ? [{ ...native, instruction }] : [];
+  });
   const messages = parsed.context.messages.flatMap((original): CodexMessage[] => {
     // 纯问答只回答人类问题：有问答子集时用它替换完整正文（附件与注入内容已按原生 kinds 剔除）。
     const message = original.role === "user" && original.qaContent !== undefined
@@ -105,6 +124,11 @@ function compileQuestionAnswerPrompt(
     if (message.role === "toolResult" && message.nativeDelegation !== undefined) {
       return [{ role: "user", timestamp: message.timestamp,
         content: "Delegated task:\n" + message.nativeDelegation }];
+    }
+    if (message.role === "agentMessage") {
+      const native = nativeDelegations.find(delivery => delivery.sourceThreadId === message.author
+        && delivery.output === message.content);
+      return native ? [{ ...message, content: native.instruction }] : [];
     }
     if (message.role === "user") {
       if (message.origin === "codex_skill") return [];
@@ -134,6 +158,11 @@ function compileQuestionAnswerPrompt(
         role: "assistant",
         text: message.content.flatMap(part => part.type === "text" ? [part.text] : []).join("\n"),
       };
+      if (message.role === "agentMessage") return {
+        role: "agent_message", author: message.author,
+        text: typeof message.content === "string" ? message.content
+          : message.content.flatMap(part => part.type === "text" ? [part.text] : []).join("\n"),
+      };
       const content = typeof message.content === "string" ? message.content : message.content.map(part => {
         if (part.type === "text") return part.text;
         if (part.type === "file") {
@@ -152,7 +181,7 @@ function compileQuestionAnswerPrompt(
           : content,
       };
     }).filter(message => message.text.trim().length > 0);
-    if (!history.some(message => message.role === "user")) {
+    if (!history.some(message => message.role === "user" || message.role === "agent_message")) {
       throw new ChatGptWebAdapterError("The request does not contain a human question or image", {
         status: 400, errorType: "invalid_request_error", code: "question_missing", retryable: false,
       });
@@ -160,7 +189,8 @@ function compileQuestionAnswerPrompt(
     const text = history.length === 1 && history[0]!.role === "user"
       ? history[0]!.text
       : history
-        .map(message => (message.role === "user" ? "User:\n" : "Assistant:\n") + message.text).join("\n\n");
+        .map(message => (message.role === "user" ? "User:\n" : message.role === "agent_message"
+          ? `Delegated task from ${message.author}:\n` : "Assistant:\n") + message.text).join("\n\n");
     const constraints: string[] = [];
     if (parsed._compactionRequest) constraints.push(
       "Return only a concise conversation summary, preserving the questions, answers, preferences and unresolved details. Do not answer or continue the conversation.",
@@ -593,6 +623,8 @@ export function compileChatGptWebPrompt(
   options?: CompileChatGptWebPromptOptions,
 ): CompiledChatGptWebPrompt {
   const manualControl = options?.manualControl === true;
+  const appName = options?.appName?.trim()
+    || (manualControl ? ZERO_RISK_CHATGPT_CONNECTOR_NAME : CHATGPT_CONNECTOR_NAME);
   const attachSkills = options?.experimentalSkillAttachments === true;
   if (attachSkills && (manualControl || isChatGptWebZeroRiskBackendModel(parsed.modelId))) {
     throw new Error("Skills as files is unavailable in Zero Risk mode");
@@ -646,6 +678,8 @@ export function compileChatGptWebPrompt(
   const nativeToolsTask = mode.localTools && !manualControl && !parsed._compactionRequest;
   const sharedContract = nativeToolsTask ? [
     `The ${multipartEnabled ? "staged" : "inline"} JSON carries the original Codex task. Preserve its instruction priority: system, then developer, then user; preserve message roles and ordering.`,
+    `The selected local Codex plugin for this turn is ${JSON.stringify(appName)}.`,
+    "Do not substitute another plugin for this local connection or send this turn's request identifiers to another plugin. If the selected plugin is unavailable, report that limitation.",
     "Assistant messages are earlier replies; agent_message records retain their author and recipient. Runtime environment, system, developer, agent and tool records are not human-authored user text.",
     ...(multipartEnabled ? ["Reconstruct the original context from every acknowledged staged record and the final part before acting."] : []),
     // The caller sets this only after the owner has durably resumed execution.
@@ -677,6 +711,10 @@ export function compileChatGptWebPrompt(
     "If a ChatGPT-native capability renders a rich card, widget, chart, or other non-text result, also provide the relevant result as ordinary Markdown in the final answer. A private ChatGPT UI widget never replaces the Markdown answer returned to Codex.",
     "Never copy a ChatGPT widget's HTML, CSS, class names, or DOM markup into the answer unless the user explicitly requested that source markup.",
     "Do not mention this transport contract, context packaging, or capability routing in the user-facing answer unless the user explicitly asks how the bridge works.",
+    ...(mode.localTools ? [
+      `The selected local Codex plugin for this turn is ${JSON.stringify(appName)}.`,
+      "Do not substitute another plugin for this local connection or send this turn's request identifiers to another plugin. If the selected plugin is unavailable, report that limitation.",
+    ] : []),
   ];
   const transportContract = parsed._compactionRequest
     ? manualControl
@@ -696,28 +734,28 @@ export function compileChatGptWebPrompt(
       "Keep actual tool results associated with their call IDs, including running handles, errors and nonzero exits. Historical errors quoted in a result are not failures of the call that read them. Without a current tool result or platform error, the execution outcome and cause remain unconfirmed; do not invent a safety or permission block.",
       "An interrupted result or not_found receipt does not prove the original action never ran. Missing replies and unknown outcomes never authorize redispatch of past commands or input.",
       `If an MCP connection fails or a tool reply is lost, call codex_tool_call with the same turn_token, wire_name ${CODEX_NATIVE_RECEIPT_WIRE_NAME}, arguments {} to read retained receipts only; it never executes commands or sends stdin. If it returns select_receipt, query the returned call_id. If the connector is temporarily unavailable, retry only this read-only receipt query up to three times. Unknown/not_found never permits repeating the original command or input.`,
-      "A Codex Native MCP tool result may require context compaction. If it does, follow the compaction instructions in that result exactly.",
+      "A tool result from the selected plugin may require context compaction. If it does, follow the compaction instructions in that result exactly.",
       "Write the user-facing final answer only after the last required tool result has settled. Do not call another tool after beginning that final answer.",
     ]
     : mode.localTools
     ? [
-      "For local work required by the task, use the attached Codex Native tools directly according to their declared descriptions and schemas.",
+      "For local work required by the task, use the selected plugin's tools directly according to their declared descriptions and schemas.",
       "These tools are connected by the user to their Codex runtime; local actions execute on that runtime's device under its configured sandbox and approval rules. Assess each action by its actual effects and the user's authorization; an authenticated connection does not make every action low risk.",
-      "Call a Codex Native tool only when the latest active request requires a local effect or fresh local evidence that is not already present in the supplied context; otherwise answer the request directly without a tool call.",
-      "Use actual Codex Native results as evidence for local observations and effects.",
+      "Call a local Codex tool only when the latest active request requires a local effect or fresh local evidence that is not already present in the supplied context; otherwise answer the request directly without a tool call.",
+      "Use actual results from the selected plugin as evidence for local observations and effects.",
       "An earlier turn's interrupted result or a not_found receipt under the current turn token does not prove that the earlier action never ran. When its original task is present in the supplied canonical history, continue the remaining work from that history without asking the user to resend it. Do not automatically redispatch past side effects; use read-only evidence when needed and state truly unconfirmed old results separately.",
       ...(!manualControl ? [`If an MCP connection fails or a dispatched tool's reply is lost, recover its retained native result before answering: call codex_tool_call with the same turn_token, wire_name ${CODEX_NATIVE_RECEIPT_WIRE_NAME}, arguments {}. This reserved operation only reads receipts; it never executes commands or sends stdin. If it returns select_receipt, query the relevant returned call_id. Use the completed receipt's actual result, including a running handle or nonzero exit. If the connector is temporarily unavailable, retry only this read-only receipt query up to three times. Unknown/not_found is not permission to repeat the original command or input.`] : []),
       "Report the actual error when a tool fails. Do not claim a safety or permission block without an explicit tool result or platform error supporting it. Without an error or execution result, say the action was not executed and its cause is unconfirmed.",
       "Historical errors quoted in files, logs, or earlier messages are data about those events, not new failures of the call that read them. Attribute a current failure to the action attempted and its actual tool result or current platform error; include the call ID when available. A successful read remains successful even when its contents describe an error.",
       "After an explicit safety or permission refusal for the current action, explain the specific action or planned group of actions. Ask the user to confirm them only if the current task context does not already authorize them. Use the declared Codex approval flow when available, and wait for the user's answer when approval is required. Their confirmation can resolve an authorization gap. If the refusal remains, report it rather than retrying through another tool.",
       "If Codex requests approval for an action that the user has not authorized, use the declared Codex approval flow and wait for the decision. Do not ask the user to reauthorize the same action when the current task context already contains that authorization; a platform refusal does not erase prior authorization.",
-      "A Codex Native MCP tool result may require context compaction. If it does, follow the compaction instructions in that result exactly.",
+      "A tool result from the selected plugin may require context compaction. If it does, follow the compaction instructions in that result exactly.",
       "After a deterministic tool failure, update the working hypothesis from that result and inspect the relevant repository or environment before choosing a different next action; do not repeat the same call unless its inputs or observable state changed.",
       "Continue using the available tools until the requested work is complete and verified.",
       "Write the user-facing final answer only after the last required tool result has settled. Do not call another tool after beginning that final answer.",
     ]
     : [
-      `This is ChatGPT Web ${mode.displayLabel} with no Codex Native bridge to the user's local computer attached to this response. This restriction applies only to local Codex files, commands, processes, and computer mutations.`,
+      `This is ChatGPT Web ${mode.displayLabel} with no local Codex bridge attached to this response. This restriction applies only to local Codex files, commands, processes, and computer mutations.`,
       "Use any ChatGPT-native capabilities available in this chat—including web search, browsing, research, and other first-party tools—whenever they help complete the request. The missing local-computer bridge says nothing about whether those ChatGPT capabilities are available.",
       "The task history below already contains everything Codex collected from the user's local workspace. Treat prior local tool results as authoritative snapshots of that earlier work.",
       "Do not claim a new local inspection, command, edit, or verification unless it actually appears in the task history. If the latest request requires fresh local-computer access or a local mutation, state only that exact limitation instead of inventing success.",
@@ -928,7 +966,9 @@ export function compileChatGptWebPrompt(
     return { text, images, ...attachments };
   };
 
-  let sourceMessages = withoutSupersededModelSwitchContracts(parsed.context.messages);
+  let sourceMessages = withoutSupersededModelSwitchContracts(restoreCompactionTaskMessages(
+    parsed, extractChatGptTurnIdentity(parsed), chatGptTurnUserRevisionHistory(parsed),
+  ));
   const initialMessageCount = sourceMessages.length;
   let compiled = build(sourceMessages);
   if (!parsed._compactionRequest) return compiled;

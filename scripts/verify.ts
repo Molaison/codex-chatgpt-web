@@ -21,6 +21,8 @@ try {
   await run(["run", "check-version"]);
   await run(["run", "audit"]);
   await run(["run", "launcher:audit"]);
+  // Electron now downloads its executable on first use. Do this before timed tests.
+  await run(["run", "launcher/node_modules/electron/install.js"]);
   await run(["run", "typecheck"]);
   await run(["run", "test"]);
   await run(["run", "launcher:typecheck"]);

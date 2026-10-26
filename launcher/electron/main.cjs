@@ -75,6 +75,7 @@ const launchEnvironment = {
 };
 process.env.CODEX_CHATGPT_WEB_HOME = CORE_HOME;
 process.env.CODEX_HOME = LAUNCHER_PROFILE.codexHome;
+if (IS_DEV_PROFILE) delete process.env.CODEX_CHATGPT_WEB_TRUSTED_CODEX_HOMES;
 app.setName(LAUNCHER_PROFILE.displayName);
 if (process.platform === "win32") {
   app.setAppUserModelId(IS_DEV_PROFILE ? "dev.codexwebgpt.launcher.dev" : "dev.codexwebgpt.launcher");
@@ -525,7 +526,7 @@ function syncBrowserPreferences(stateStore, config) {
   const biggerContextAvailable = typeof config?.solAvailable === "boolean";
   const biggerContextEnabled = config?.experimentalBiggerContext === true;
   const composerPredictionsEnabled = config?.composerPredictionsEnabled !== false;
-  const useSavedChats = config?.useSavedChats === true;
+  const useSavedChats = config?.useSavedChats !== false;
   const enabled = config?.experimentalFreshConversationPerTurn === true;
   const autoApproveToolCalls = config?.autoApproveToolCalls === true;
   const current = stateStore.read();
@@ -806,7 +807,7 @@ function registerIpc({ logger, stateStore }) {
       experimentalBiggerContext: false,
       experimentalSkillAttachments: false,
       experimentalFreshConversationPerTurn: false,
-      useSavedChats: false,
+      useSavedChats: true,
       autoApproveToolCalls: false,
       zeroRiskProEnabled: false,
     });
@@ -844,7 +845,7 @@ function registerIpc({ logger, stateStore }) {
       biggerContextAvailable: typeof runtimeHost.runtimeConfigSnapshot().config?.solAvailable === "boolean",
       zeroRiskProEnabled: runtimeHost.runtimeConfigSnapshot().config?.zeroRiskProEnabled === true,
       experimentalFreshConversationPerTurn: runtimeHost.runtimeConfigSnapshot().config?.experimentalFreshConversationPerTurn === true,
-      useSavedChats: runtimeHost.runtimeConfigSnapshot().config?.useSavedChats === true,
+      useSavedChats: runtimeHost.runtimeConfigSnapshot().config?.useSavedChats !== false,
       autoApproveToolCalls: runtimeHost.runtimeConfigSnapshot().config?.autoApproveToolCalls === true,
       ...(result.mode === "full" ? {
         mcpRuntimeInstalled: true,
@@ -889,7 +890,7 @@ function registerIpc({ logger, stateStore }) {
       biggerContextAvailable: typeof runtimeHost.runtimeConfigSnapshot().config?.solAvailable === "boolean",
       zeroRiskProEnabled: runtimeHost.runtimeConfigSnapshot().config?.zeroRiskProEnabled === true,
       experimentalFreshConversationPerTurn: runtimeHost.runtimeConfigSnapshot().config?.experimentalFreshConversationPerTurn === true,
-      useSavedChats: runtimeHost.runtimeConfigSnapshot().config?.useSavedChats === true,
+      useSavedChats: runtimeHost.runtimeConfigSnapshot().config?.useSavedChats !== false,
       autoApproveToolCalls: runtimeHost.runtimeConfigSnapshot().config?.autoApproveToolCalls === true,
       coreSetupComplete: true,
       codexCatalogVerified: IS_DEV_PROFILE,
@@ -1024,7 +1025,7 @@ function registerIpc({ logger, stateStore }) {
       browserInteractionMode: mode,
       biggerContextAvailable: typeof runtimeHost.runtimeConfigSnapshot().config?.solAvailable === "boolean",
       experimentalFreshConversationPerTurn: runtimeHost.runtimeConfigSnapshot().config?.experimentalFreshConversationPerTurn === true,
-      useSavedChats: runtimeHost.runtimeConfigSnapshot().config?.useSavedChats === true,
+      useSavedChats: runtimeHost.runtimeConfigSnapshot().config?.useSavedChats !== false,
       autoApproveToolCalls: runtimeHost.runtimeConfigSnapshot().config?.autoApproveToolCalls === true,
       ...(mode === "manual" ? { experimentalBiggerContext: false, experimentalSkillAttachments: false } : {}),
       ...(result.configured ? {
@@ -1260,7 +1261,7 @@ async function start() {
     control: browserControl.descriptor(),
     cancelTurn: IS_DEV_PROFILE ? undefined : (traceId, reason) => runtimeSupervisor.cancelBrowserTurn(traceId, reason),
     getConnectorName: () => runtimeHost.browserConnectorName(),
-    getUseSavedChats: () => runtimeHost.runtimeConfigSnapshot().config?.useSavedChats === true,
+    getUseSavedChats: () => runtimeHost.runtimeConfigSnapshot().config?.useSavedChats !== false,
     getAccountId: () => runtimeHost.runtimeConfigSnapshot().config?.accountId,
     getHealthPinPath: () => runtimeHost.runtimeConfigSnapshot().config?.qaHealthPinPath,
     publishHealth: event => maintenanceDelivery.report(event),
@@ -1367,7 +1368,7 @@ async function start() {
       composerPredictionsEnabled: config?.composerPredictionsEnabled !== false,
       experimentalSkillAttachments: config?.experimentalSkillAttachments === true,
       experimentalFreshConversationPerTurn: config?.experimentalFreshConversationPerTurn === true,
-      useSavedChats: config?.useSavedChats === true,
+      useSavedChats: config?.useSavedChats !== false,
       autoApproveToolCalls: config?.autoApproveToolCalls === true,
       zeroRiskProEnabled: config?.zeroRiskProEnabled === true,
     });
@@ -1396,7 +1397,7 @@ async function start() {
         experimentalBiggerContext: runtimeHost.runtimeConfigSnapshot().config?.experimentalBiggerContext === true,
         experimentalSkillAttachments: runtimeHost.runtimeConfigSnapshot().config?.experimentalSkillAttachments === true,
         experimentalFreshConversationPerTurn: runtimeHost.runtimeConfigSnapshot().config?.experimentalFreshConversationPerTurn === true,
-        useSavedChats: runtimeHost.runtimeConfigSnapshot().config?.useSavedChats === true,
+        useSavedChats: runtimeHost.runtimeConfigSnapshot().config?.useSavedChats !== false,
         autoApproveToolCalls: runtimeHost.runtimeConfigSnapshot().config?.autoApproveToolCalls === true,
         zeroRiskProEnabled: runtimeHost.runtimeConfigSnapshot().config?.zeroRiskProEnabled === true,
         ...(upgrade.mode === "full" ? {
@@ -1423,7 +1424,7 @@ async function start() {
       const composerPredictionsEnabled = configuredRuntime.config?.composerPredictionsEnabled !== false;
       const experimentalSkillAttachments = configuredRuntime.config?.experimentalSkillAttachments === true;
       const experimentalFreshConversationPerTurn = configuredRuntime.config?.experimentalFreshConversationPerTurn === true;
-      const useSavedChats = configuredRuntime.config?.useSavedChats === true;
+      const useSavedChats = configuredRuntime.config?.useSavedChats !== false;
       const autoApproveToolCalls = configuredRuntime.config?.autoApproveToolCalls === true;
       const zeroRiskProEnabled = configuredRuntime.config?.zeroRiskProEnabled === true;
       const saved = stateStore.read();
@@ -1453,7 +1454,7 @@ async function start() {
         composerPredictionsEnabled: config.composerPredictionsEnabled !== false,
         experimentalSkillAttachments: config.experimentalSkillAttachments === true,
         experimentalFreshConversationPerTurn: config.experimentalFreshConversationPerTurn === true,
-        useSavedChats: config.useSavedChats === true,
+        useSavedChats: config.useSavedChats !== false,
         autoApproveToolCalls: config.autoApproveToolCalls === true,
         zeroRiskProEnabled: config.zeroRiskProEnabled === true,
         ...(runtime.bridgeRouteChanged ? {

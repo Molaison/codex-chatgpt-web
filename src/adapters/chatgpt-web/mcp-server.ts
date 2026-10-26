@@ -7,7 +7,7 @@ import { namespacedToolName, type CodexTool } from "../../types";
 import { VERSION } from "../../version";
 import type { ChatGptTurnEnvironment } from "./environment";
 import { CODEX_COMPACTION_CONTROL_WIRE_NAME } from "./native-compaction-control";
-import { callTurnBroker, brokerPreconnectFailure, brokerClaimRejection, TurnBrokerTimeoutError, TurnBrokerTransportError, type BrokerToolResult, type BrokerPreconnectFailure, type BrokerClaimRejection } from "./turn-broker";
+import { callTurnBroker, brokerPreconnectFailure, brokerClaimRejection, TurnBrokerTimeoutError, TurnBrokerTransportError, type BrokerRetirementDiagnostics, type BrokerToolResult, type BrokerPreconnectFailure, type BrokerClaimRejection } from "./turn-broker";
 import { operationDigest } from "./operation-journal";
 import { CODEX_NATIVE_RECEIPT_WIRE_NAME } from "./native-terminal-receipt";
 import { mcpInvocationId, mcpRequestRef, observeMcpToolCalls } from "./mcp-observation";
@@ -39,6 +39,9 @@ const GATEWAY_AGENT_WAIT_TOOL_NAMES = new Set([
 ]);
 
 const turnTokenSchema = z.string().min(20).max(256);
+const nativeTurnTokenSchema = z.string().regex(/^turn_[A-Za-z0-9_-]{32}$/,
+  "Copy turn_token exactly from the current request: turn_ followed by 32 case-sensitive characters. Do not guess or reuse an earlier token.")
+  .describe("Opaque capability for this request. Copy the complete turn_token from the current request unchanged, including case, hyphens and underscores. Never infer it from another turn or from an error.");
 const jsonArgumentsSchema = z.record(z.string(), z.unknown()).default({});
 // Match Codex's default wait interval while returning before the MCP invocation deadline.
 export const CHATGPT_WEB_AGENT_WAIT_POLL_MS = 30_000;
@@ -60,7 +63,7 @@ const ZERO_RISK_MCP_INSTRUCTIONS = [
 function turnReferenceInput(contract: ChatGptMcpContract): Record<string, z.ZodString> {
   return contract === "safe"
     ? { request_id: turnTokenSchema }
-    : { turn_token: turnTokenSchema };
+    : { turn_token: nativeTurnTokenSchema };
 }
 
 function turnReference(contract: ChatGptMcpContract, input: object): string {
@@ -617,6 +620,7 @@ export function createChatGptMcpServer(options: ChatGptMcpServerOptions): McpSer
     nativeDispatchAttempts.add(extra.requestId);
     const timeoutMs = chatGptMcpInvocationTimeout(bound);
     const invocationId = mcpInvocationId(bindingId, extra.requestId, wireName(tool));
+    let brokerStateAtDetachment: BrokerRetirementDiagnostics | undefined;
     const request = {
       method: "invoke" as const,
       bindingId,
@@ -638,7 +642,9 @@ export function createChatGptMcpServer(options: ChatGptMcpServerOptions): McpSer
         try {
           const receipt = await callTurnBroker<{
             state: string; invocation_id?: string; result?: BrokerToolResult; resultHash?: string;
+            brokerState?: BrokerRetirementDiagnostics;
           }>(options.brokerSocketPath, { ...request, method: "owner_invocation_receipt" }, 5_000, extra.signal);
+          brokerStateAtDetachment = receipt.brokerState;
           if (receipt.state === "completed" && receipt.invocation_id === invocationId
             && Array.isArray(receipt.result?.content)
             && receipt.resultHash === operationDigest(JSON.stringify(receipt.result))) {
@@ -677,6 +683,7 @@ export function createChatGptMcpServer(options: ChatGptMcpServerOptions): McpSer
           execution_state: "unknown",
           turn_release: "not_requested",
           recovery: "needs_reconcile",
+          ...(brokerStateAtDetachment ? { broker_state_at_retirement: brokerStateAtDetachment } : {}),
           message: `Codex tool ${wireName(tool)} did not complete before the MCP transport deadline. This RPC timeout did not release the turn or cancel the native execution. Reconcile the original invocation or query its existing native handle; do not restart or resubmit it. Execution and approval status are unknown.`,
         }, true);
       }

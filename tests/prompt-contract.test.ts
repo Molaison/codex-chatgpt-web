@@ -11,6 +11,7 @@ import {
 } from "../src/adapters/chatgpt-web/prompt";
 import { CHATGPT_WEB_LUNA_MODEL_ID, CHATGPT_WEB_MODEL_ID } from "../src/adapters/chatgpt-web/model";
 import { SUMMARY_PREFIX } from "../src/responses/compaction";
+import { parseRequest } from "../src/responses/parser";
 import { biggerContextPartCount } from "../src/adapters/chatgpt-web/usage";
 import type { CodexParsedRequest } from "../src/types";
 
@@ -28,6 +29,27 @@ function request(reasoning: "low" | "medium" | "high" | "xhigh" | "max"): CodexP
     options: { reasoning },
   };
 }
+
+test("custom plugin identity stays explicit in inline and multipart execution without rewriting task history", () => {
+  const capabilities = { localToolsEnabled: true, solAvailable: true, extraHighAvailable: true, proAvailable: true };
+  const parsed = request("high");
+  parsed.context.messages[1]!.content = "Compare Codex Native2 with the selected plugin.";
+  for (const appName of ["Codex app", "Codex Native2 DEV", "Codex Робота"]) {
+    for (const parts of [undefined, 2, 6] as const) {
+      const compiled = compileChatGptWebPrompt(parsed, capabilities, "turn_12345678901234567890123456789012", {
+        appName, experimentalMultipartParts: parts,
+      });
+      const contract = compiled.multipart?.commit ?? compiled.text;
+      expect(contract).toContain(`The selected local Codex plugin for this turn is ${JSON.stringify(appName)}.`);
+      expect(contract).toContain("Do not substitute another plugin for this local connection");
+      expect(contract).not.toContain("attached Codex Native tools");
+      const history = compiled.multipart
+        ? compiled.multipart.parts.flatMap(part => JSON.parse(part).records).filter(record => record.kind === "message").map(record => record.message)
+        : JSON.parse(compiled.text.match(/<codex_context_json>\n(.+)\n<\/codex_context_json>/s)![1]!).messages;
+      expect(history[1].content).toBe(parsed.context.messages[1]!.content);
+    }
+  }
+});
 
 test("inline and staged history escape Markdown delimiters without changing decoded code", () => {
   const parsed = request("high");
@@ -94,7 +116,7 @@ test("Full-mode Pro prompts pass one stable turn token directly to native action
   expect(transportOnly).toContain("attached tools' actual descriptions and schemas");
   expect(transportOnly).toContain("existing evidence does not require another call");
   expect(transportOnly).toContain("Keep actual tool results associated with their call IDs");
-  expect(transportOnly).toContain("A Codex Native MCP tool result may require context compaction. If it does, follow the compaction instructions in that result exactly.");
+  expect(transportOnly).toContain("A tool result from the selected plugin may require context compaction. If it does, follow the compaction instructions in that result exactly.");
   expect(transportOnly).not.toContain("After a deterministic tool failure");
   expect(transportOnly).toContain("unknown outcomes never authorize redispatch");
   expect(transportOnly).not.toContain("Continue using the available tools until");
@@ -645,7 +667,7 @@ test("uses the public Instant name without leaking the browser menu alias into t
     { localToolsEnabled: false, solAvailable: true, extraHighAvailable: true, proAvailable: true },
   );
 
-  expect(compiled.text).toContain("This is ChatGPT Web Instant with no Codex Native bridge to the user's local computer");
+  expect(compiled.text).toContain("This is ChatGPT Web Instant with no local Codex bridge");
   expect(compiled.text).not.toContain("Instant 5.5");
 });
 
@@ -701,4 +723,19 @@ test("inline and multipart transports preserve code while escaping its Markdown 
     expect(() => JSON.parse(part)).not.toThrow();
   }
   expect(JSON.stringify(multipart.multipart!.parts.map(part => JSON.parse(part)))).toContain("```python");
+});
+
+test("Chat keeps a canonical desktop delegation attributed after filtering runtime history", () => {
+  const output = "<codex_delegation><source_thread_id>parent &amp; coordinator</source_thread_id><input>Explain &lt;sample&gt; &amp; preserve &amp;lt;literal&amp;gt;.</input></codex_delegation>";
+  const parsed = parseRequest({ model: CHATGPT_WEB_MODEL_ID, reasoning: { effort: "low" }, input: [
+    { type: "message", role: "developer", content: "RUNTIME_ONLY" },
+    { type: "function_call_output", id: "delegation-current", name: "send_message_to_thread", namespace: "codex_app",
+      output, internal_chat_message_metadata_passthrough: { turn_id: "current" } },
+  ] });
+  const original = structuredClone(parsed);
+  const compiled = compileChatGptWebPrompt(parsed, { localToolsEnabled: false, solAvailable: true, extraHighAvailable: true, proAvailable: true }, undefined, { importCodexPrompt: false });
+  expect(compiled.text).toBe("Delegated task from parent & coordinator:\nExplain <sample> & preserve &lt;literal&gt;.");
+  expect(compiled.text).not.toContain("User:");
+  expect(compiled.text).not.toContain("RUNTIME_ONLY");
+  expect(parsed).toEqual(original);
 });
