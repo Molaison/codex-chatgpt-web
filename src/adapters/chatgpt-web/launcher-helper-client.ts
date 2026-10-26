@@ -1,4 +1,6 @@
-import { parseBrowserObservation, observationUnavailable, type BrowserObservationCheckpoint } from "./observation-recovery";
+import { nativeExecutionDigest, ExplicitNativeCancellation, type NativeExecutionEvent, type NativeExecutionPayload, type NativeResultReady, type NativeReleaseReceipt, type NativeCancelTerminal } from "./native-execution";
+import { nativeSubmissionDigest, parseNativeSubmission, retainsBrowserExecution, submissionIdentityUnproven, type NativeSubmissionRecord } from "./submission-identity";
+import { BrowserObservationDetached, parseBrowserObservation, observationUnavailable, type BrowserObservationCheckpoint } from "./observation-recovery";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -25,6 +27,11 @@ interface PendingTurn {
   acknowledgedMultipartStage?: number;
   surfaceId?: string;
   submission?: Promise<void>;
+  nativeUpdates?: Promise<void>;
+  sendActivated?: boolean;
+  preparationCancelled?: boolean;
+  nativeReady?: NativeResultReady;
+  nativeReleased?: NativeReleaseReceipt;
 }
 
 type HelperMessage =
@@ -38,8 +45,10 @@ type HelperMessage =
   | { type: "event"; id: string; event: "prepared_selected"; reused: boolean }
   | { type: "event"; id: string; event: "browser_lease_acquired"; surfaceId: string }
   | { type: "event"; id: string; event: "luna_checkpoint"; checkpoint: ChatGptLunaCheckpoint; answerHash: string }
-  | { type: "event"; id: string; event: "conversation_restored" | "observation_resumed" | "reconnecting" | "conversation_recovered" | "recovery_fence"; reason?: "delivery_loss" | "receipt_only_failure"; phase?: "connector_waiting" | "connector_refreshing" | "network_waiting" | "saved_conversation_waiting" | "model_selection_restoring" }
-  | { type: "event"; id: string; event: "observation_ready"; checkpoint: BrowserObservationCheckpoint }
+  | { type: "event"; id: string; event: "conversation_restored" | "observation_resumed" | "reconnecting" | "conversation_recovered" | "recovery_fence"; reason?: "delivery_loss" | "receipt_only_failure" | "transport_retry" | "recovery_verified"; epoch?: number; requestId?: number; phase?: "connector_waiting" | "connector_refreshing" | "network_waiting" | "saved_conversation_waiting" | "model_selection_restoring" }
+  | { type: "event"; id: string; event: "native_submission"; record: NativeSubmissionRecord }
+  | { type: "event"; id: string; event: NativeExecutionEvent; payload: NativeExecutionPayload; requestId: number; digest: string }
+  | { type: "event"; id: string; event: "observation_ready"; checkpoint: BrowserObservationCheckpoint; digest?:string }
   | { type: "result"; id: string; text: string }
   | {
       type: "error";
@@ -72,8 +81,25 @@ function parseHelperMessage(line: string): HelperMessage {
   }
   if (message.type === "event") {
     const event = message.event;
-    if (event === "conversation_restored" || event === "observation_resumed" || event === "reconnecting" || event === "conversation_recovered" || event === "recovery_fence") return { type: "event", id: message.id, event, ...(event === "reconnecting" && (message.phase === "connector_waiting" || message.phase === "connector_refreshing" || message.phase === "network_waiting" || message.phase === "saved_conversation_waiting" || message.phase === "model_selection_restoring") ? { phase: message.phase } : {}), ...(event === "recovery_fence" && (message.reason === "delivery_loss" || message.reason === "receipt_only_failure") ? { reason: message.reason } : {}) };
-    if (event === "observation_ready") return { type: "event", id: message.id, event, checkpoint: parseBrowserObservation(message.checkpoint) };
+    if (["native_result_ready", "native_release", "native_cancel_terminal"].includes(event as string)) {
+      if (!message.payload || typeof message.payload !== "object" || !Number.isSafeInteger(message.requestId)
+        || (message.requestId as number) < 1 || typeof message.digest !== "string"
+        || message.digest !== nativeExecutionDigest(message.payload)) throw submissionIdentityUnproven("invalid native execution frame");
+      return { type: "event", id: message.id, event: event as NativeExecutionEvent, payload: message.payload as NativeExecutionPayload,
+        requestId: message.requestId as number, digest: message.digest };
+    }
+    if (event === "native_submission") return { type: "event", id: message.id, event, record: parseNativeSubmission(message.record) };
+    if (event === "recovery_fence" && (
+      message.requestId !== undefined && (!Number.isSafeInteger(message.requestId) || (message.requestId as number) < 1)
+      || message.epoch !== undefined && (!Number.isSafeInteger(message.epoch) || (message.epoch as number) < 0))) {
+      throw new Error("Invalid recovery fence identity");
+    }
+    if (event === "conversation_restored" || event === "observation_resumed" || event === "reconnecting" || event === "conversation_recovered" || event === "recovery_fence") return { type: "event", id: message.id, event, ...(event === "reconnecting" && (message.phase === "connector_waiting" || message.phase === "connector_refreshing" || message.phase === "network_waiting" || message.phase === "saved_conversation_waiting" || message.phase === "model_selection_restoring") ? { phase: message.phase } : {}), ...(event === "recovery_fence" ? { epoch: message.epoch as number | undefined, requestId: message.requestId as number | undefined } : {}), ...(event === "recovery_fence" && (message.reason === "delivery_loss" || message.reason === "receipt_only_failure" || message.reason === "transport_retry" || message.reason === "recovery_verified") ? { reason: message.reason } : {}) };
+    if (event === "observation_ready") {
+      const checkpoint=parseBrowserObservation(message.checkpoint);
+      if(message.digest!==undefined && message.digest!==nativeExecutionDigest(checkpoint))throw observationUnavailable("observation checkpoint digest changed");
+      return {type:"event",id:message.id,event,checkpoint,...(typeof message.digest==="string"?{digest:message.digest}:{})};
+    }
     if (event === "browser_lease_acquired") {
       if (typeof message.surfaceId !== "string" || !/^[A-Za-z0-9_-]{32}$/.test(message.surfaceId)) {
         throw new Error("Launcher browser helper lease is invalid");
@@ -234,10 +260,54 @@ export class LauncherBrowserHelperClient {
     return existsSync(sibling) ? sibling : undefined;
   }
 
+  private async rejectAbortedPreparation(turn: BrowserTurn): Promise<void> {
+    if (!turn.abortSignal?.aborted) return;
+    const reason = turn.abortSignal.reason;
+    if (turn.nativeSubmissionIdentity && reason instanceof ExplicitNativeCancellation) {
+      if (!turn.onNativePreparationCancel) throw submissionIdentityUnproven("no durable preparation cancellation owner");
+      try { await turn.onNativePreparationCancel(reason.request); }
+      catch { throw submissionIdentityUnproven("explicit preparation cancellation persistence is unresolved"); }
+      throw new ChatGptWebAdapterError("The original turn was explicitly cancelled before helper dispatch", {
+        status: 499, errorType: "client_closed_request", code: "client_cancelled", retryable: false,
+      });
+    }
+    throw new DOMException("ChatGPT web turn aborted", "AbortError");
+  }
+
+  private async ensureChildForTurn(turn: BrowserTurn): Promise<void> {
+    await this.rejectAbortedPreparation(turn);
+    const signal = turn.abortSignal;
+    if (!signal) return this.ensureChild();
+    // A request may cancel while a shared helper is booting. Own this request's
+    // durable cancellation without cancelling that bootstrap or dispatching its run.
+    await new Promise<void>((resolve, reject) => {
+      let settled = false, aborting = false;
+      const settle = (accepted: boolean, error?: unknown) => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener("abort", onAbort);
+        if (accepted) resolve(); else reject(error);
+      };
+      const onAbort = () => {
+        if (settled || aborting) return;
+        aborting = true;
+        void this.rejectAbortedPreparation(turn).then(
+          () => settle(false, new DOMException("ChatGPT web turn aborted", "AbortError")),
+          error => settle(false, error),
+        );
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      if (signal.aborted) { onAbort(); return; }
+      void this.ensureChild().then(
+        () => { if (!aborting) { if (signal.aborted) onAbort(); else settle(true); } },
+        error => { if (!aborting) { if (signal.aborted) onAbort(); else settle(false, error); } },
+      );
+    });
+    await this.rejectAbortedPreparation(turn);
+  }
+
   async run(turn: BrowserTurn): Promise<string> {
-    if (turn.abortSignal?.aborted) throw new DOMException("ChatGPT web turn aborted", "AbortError");
-    await this.ensureChild();
-    if (turn.abortSignal?.aborted) throw new DOMException("ChatGPT web turn aborted", "AbortError");
+    await this.ensureChildForTurn(turn);
     if ((turn.observationIdentity || turn.observation) && !this.helperFeatures.has("durable-observation")) {
       throw observationUnavailable("the browser helper does not support durable observation");
     }
@@ -262,6 +332,14 @@ export class LauncherBrowserHelperClient {
         "Launcher browser helper does not support the MCP completion fence; update or restart the launcher",
       );
     }
+    if (turn.nativeSubmissionIdentity && (!turn.onNativeSubmission || !turn.onNativeResultReady || !turn.onNativeRelease
+      || !turn.onNativeCancelIntent || !turn.onNativePreparationCancel || !turn.onNativeCancelTerminal || !turn.nativeOperationScope
+      || !this.helperFeatures.has("native-submission-v1") || !this.helperFeatures.has("native-execution-v1"))) {
+      throw new Error("Paired native-submission helper and durable owner are required before Send");
+    }
+    if (turn.recoveryState && !this.helperFeatures.has("recovery-clock")) {
+      throw new Error("The browser helper does not support the durable recovery clock; keep its original owner and use a paired helper");
+    }
     return await new Promise<string>((resolveResult, rejectResult) => {
         if (this.pending.has(turn.traceId)) {
           rejectResult(new Error(`Duplicate launcher browser turn: ${turn.traceId}`));
@@ -271,19 +349,32 @@ export class LauncherBrowserHelperClient {
         this.pending.set(turn.traceId, pending);
         if (turn.abortSignal) {
           const abortListener = () => {
-            if (!pending.sent) {
-              this.finishWithError(
-                turn.traceId,
-                new DOMException("ChatGPT web turn aborted", "AbortError"),
-              );
+            if (turn.nativeSubmissionIdentity && turn.abortSignal?.reason instanceof ExplicitNativeCancellation) {
+              const request = turn.abortSignal.reason.request;
+              void this.flushNativeUpdates(pending).then(async () => {
+                if(!pending.nativeUpdates){
+                  pending.preparationCancelled=true;
+                  if(!turn.onNativePreparationCancel)throw submissionIdentityUnproven("no durable preparation cancellation owner");
+                  const preparation=await turn.onNativePreparationCancel(request);
+                  if(!pending.sent){this.finishWithError(turn.traceId,new DOMException("Original preparation cancelled","AbortError"));return;}
+                  await this.send({type:"abort",id:turn.traceId,reason:"native_preparation_cancel",preparation});return;
+                }
+                if (!turn.onNativeCancelIntent) throw submissionIdentityUnproven("no durable original cancellation authority");
+                const intent = await turn.onNativeCancelIntent(request);
+                await this.send({ type: "abort", id: turn.traceId, reason: "native_interrupt", intent });
+              }).catch(() => this.abortWithLocalFailure(turn.traceId, submissionIdentityUnproven("explicit cancellation authority could not be durably acknowledged"), pending));
               return;
+            }
+            if (!pending.sent) {
+              this.finishWithError(turn.traceId,new DOMException("ChatGPT web turn aborted","AbortError"));return;
             }
             void this.send({
               type: "abort",
               id: turn.traceId,
               ...(turn.abortSignal?.reason instanceof ChatGptCompactionHandoffAccepted
                 ? { reason: "compaction_handoff_accepted" }
-                : {}),
+                : turn.abortSignal?.reason instanceof BrowserObservationDetached || retainsBrowserExecution(turn.abortSignal?.reason)
+                  ? { reason: "recovery_budget_retained" } : {}),
             }).catch(error => {
               this.finishWithError(
                 turn.traceId,
@@ -330,6 +421,11 @@ export class LauncherBrowserHelperClient {
             ...(this.helperFeatures.has("durable-observation") && (turn.onConversationRestored || turn.onObservationResumed || turn.onRecovering || turn.onConversationRecovered)
               ? { observationNotices: true } : {}),
             ...(this.helperFeatures.has("context-recovery") && turn.authorizeRecovery ? { contextRecovery: true } : {}),
+            recoveryDeadlineAt: turn.recoveryDeadlineAt,
+            recoveryState: turn.recoveryState,
+            nativeSubmissionIdentity: turn.nativeSubmissionIdentity,
+            nativeSubmissionRoundKey: turn.nativeSubmissionRoundKey,
+            nativeOperationScope: turn.nativeOperationScope,
             ...(turn.project ? { project: turn.project } : {}),
             ...(turn.sessionMode ? { sessionMode: turn.sessionMode } : {}),
             ...(turn.deferTextUntilComplete ? { deferTextUntilComplete: true } : {}),
@@ -470,10 +566,48 @@ export class LauncherBrowserHelperClient {
     const pending = this.pending.get(message.id);
     if (!pending) return;
     if (message.type === "event") {
-      if (message.event === "recovery_fence") {
-        void Promise.resolve().then(() => pending.turn.authorizeRecovery?.(message.reason) ?? false).then(allowed => {
+      if (["native_result_ready", "native_release", "native_cancel_terminal"].includes(message.event)) {
+        const frame = message as Extract<HelperMessage, { event: NativeExecutionEvent }>;
+        const update = (pending.nativeUpdates ?? Promise.resolve()).then(async () => {
+          if (!pending.turn.nativeSubmissionIdentity) throw submissionIdentityUnproven("unexpected native execution state");
+          if (frame.event === "native_result_ready") {
+            if (!pending.turn.onNativeResultReady) throw submissionIdentityUnproven("no durable original result owner");
+            await pending.turn.onNativeResultReady(frame.payload as NativeResultReady);
+            pending.nativeReady=frame.payload as NativeResultReady;
+          } else if (frame.event === "native_release") {
+            if (!pending.turn.onNativeRelease) throw submissionIdentityUnproven("no durable original release owner");
+            await pending.turn.onNativeRelease(frame.payload as NativeReleaseReceipt);
+            pending.nativeReleased=frame.payload as NativeReleaseReceipt;
+          } else {
+            if (!pending.turn.onNativeCancelTerminal) throw submissionIdentityUnproven("no durable original cancellation owner");
+            await pending.turn.onNativeCancelTerminal(frame.payload as NativeCancelTerminal);
+          }
+          if (this.pending.get(message.id) !== pending || pending.localFailure) throw submissionIdentityUnproven("original execution owner was lost before its ACK");
+          await this.send({ type:"native_execution_ack", id:message.id, event:frame.event,
+            requestId:frame.requestId, digest:frame.digest });
+        });
+        pending.nativeUpdates = update;
+        void update.catch(() => this.abortWithLocalFailure(message.id, submissionIdentityUnproven("native execution persistence or ACK failed"), pending));
+      }
+      else if (message.event === "native_submission") {
+        if(pending.preparationCancelled)return; // Its durable preparation cancellation precedes any slot ACK.
+        const update = (pending.nativeUpdates ?? Promise.resolve()).then(async () => {
+          if (!pending.turn.nativeSubmissionIdentity || !pending.turn.onNativeSubmission) throw submissionIdentityUnproven("unexpected native identity");
+          try { await pending.turn.onNativeSubmission(message.record); }
+          catch { throw submissionIdentityUnproven("durable parent identity acknowledgement failed"); }
+          if (message.record.phase === "conflict") throw submissionIdentityUnproven("the physical Send has conflicting POSTs");
+        });
+        pending.nativeUpdates = update;
+        void update.then(() => {
+          if (this.pending.get(message.id) !== pending || pending.localFailure) return;
+          return this.send({ type: "native_submission_ack", id: message.id, sendId: message.record.sendId, revision: message.record.revision, digest: nativeSubmissionDigest(message.record) });
+        }).catch(() => this.abortWithLocalFailure(message.id, submissionIdentityUnproven("native identity persistence or ACK transport failed"), pending));
+      }
+      else if (message.event === "recovery_fence") {
+        void Promise.resolve().then(() => pending.turn.authorizeRecovery?.(message.reason, message.epoch) ?? false).then(allowed => {
           if (this.pending.get(message.id) !== pending || pending.localFailure || pending.turn.abortSignal?.aborted) return;
-          return this.send({ type: "recovery_fence_ack", id: message.id, allowed });
+          return this.send({ type: "recovery_fence_ack", id: message.id, allowed,
+            requestId: message.requestId, recoveryState: pending.turn.recoveryState });
         }).catch(error => this.abortWithLocalFailure(message.id, error instanceof Error ? error : new Error(String(error)), pending));
       }
       else if (message.event === "conversation_recovered") pending.turn.onConversationRecovered?.();
@@ -481,16 +615,17 @@ export class LauncherBrowserHelperClient {
       else if (message.event === "observation_resumed") pending.turn.onObservationResumed?.();
       else if (message.event === "reconnecting") pending.turn.onRecovering?.(message.phase);
       else if (message.event === "observation_ready") {
-        if (!pending.turn.onObservationReady || !pending.turn.observationIdentity
+        if (pending.turn.nativeSubmissionIdentity && message.digest!==nativeExecutionDigest(message.checkpoint)
+          || !pending.turn.onObservationReady || !pending.turn.observationIdentity
           || JSON.stringify(message.checkpoint.identity) !== JSON.stringify(pending.turn.observationIdentity)
           || message.checkpoint.traceId !== pending.turn.traceId || message.checkpoint.modelId !== pending.turn.modelId
           || message.checkpoint.accountId !== this.config.accountId || message.checkpoint.appName !== this.config.appName) {
           this.abortWithLocalFailure(message.id, observationUnavailable("helper checkpoint identity mismatch"), pending);
           return;
         }
-        void Promise.resolve().then(() => pending.turn.onObservationReady!(message.checkpoint)).then(() => {
-          if (this.pending.get(message.id) !== pending || pending.localFailure || pending.turn.abortSignal?.aborted) return;
-          return this.send({ type: "observation_ready_ack", id: message.id });
+        void this.flushNativeUpdates(pending).then(() => pending.turn.onObservationReady!(message.checkpoint)).then(() => {
+          if (this.pending.get(message.id) !== pending || pending.localFailure) return;
+          return this.send({ type: "observation_ready_ack", id: message.id, ...(message.digest?{digest:message.digest}:{}) });
         }).catch(error => this.abortWithLocalFailure(message.id, error instanceof Error ? error : new Error(String(error)), pending));
       }
       else if (message.event === "browser_lease_acquired") pending.surfaceId = message.surfaceId;
@@ -561,6 +696,7 @@ export class LauncherBrowserHelperClient {
         ));
       }
       else if (message.event === "send_activated") {
+        if(!pending.turn.nativeSubmissionIdentity)pending.sendActivated = true;
         void Promise.resolve().then(() => pending.turn.onSendActivated?.()).then(() => {
           if (this.pending.get(message.id) !== pending || pending.localFailure || pending.turn.abortSignal?.aborted) return;
           return this.send({ type: "send_activation_ack", id: message.id });
@@ -571,7 +707,7 @@ export class LauncherBrowserHelperClient {
         ));
       }
       else if (message.event === "submitted") {
-        const submission = (pending.submission ?? Promise.resolve()).then(() => pending.turn.onSubmitted?.());
+        const submission = (pending.submission ?? Promise.resolve()).then(() => this.flushNativeUpdates(pending)).then(() => pending.turn.onSubmitted?.());
         pending.submission = submission;
         void submission.then(() => {
           if (this.pending.get(message.id) !== pending || pending.localFailure || pending.turn.abortSignal?.aborted) return;
@@ -655,11 +791,14 @@ export class LauncherBrowserHelperClient {
       return;
     }
     if (message.type === "result") {
-      void (pending.submission ?? Promise.resolve()).then(() => {
+      void (pending.submission ?? Promise.resolve()).then(() => this.flushNativeUpdates(pending)).then(() => {
         if (this.pending.get(message.id) !== pending) return;
         this.finish(message.id);
         if (pending.localFailure) pending.reject(pending.localFailure);
-        else pending.resolve(message.text);
+        else if(pending.turn.nativeSubmissionIdentity && (!pending.nativeReady || !pending.nativeReleased
+          || pending.nativeReleased.outcome!=="completed" || pending.nativeReady.answer!==message.text)) {
+          pending.reject(submissionIdentityUnproven("helper final lacks its exact durable result and physical release"));
+        } else pending.resolve(message.text);
       }, error => this.finishWithError(message.id, error instanceof Error ? error : new Error(String(error))));
     } else if (message.type === "error") {
       const error = message.status !== undefined
@@ -674,22 +813,34 @@ export class LauncherBrowserHelperClient {
           ? new DOMException(message.message, "AbortError")
           : new Error(message.message);
       this.finish(message.id);
-      pending.reject(pending.localFailure ?? error);
+      pending.reject(pending.localFailure ?? (pending.turn.nativeSubmissionIdentity && (pending.sendActivated || pending.nativeUpdates)
+        && !pending.nativeReleased && !retainsBrowserExecution(error)
+        ? submissionIdentityUnproven("helper ended before original physical release was proved") : error));
     }
   }
 
+  private async flushNativeUpdates(pending: PendingTurn): Promise<void> {
+    for (;;) {
+      const queued = pending.nativeUpdates;
+      await queued;
+      if (queued === pending.nativeUpdates) return;
+    }
+  }
   private abortWithLocalFailure(id: string, error: Error, pending: PendingTurn): void {
     if (this.pending.get(id) !== pending || pending.localFailure) return;
+    if (pending.turn.nativeSubmissionIdentity && (pending.sendActivated || pending.nativeUpdates) && !retainsBrowserExecution(error)) {
+      error = submissionIdentityUnproven("native protocol failed while physical ownership is unresolved");
+    }
     pending.localFailure = error;
-    void this.send({ type: "abort", id }).catch(sendError => {
+    void this.send({ type: "abort", id,
+      ...(retainsBrowserExecution(error)
+        ? { reason: "recovery_budget_retained" } : {}),
+    }).catch(sendError => {
       if (this.pending.get(id) !== pending) return;
-      this.finishWithError(
-        id,
-        new AggregateError(
-          [error, sendError instanceof Error ? sendError : new Error(String(sendError))],
-          "Launcher browser helper could not abort after a local protocol failure",
-        ),
-      );
+      this.finishWithError(id, retainsBrowserExecution(error)
+        ? submissionIdentityUnproven("retained helper control transport failed; original execution is unresolved")
+        : new AggregateError([error, sendError instanceof Error ? sendError : new Error(String(sendError))],
+          "Launcher browser helper could not abort after a local protocol failure"));
     });
   }
 
@@ -759,8 +910,10 @@ export class LauncherBrowserHelperClient {
     for (const id of [...this.pending.keys()]) {
       const pending = this.pending.get(id);
       if (!pending) continue;
-      if (pending.turn.observation) {
-        this.finishWithError(id, pending.localFailure ?? error); continue;
+      if (pending.turn.observation || pending.turn.nativeSubmissionIdentity && (pending.sendActivated || pending.nativeUpdates)) {
+        this.finishWithError(id, retainsBrowserExecution(pending.localFailure) ? pending.localFailure!
+          : submissionIdentityUnproven("helper exited while original browser ownership is unresolved"));
+        continue;
       }
       void notifyLauncherTurn(this.config.browserHostDescriptorPath!, {
         phase: "end",

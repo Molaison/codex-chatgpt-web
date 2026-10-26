@@ -1060,6 +1060,47 @@ describe("trusted Codex task environment continuity", () => {
     expect(store.resolve(nongitChild).cwd).toBe(root);
   });
 
+  for (const [mode, profile, network] of [
+    ["read-only", readOnlyProfileXml, false],
+    ["read-only", readOnlyProfileXml, true],
+    ["workspace-write", workspaceWriteProfileXml, true],
+  ] as const) test(`inherited ${mode} authority with network=${network} expires with its original parent across restart`, () => {
+    const stateRoot = mkdtempSync(join(tmpdir(), "codex-inherited-expiry-"));
+    temporaryRoots.push(stateRoot);
+    const statePath = join(stateRoot, "thread-environments.json");
+    const codexHome = join(stateRoot, "absent-rollouts");
+    const issuedAt = Date.now();
+    const day = 24 * 60 * 60_000;
+    let now = issuedAt;
+    const store = new ChatGptThreadEnvironmentStore(statePath, () => now, codexHome);
+    const parent = currentWire({ sandbox: mode, environmentXml: filesystemEnvironmentXml(profile)
+      .replace("</environment_context>", `<network_access>${network ? "enabled" : "disabled"}</network_access></environment_context>`) });
+    const authority = store.resolve(parent);
+    const child = structuredClone(parent);
+    const metadata = (threadId: string, parentThreadId: string) => ({
+      request_kind: "turn", thread_id: threadId, turn_id: `turn_${threadId}`,
+      parent_thread_id: parentThreadId, agent_name: `/root/${threadId}`,
+      subagent_kind: "thread_spawn", sandbox_mode: mode,
+      workspaces: { [root]: { has_changes: false } },
+    });
+    child._rawBody = {
+      client_metadata: { "x-codex-turn-metadata": JSON.stringify(metadata("child", "thread_current")) },
+      input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Read one file" }] }],
+    };
+    now += 29 * day;
+    expect(store.resolve(child)).toEqual(authority);
+    const grandchild = structuredClone(child);
+    (grandchild._rawBody as { client_metadata: Record<string, string> }).client_metadata["x-codex-turn-metadata"] =
+      JSON.stringify(metadata("grandchild", "child"));
+    expect(store.resolve(grandchild)).toEqual(authority);
+    const restarted = new ChatGptThreadEnvironmentStore(statePath, () => now, codexHome);
+    expect(restarted.resolve(child)).toEqual(authority);
+    now = issuedAt + 30 * day + 1;
+    expect(() => restarted.resolve(child)).toThrow("missing cwd");
+    expect(() => restarted.resolve(grandchild)).toThrow("missing cwd");
+    expect(() => new ChatGptThreadEnvironmentStore(statePath, () => now, codexHome).resolve(child)).toThrow("missing cwd");
+  });
+
   test("rejects forged or conflicting child lineage instead of borrowing parent authority", () => {
     const store = new ChatGptThreadEnvironmentStore();
     store.resolve(currentWire());
@@ -3009,4 +3050,55 @@ describe("authenticated read-only cwd narrowing without local client rollouts", 
       expect(() => f.store.resolve(f.request)).toThrow();
     }
   });
+});
+
+for (const agentName of [undefined, "/root/worker", "/root"] as const) test(`optional fork proof upgrade requires explicit root identity ${agentName}`, () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), "codex-proof-upgrade-"));
+  temporaryRoots.push(stateRoot);
+  const path = join(stateRoot, "thread-environments.json");
+  const codexHome = join(stateRoot, "absent-rollouts");
+  const first = splitPermissionsWire("workspace-write", "enabled");
+  new ChatGptThreadEnvironmentStore(path, () => 1000, codexHome).resolve(first.request);
+  const cache = JSON.parse(readFileSync(path, "utf8"));
+  const id = JSON.parse(first.body.client_metadata["x-codex-turn-metadata"]!).thread_id;
+  delete cache.threads[id].acceptedHistory.forkIndependent;
+  const before = JSON.stringify(cache);
+  writeFileSync(path, before);
+  const metadata = JSON.parse(first.body.client_metadata["x-codex-turn-metadata"]!);
+  Object.assign(metadata, { turn_id: "turn_upgrade", request_kind: "turn", agent_name: agentName });
+  first.body.client_metadata["x-codex-turn-metadata"] = JSON.stringify(metadata);
+  first.body.input.push({ type: "message", role: "assistant", id: "msg_prior", content: [{ type: "output_text", text: "Earlier answer" }] },
+    { type: "message", role: "user", id: "msg_next", content: [{ type: "input_text", text: "Continue" }] });
+  const reopened = new ChatGptThreadEnvironmentStore(path, () => 2000, codexHome);
+  expect(reopened.resolve(first.request).sandboxPolicy).toMatchObject({ type: "workspaceWrite", networkAccess: true });
+  if (agentName === "/root") {
+    const after = JSON.parse(readFileSync(path, "utf8"));
+    expect(after.threads[id].acceptedHistory.forkIndependent.version).toBe(1);
+    delete after.threads[id].acceptedHistory.forkIndependent;
+    expect(after).toEqual(cache);
+  } else expect(readFileSync(path, "utf8")).toBe(before);
+});
+
+for (const mismatch of ["thread", "cwd", "network", "permission"] as const) test(`optional fork proof upgrade rejects current ${mismatch} mismatch without writing authority`, () => {
+  const directory = mkdtempSync(join(tmpdir(), "codex-upgrade-reject-"));
+  temporaryRoots.push(directory);
+  const path = join(directory, "thread-environments.json");
+  const codexHome = join(directory, "absent-rollouts");
+  const f = splitPermissionsWire("workspace-write", "enabled");
+  new ChatGptThreadEnvironmentStore(path, () => 1000, codexHome).resolve(f.request);
+  const cache = JSON.parse(readFileSync(path, "utf8"));
+  const metadata = JSON.parse(f.body.client_metadata["x-codex-turn-metadata"]!);
+  delete cache.threads[metadata.thread_id].acceptedHistory.forkIndependent;
+  const before = JSON.stringify(cache);
+  writeFileSync(path, before);
+  Object.assign(metadata, { turn_id: "turn_upgrade", request_kind: "turn", agent_name: "/root" });
+  if (mismatch === "thread") metadata.thread_id = "foreign_thread";
+  if (mismatch === "cwd") metadata.cwd = root + "/foreign";
+  if (mismatch === "network") metadata.network_access = false;
+  if (mismatch === "permission") metadata.sandbox_mode = "read-only";
+  f.body.client_metadata["x-codex-turn-metadata"] = JSON.stringify(metadata);
+  f.body.input.push({ type: "message", role: "assistant", id: "msg_prior", content: [{ type: "output_text", text: "Earlier answer" }] },
+    { type: "message", role: "user", id: "msg_next", content: [{ type: "input_text", text: "Continue" }] });
+  expect(() => new ChatGptThreadEnvironmentStore(path, () => 2000, codexHome).resolve(f.request)).toThrow();
+  expect(readFileSync(path, "utf8")).toBe(before);
 });

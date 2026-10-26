@@ -1,3 +1,4 @@
+import { QaHealthAdmission, type HostAssignmentAdmission } from "./qa-health";
 import { parseChatGptSessionEffort as parseQaSessionEffort } from "./chatgpt-session-effort";
 export { parseChatGptSessionEffort as parseQaSessionEffort } from "./chatgpt-session-effort";
 import { ReleaseAdmission, releaseTrackedResponse, type ReleaseControlConfig } from "./release-admission";
@@ -11,7 +12,7 @@ import { chmodSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { gunzipSync, zstdDecompressSync } from "node:zlib";
 
-export interface QaPoolAccount { id: string; origin: string; models: string[]; enabled?: boolean; sessionModes?: boolean; conversationStoreDirectory?: string; browserHostDescriptorPath?: string }
+export interface QaPoolAccount { id: string; origin: string; models: string[]; enabled?: boolean; sessionModes?: boolean; conversationStoreDirectory?: string; browserHostDescriptorPath?: string; runtimeControlTokenFile?: string; qaHealthPinPath?: string }
 export interface QaPoolConfig {
   host: string; port: number; databasePath: string;
   releaseControl?: ReleaseControlConfig;
@@ -192,16 +193,20 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
   if (new Set(clients.map(client => client.digest.toString("hex"))).size !== clients.length) {
     db.close(); throw new Error("Each QA pool client must have a distinct API key");
   }
+  const health = new QaHealthAdmission(config.accounts.filter(a => a.enabled !== false));
+  db.exec("CREATE TABLE IF NOT EXISTS qa_health_admissions (session_hash TEXT PRIMARY KEY, receipt_json TEXT NOT NULL)");
+  const recordHealthAdmission = db.query("INSERT INTO qa_health_admissions VALUES (?, ?)");
   const failure = (status: number, code: string, message: string) => Response.json({ error: { code, type: "qa_pool_error", message } }, { status });
-  const select = db.transaction((hash: string, model: string, route?: NonNullable<QaPoolConfig["projectRoutes"]>[number]) => {
+  const select = db.transaction((hash: string, model: string, selected: QaPoolAccount,
+    consumeAdmission: () => HostAssignmentAdmission | undefined, route?: NonNullable<QaPoolConfig["projectRoutes"]>[number]) => {
     const owner = find.get(hash);
     if (owner) return owner;
-    const counts = new Map(count.all().map(row => [row.account_id, row.n]));
-    const eligible = config.accounts.filter(account => account.enabled !== false && account.models.includes(model)
-      && (!route || account.id === route.accountId))
-      .sort((a, b) => (counts.get(a.id) ?? 0) - (counts.get(b.id) ?? 0) || a.id.localeCompare(b.id));
-    if (!eligible[0]) return undefined;
-    insert.run(hash, eligible[0].id, new Date().toISOString(), route?.projectId ?? null, route?.displayName ?? route?.name ?? null);
+    if (closed || admission?.draining || admission?.sealed || selected.enabled === false || !selected.models.includes(model)
+      || route && selected.id !== route.accountId) return undefined;
+    const receipt = consumeAdmission();
+    if (!receipt || receipt.assignment.sessionHash !== hash || receipt.runtime.accountId !== selected.id) return undefined;
+    insert.run(hash, selected.id, new Date().toISOString(), route?.projectId ?? null, route?.displayName ?? route?.name ?? null);
+    recordHealthAdmission.run(hash, JSON.stringify(receipt));
     return find.get(hash)!;
   });
   async function fetchRequest(request: Request, admitted = true): Promise<Response> {
@@ -226,7 +231,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
       }
     }
     const pathname = identityPath?.[1] ?? prefix?.[2] ?? url.pathname;
-    if (request.method === "GET" && url.pathname === "/healthz") return Response.json({ status: "ok", persistentSessions: true, accounts: config.accounts.filter(a => a.enabled !== false).length });
+    if (request.method === "GET" && url.pathname === "/healthz") return Response.json({ status: "ok", persistentSessions: true, health: health.snapshot(), accounts: config.accounts.filter(a => a.enabled !== false).length });
     if (request.method === "GET" && pathname === "/v1/models") {
       const models = route?.modelAliases ? Object.keys(route.modelAliases) : [...new Set(config.accounts.filter(a => a.enabled !== false && (!route || a.id === route.accountId)).flatMap(a => a.models))];
       const catalog = config.modelCatalogPath
@@ -336,7 +341,31 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
       record(normalized.payload.client_metadata)["x-codex-turn-metadata"] = JSON.stringify({...paperMetadata,thread_id:normalized.thread});
     }
     const hash = createHash("sha256").update(JSON.stringify(["qa-pool/v1", sessionScope, normalized.thread])).digest("hex");
-    const owner = admitted ? select(hash, model, route) : find.get(hash);
+    let owner = find.get(hash);
+    if (!owner && admitted) {
+      const candidates = config.accounts.filter(a => a.enabled !== false && a.models.includes(model) && (!route || a.id === route.accountId));
+      if (!candidates.length) return failure(400, "model_unavailable", "No account supports the requested model");
+      const checks = await Promise.all(candidates.map(async a => ({ id: a.id, ready: await health.check(a) })));
+      if (closed) return failure(503, "pool_closed", "The QA pool is closed");
+      if (admission?.draining || admission?.sealed) return failure(503, "pool_draining", "New work is fenced; no new message was sent");
+      // All candidate/UI waits finish before choosing one account. A probe is
+      // selection evidence only; it is not permission to commit an owner.
+      owner = find.get(hash);
+      if (!owner) {
+        const counts = new Map(count.all().map(row => [row.account_id, row.n]));
+        const selected = candidates.filter(a => checks.some(c => c.id === a.id && c.ready) && health.eligibleNow(a))
+          .sort((a, b) => (counts.get(a.id) ?? 0) - (counts.get(b.id) ?? 0) || a.id.localeCompare(b.id))[0];
+        if (selected) {
+          const consume = await health.authorizeSelected(selected, hash);
+          if (closed) return failure(503, "pool_closed", "The QA pool is closed");
+          // A concurrent caller may have committed the original mapping while
+          // this request waited. Preserve it even if our fresh admission failed.
+          try { owner = find.get(hash) ?? (consume ? select(hash, model, selected, consume, route) : undefined) ?? null; }
+          catch { return failure(503, "account_admission_unavailable", "The account admission could not be persisted; no new message was sent"); }
+        }
+      }
+      if (!owner) return failure(503, "account_health_unavailable", "No configured account has current authenticated health proof; no new message was sent");
+    }
     if (!owner && !admitted) return failure(503, "pool_draining", "New work is fenced; no new message was sent");
     if (!owner) return failure(400, "model_unavailable", "No account supports the requested model");
     const account = config.accounts.find(a => a.id === owner.account_id);
@@ -647,7 +676,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
     }
   }, close: () => {
     if (admission && !admission.status().safe_to_stop) throw Error("Pool native work is not drained; preserve original owner");
-    closed = true; clearInterval(sweep); for (const stop of shutdownObservers) stop(); shutdownObservers.clear(); db.close(); } };
+    closed = true; health.close(); clearInterval(sweep); for (const stop of shutdownObservers) stop(); shutdownObservers.clear(); db.close(); } };
 }
 
 if (import.meta.main) {

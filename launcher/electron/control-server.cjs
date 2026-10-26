@@ -3,6 +3,7 @@ const { randomBytes, timingSafeEqual } = require("node:crypto");
 const { releaseRetainedConversation } = require("./retained-turn-release.cjs");
 
 const MAX_BODY_BYTES = 16 * 1024;
+const MAX_NATIVE_WATCH_BODY_BYTES = 256 * 1024;
 const MAX_MANUAL_START_BODY_BYTES = 3 * 1024 * 1024;
 const MANUAL_SENT_OBSERVER_TIMEOUT_MS = 35_000;
 
@@ -96,6 +97,8 @@ class BrowserControlServer {
       return;
     }
     const isTurn = request.url === "/v1/turn/observe-ready"
+      || request.url === "/v1/turn/native-submission-watch"
+      || request.url === "/v1/turn/native-release-read"
       || request.url === "/v1/turn/observe"
       || request.url === "/v1/turn/start"
       || request.url === "/v1/turn/heartbeat"
@@ -104,6 +107,9 @@ class BrowserControlServer {
       || request.url === "/v1/turn/end";
     const isTurnRelease = request.url === "/v1/turn/release";
     const isStandbyStatus = request.url === "/v1/browser/standby";
+    const isHealthRead = request.url === "/v1/health/read";
+    const isHealthAdmission = request.url === "/v1/health/admit";
+    const isHealthMaintenance = request.url === "/v1/health/maintenance";
     const isSessionInspect = request.url === "/v1/session/inspect";
     const isProxyResolution = request.url === "/v1/network/resolve-proxy";
     const manualAction = new Map([
@@ -114,15 +120,28 @@ class BrowserControlServer {
       ["/v1/manual/end", "end"],
       ["/v1/manual/cancel", "cancel"],
     ]).get(request.url);
-    if (request.method !== "POST" || (!isTurn && !isTurnRelease && !isSessionInspect && !isProxyResolution && !isStandbyStatus && !manualAction)) {
+    if (request.method !== "POST" || (!isHealthRead && !isHealthAdmission && !isHealthMaintenance && !isTurn && !isTurnRelease && !isSessionInspect && !isProxyResolution && !isStandbyStatus && !manualAction)) {
       writeJson(response, 404, { error: "not_found" });
       return;
     }
+    let nativeWatchDiagnostic;
     try {
       const body = await readJson(
         request,
-        manualAction === "start" ? MAX_MANUAL_START_BODY_BYTES : MAX_BODY_BYTES,
+        manualAction === "start" ? MAX_MANUAL_START_BODY_BYTES
+          : ["/v1/turn/native-submission-watch", "/v1/turn/native-release-read", "/v1/turn/observe-ready", "/v1/turn/observe"].includes(request.url)
+            ? MAX_NATIVE_WATCH_BODY_BYTES : MAX_BODY_BYTES,
       );
+      if (request.url === "/v1/turn/native-submission-watch") {
+        nativeWatchDiagnostic = {
+          phase: "native-submission-watch",
+          ...(typeof body?.traceId === "string" && /^[a-f0-9]{12}$/.test(body.traceId) ? { traceId: body.traceId } : {}),
+          ...(typeof body?.sendId === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(body.sendId)
+            ? { sendId: body.sendId } : {}),
+          ...(["start", "read", "stage-complete", "final-complete", "cancel-request", "cancel-terminal"].includes(body?.action)
+            ? { action: body.action } : {}),
+        };
+      }
       if (isProxyResolution) {
         const url = new URL(body?.url);
         if (url.origin !== "https://chatgpt.com" || url.username || url.password
@@ -139,6 +158,18 @@ class BrowserControlServer {
       const preferences = this.getPreferences();
       const host = this.getBrowserHost();
       if (!host) throw new Error("browser host is not ready");
+      if (isHealthAdmission) {
+        writeJson(response, 200, host.admitHealthAssignment(body));
+        return;
+      }
+      if (isHealthRead) {
+        writeJson(response, 200, await host.readPassiveHealth(body));
+        return;
+      }
+      if (isHealthMaintenance) {
+        writeJson(response, 200, host.reportHealthMaintenance(body));
+        return;
+      }
       if (isStandbyStatus) {
         writeJson(response, 200, {
           standbyReady: host.standbyView?.ready === true,
@@ -306,9 +337,20 @@ class BrowserControlServer {
         writeJson(response, 200, { ok: true, ...release });
         return;
       }
+      if (request.url === "/v1/turn/native-release-read") {
+        const nativeRelease = host.nativeReleaseRead(body);
+        writeJson(response, 200, { ok: true, nativeRelease });
+        return;
+      }
+      if (request.url === "/v1/turn/native-submission-watch") {
+        if (host.browserInteractionMode() === "manual") throw new Error("Automatic browser interaction is disabled");
+        const nativeSubmissionWatch = await host.nativeSubmissionWatch(body);
+        writeJson(response, 200, { ok: true, nativeSubmissionWatch });
+        return;
+      }
       if (request.url === "/v1/turn/observe-ready" || request.url === "/v1/turn/observe") {
         if (host.browserInteractionMode() === "manual") throw new Error("Automatic browser interaction is disabled");
-        host.observeTurn(body.traceId, body.helperPid, body.surfaceId, body.observation,
+        await host.observeTurnWithNativeWatch(body.traceId, body.helperPid, body.surfaceId, body.observation,
           request.url === "/v1/turn/observe-ready");
         writeJson(response, 200, { ok: true });
         return;
@@ -365,7 +407,7 @@ class BrowserControlServer {
         writeJson(response, 200, { ok: true });
         return;
       } else {
-        if (!['completed', 'failed', 'aborted'].includes(body.status)) throw new Error("turn status is invalid");
+        if (!['completed', 'cancelled', 'failed', 'aborted'].includes(body.status)) throw new Error("turn status is invalid");
         const release = await host.endTurn(
           body.traceId,
           body.helperPid,
@@ -374,7 +416,8 @@ class BrowserControlServer {
           body.message,
           body.retain === true,
           body.connectorBound === true,
-          ...(body.surfaceId === undefined ? [] : [body.surfaceId]),
+          body.surfaceId,
+          body.nativeRelease,
         );
         this.logger.info("browser.turn_ended", { traceId: body.traceId, status: body.status });
         writeJson(response, 200, { ok: true, ...release });
@@ -382,7 +425,13 @@ class BrowserControlServer {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn("browser.control_rejected", { message });
+      this.logger.warn("browser.control_rejected", { message,
+        ...(nativeWatchDiagnostic ? {
+          ...nativeWatchDiagnostic,
+          ...(["watch_state_rejected", "owner_fence_rejected", "request_schema_rejected", "bootstrap_unready", "turn_state_rejected", "scope_rejected"]
+            .includes(error?.nativeWatchReason) ? { reason: error.nativeWatchReason } : {}),
+        } : {}),
+      });
       const writerConflict = error?.code === "browser_writer_conflict";
       const cancelled = error?.code === "turn_cancelled";
       const retainedUnavailable = error?.code === "retained_conversation_unavailable";

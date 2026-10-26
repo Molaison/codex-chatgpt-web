@@ -91,18 +91,18 @@ test("Full-mode Pro prompts pass one stable turn token directly to native action
   expect(resume).toBeGreaterThan(envelopeEnd);
   expect(tokenMatches).toHaveLength(1);
   expect(compiled.text).toContain("[retired turn handle]");
-  expect(transportOnly).toContain("For local work required by the task, use the attached Codex Native tools directly according to their declared descriptions and schemas.");
-  expect(transportOnly).toContain("Call a Codex Native tool only when the latest active request requires a local effect or fresh local evidence that is not already present in the supplied context; otherwise answer the request directly without a tool call.");
-  expect(transportOnly).toContain("Use actual Codex Native results as evidence for local observations and effects.");
+  expect(transportOnly).toContain("attached tools' actual descriptions and schemas");
+  expect(transportOnly).toContain("existing evidence does not require another call");
+  expect(transportOnly).toContain("Keep actual tool results associated with their call IDs");
   expect(transportOnly).toContain("A Codex Native MCP tool result may require context compaction. If it does, follow the compaction instructions in that result exactly.");
-  expect(transportOnly).toContain("After a deterministic tool failure, update the working hypothesis from that result");
-  expect(transportOnly).toContain("do not repeat the same call unless its inputs or observable state changed.");
-  expect(transportOnly).toContain("Continue using the available tools until the requested work is complete and verified.");
+  expect(transportOnly).not.toContain("After a deterministic tool failure");
+  expect(transportOnly).toContain("unknown outcomes never authorize redispatch");
+  expect(transportOnly).not.toContain("Continue using the available tools until");
   expect(transportOnly).toContain("Write the user-facing final answer only after the last required tool result has settled.");
-  expect(transportOnly).toContain(`The task context is complete. Pass turn_token ${token} unchanged to every Codex Native call in this response, including continuations after tool results; do not expose it in the answer. Execute the latest active user request now.`);
+  expect(transportOnly).toContain(`Pass turn_token ${token} unchanged to every Codex Native call in this response, including continuations after tool results; do not expose it in the answer.`);
   expect(transportOnly).not.toMatch(/codex_bind_turn|binding_id|outer_tool_gateway|command_tool/);
   expect(transportOnly).not.toMatch(/codex_exec|codex_write_stdin|codex_apply_patch|codex_view_image|codex_tool_inventory|codex\.control\.turn_complete/);
-  expect(transportOnly).toContain("Do not claim a safety or permission block without an explicit tool result or platform error supporting it.");
+  expect(transportOnly).toContain("Without a current tool result or platform error, the execution outcome and cause remain unconfirmed");
   expect(transportOnly).not.toMatch(/expired|invalid|revoked|blocked|security layer|permission gate/i);
   expect(compiled.text).not.toContain("CODEX_INTERNAL_CONTEXT_COMPACT");
   expect(compiled.text).not.toContain("internally compacts this response");
@@ -115,7 +115,7 @@ test("Pro preserves the same native Codex delegation contract as Extra High", ()
   const extraHigh = compileChatGptWebPrompt(request("xhigh"), capabilities, token);
 
   for (const compiled of [pro, extraHigh]) {
-    expect(compiled.text).toContain("For local work required by the task, use the attached Codex Native tools directly according to their declared descriptions and schemas.");
+    expect(compiled.text).toContain("attached tools' actual descriptions and schemas");
     expect(compiled.text).toContain(`Pass turn_token ${token} unchanged to every Codex Native call in this response`);
     expect(compiled.text).not.toContain("Complete this task directly in the current parent response.");
     expect(compiled.text).not.toContain("Do not create, spawn, delegate to, or wait on sub-agents");

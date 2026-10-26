@@ -1,6 +1,7 @@
+const { readHealthPin } = require("./health-identity.cjs");
 const fs = require("node:fs");
 const path = require("node:path");
-const { createHash, randomBytes } = require("node:crypto");
+const { createHash, randomBytes, randomUUID } = require("node:crypto");
 const { clipboard, WebContentsView, powerMonitor, powerSaveBlocker, shell } = require("electron");
 const { writePrivateFileAtomic } = require("./atomic-file.cjs");
 const {
@@ -11,8 +12,10 @@ const { validateConnectorName } = require("./connector-identity.cjs");
 const { processRunning } = require("./process-tree.cjs");
 const { validatePasskeyLoginState } = require("./passkey-login-state.cjs");
 const { configureChatGptAnnouncementDismissal } = require("./browser-announcements.cjs");
+const { PassiveSessionHealth, hostHealthIdentity, sameHealthHost, HOST_VERSION, HOST_CLOSURE_DIGEST } = require("./passive-session-health.cjs");
 const { readChatGptAuthSession } = require("./chatgpt-auth-session.cjs");
 const { runBrowserPageScript } = require("./browser-page-script.cjs");
+const { NativeSubmissionObserver, validSlot, sameBinding, validScope, sameScope, sameHost, sameLease } = require("./native-submission-observer.cjs");
 const {
   refreshTurnLeasesAfterSuspension,
   shouldBlockSleepForTurns,
@@ -348,6 +351,9 @@ class BrowserHost {
     clipboardApi = clipboard,
     getBrowserInteractionMode = () => "automatic",
     getUseSavedChats = () => false,
+    getAccountId = () => undefined,
+    getHealthPinPath = () => undefined,
+    publishHealth = () => {},
   }) {
     if (typeof getConnectorName !== "function") {
       throw new Error("Browser host connector-name resolver is unavailable");
@@ -379,6 +385,9 @@ class BrowserHost {
     this.clipboard = clipboardApi;
     this.getBrowserInteractionMode = getBrowserInteractionMode;
     this.getUseSavedChats = getUseSavedChats;
+    this.getAccountId = getAccountId;
+    this.getHealthPinPath = getHealthPinPath;
+    this.publishHealth = publishHealth;
     this.runBrowserHelperOperation = runBrowserHelperOperation;
     this.verifyConnectorWithBrowserHelper = verifyConnectorWithBrowserHelper;
     this.surfaceId = randomBytes(24).toString("base64url");
@@ -386,6 +395,7 @@ class BrowserHost {
     this.surfaceActive = true;
     this.turnTabs = new Map();
     this.closedTurnOwners = new Map();
+    this.nativeReleaseReceipts = new Map();
     this.userCancelledTurnOwners = new Map();
     this.manualTerminalSignals = new Map();
     this.manualCompletionSignals = new Map();
@@ -706,13 +716,59 @@ class BrowserHost {
     this.bindShellZoomShortcuts(view.webContents);
     this.bindTurnContents(tab);
     if (standby) {
+      let documentChanged = false;
+      const onClaimNavigation = (_event, _url, inPlace, mainFrame) => {
+        if (mainFrame === true && !inPlace) documentChanged = true;
+      };
+      const onClaimRendererGone = () => { documentChanged = true; };
+      const assertClaim = () => {
+        signal?.throwIfAborted();
+        if (documentChanged || this.turnTabs.get(id) !== tab || tab.status !== "running" || tab.surfaceId !== surfaceId
+          || tab.helperPid !== helperPid || tab.traceId !== traceId || tab.view !== view
+          || view.webContents.isDestroyed() || view.webContents.getURL() !== "https://chatgpt.com/") {
+          throw browserWriterConflict("The claimed standby document is no longer ready");
+        }
+      };
+      view.webContents.on("did-start-navigation", onClaimNavigation);
+      view.webContents.on("render-process-gone", onClaimRendererGone);
+      let onClaimAbort;
+      const aborted = new Promise((_, reject) => {
+        onClaimAbort = () => reject(signal.reason);
+        signal?.addEventListener("abort", onClaimAbort, { once: true });
+      });
       try {
+        await Promise.race([(async () => {
         signal?.throwIfAborted();
         await this.markTurnTabSurface(tab);
-        signal?.throwIfAborted();
+        assertClaim();
+        // The standby completed loading before bindTurnContents installed its listeners.
+        // Revalidate its current owned document; no later load event will grant readiness.
+        const ready = await view.webContents.executeJavaScript(`(() => {
+          const p = [...document.querySelectorAll(${JSON.stringify(COMPOSER_SELECTOR)})].find(p => p.getClientRects().length > 0);
+          return location.href === 'https://chatgpt.com/' && document.readyState !== 'loading'
+            && globalThis.__CODEX_WEB_GPT_SURFACE_ID__ === ${JSON.stringify(surfaceId)}
+            && !!p && p.getAttribute('contenteditable') === 'true' && !p.textContent.trim()
+            && !document.querySelector('[data-message-author-role]');
+        })()`);
+        assertClaim();
+        if (ready !== true) {
+          throw browserWriterConflict("The claimed standby document is no longer ready");
+        }
+        })(), aborted]);
+        // The abort/document event may run after the inner await's proof but before
+        // Promise.race returns. Commit readiness only at this final synchronous fence.
+        assertClaim();
+        tab.url = "https://chatgpt.com/";
+        tab.loading = false;
+        tab.bootstrapReady = true;
+        tab.rendererReady = true;
       } catch (error) {
-        this.removeTurnTab(tab, true);
+        if (this.turnTabs.get(id) === tab) this.removeTurnTab(tab, true);
         throw error;
+      } finally {
+        signal?.removeEventListener("abort", onClaimAbort);
+        view.webContents.off("did-start-navigation", onClaimNavigation);
+        view.webContents.off("render-process-gone", onClaimRendererGone);
       }
       tab.initializingSurface = false;
       this.logger.info("browser.standby_claimed", { traceId, tabId: id, ageMs: Date.now() - standby.startedAt });
@@ -1415,8 +1471,82 @@ class BrowserHost {
     await this.waitForAuthenticated(60_000);
   }
 
+  healthIdentity() { return hostHealthIdentity(this); }
+
+  async readPassiveHealth(request) {
+    if (typeof request?.accountId !== "string" || !request.accountId
+      || request.accountId !== this.getAccountId?.()
+      || !sameHealthHost(request.expectedHost, this.healthIdentity())) throw new Error("Health binding mismatch");
+    this.passiveHealth ??= new PassiveSessionHealth({
+      identity: () => ({ host: this.healthIdentity(), accountId: this.getAccountId() }),
+      pin: () => readHealthPin(this.getHealthPinPath?.(), { accountId: this.getAccountId(), host: this.healthIdentity() }),
+      session: () => this.view.webContents.session,
+      available: () => !this.destroyed && !this.view.webContents.isDestroyed()
+        && !this.primaryRendererRecoveryNeeded && !this.primaryRendererRecovery
+        && !this.reauthenticationRequired && !this.primaryNavigationError
+        && browserInteractionModeFor(this) === "automatic"
+        && !(this.nativeReleaseCleanups?.size > 0),
+      timeoutMs: CHATGPT_AUTH_SESSION_TIMEOUT_MS,
+    });
+    return this.passiveHealth.read();
+  }
+
+  reportHealthMaintenance(request) {
+    if (request?.accountId !== this.getAccountId?.() || !request.accountId
+      || !sameHealthHost(request.expectedHost, this.healthIdentity())
+      || !["ready", "signed_out", "unknown", "runtime_unavailable", "binding_mismatch", "draining"].includes(request.state)) {
+      throw new Error("Health maintenance binding mismatch");
+    }
+    return this.publishHealth({ accountId: request.accountId, state: request.state });
+  }
+
+  admitHealthAssignment(request) {
+    const { assignment, runtime, expectedProof } = request ?? {};
+    if (request?.accountId !== this.getAccountId?.() || !request.accountId
+      || !sameHealthHost(request.expectedHost, this.healthIdentity())
+      || !sameHealthHost(expectedProof?.host, request.expectedHost) || expectedProof?.accountId !== request.accountId
+      || !assignment || !/^[a-f0-9-]{36}$/.test(assignment.admissionId) || !/^[a-f0-9]{64}$/.test(assignment.sessionHash)
+      || runtime?.accountId !== request.accountId || runtime.mode !== "browser-only"
+      || !/^[a-f0-9-]{36}$/.test(runtime.instanceId) || !Number.isSafeInteger(runtime.pid) || runtime.pid < 1
+      || typeof runtime.version !== "string" || !runtime.version || !/^[a-f0-9]{64}$/.test(runtime.bundleId)) {
+      throw new Error("Selected health assignment binding mismatch");
+    }
+    const identity = { host: this.healthIdentity(), accountId: this.getAccountId() };
+    const admittedAt = Date.now();
+    this.healthAssignments ??= new Map();
+    for (const [id, receipt] of this.healthAssignments) {
+      if (receipt.host.expiresAt <= admittedAt) this.healthAssignments.delete(id);
+    }
+    const prior = this.healthAssignments.get(assignment.admissionId);
+    if (prior) {
+      if (prior.assignment.sessionHash !== assignment.sessionHash
+        || JSON.stringify(prior.runtime) !== JSON.stringify(runtime) || JSON.stringify(prior.host) !== JSON.stringify(expectedProof)) {
+        throw new Error("Selected health assignment identity conflict");
+      }
+      return structuredClone(prior); // Same admitted metadata, never a new observation.
+    }
+    if (this.healthAssignments.size >= 1024) throw new Error("Selected health assignment capacity unavailable");
+    const current = this.passiveHealth?.current(identity);
+    // No await, auth refresh or UI callback between observing cookieRevision and
+    // issuing this decision. Cookie events before this boundary revoke the proof;
+    // later events fence later assignments, not this already admitted owner.
+    if (!current || current.state !== "ready" || current.observedAt > admittedAt || current.expiresAt <= admittedAt
+      || JSON.stringify(current) !== JSON.stringify(expectedProof)
+      || current.principalDigest !== readHealthPin(this.getHealthPinPath?.(), identity)) {
+      throw new Error("Selected health assignment proof is no longer current");
+    }
+    const receipt = { version: 1, assignment: { admissionId: assignment.admissionId, sessionHash: assignment.sessionHash },
+      runtime: { instanceId: runtime.instanceId, pid: runtime.pid, version: runtime.version, bundleId: runtime.bundleId,
+        accountId: runtime.accountId, mode: runtime.mode }, host: current, admittedAt };
+    this.healthAssignments.set(assignment.admissionId, receipt);
+    return structuredClone(receipt);
+  }
+
   bindAuthenticationChanges() {
     this.authenticationCookieListener = (_event, cookie, cause, removed) => {
+      if (cookie.httpOnly && cookie.domain.replace(/^\./, "") === "chatgpt.com") this.passiveHealth?.invalidate();
+      // A passive auth request may renew cookies. It cannot initiate the legacy page probe.
+      if (this.passiveHealth?.pending) return;
       // HttpOnly cookie changes are a reason to check, never proof of sign-in.
       // Ignore analytics cookies and other sites in the shared browser partition.
       // Session verification can renew its own cookies. Do not recursively verify
@@ -1595,6 +1725,7 @@ class BrowserHost {
           ]
         : [homeTab],
       maxTabs: MAX_BROWSER_TABS,
+      nativeReleaseCleanup: this.nativeReleaseCleanupSnapshot(),
     };
   }
 
@@ -1649,7 +1780,7 @@ class BrowserHost {
     const c = observation;
     const fail = () => { const error = new Error("The original read-only observation lease is unavailable");
       error.code = "browser_writer_conflict"; throw error; };
-    if (!tab || !c || c.version !== 1 || !c.identity || !c.host || !c.lease || !c.conversation || !c.submission
+    if (!tab || !c || ![1, 2].includes(c.version) || !c.identity || !c.host || !c.lease || !c.conversation || !c.submission
       || tab.interactionMode !== "automatic" || tab.status !== "running" || tab.failedAt !== undefined
       || tab.authenticationRequired || this.userCancelledTurnOwners.has(traceId)
       || tab.view.webContents.isDestroyed() || c.traceId !== traceId || c.host.pid !== process.pid
@@ -1658,14 +1789,330 @@ class BrowserHost {
       || c.lease.targetId !== tab.view.webContents.getOrCreateDevToolsTargetId()
       || c.conversation.key !== tab.conversationKey || savedConversationId(c.conversation.url) !== savedConversationId(tab.view.webContents.getURL())
       || !savedConversationId(c.conversation.url)) fail();
+    if (c.version === 1 && tab.nativeSubmissionWatch) fail();
+    if (c.version === 2) {
+      const native = c.submission.native;
+      if (c.toolChannel || c.submission.receipt !== undefined || !native || native.version !== 1
+        || native.phase !== "accepted" || !native.post || !native.dom
+        || !Number.isSafeInteger(native.revision) || native.revision < 4
+        || native.conflict !== undefined
+        || !["same-bound-assistant-progress", "same-bound-assistant-completed"].includes(native.dom.proof)
+        || !Number.isSafeInteger(native.post.observedAt) || native.post.observedAt <= 0
+        || !Number.isSafeInteger(native.dom.observedAt) || native.dom.observedAt < native.post.observedAt
+        || !/^[a-f0-9-]{36}$/i.test(native.post.userMessageId)
+        || !/^[a-f0-9]{64}$/.test(native.post.payloadSha256)
+        || native.dom.acceptedUserIdentity !== `group:user:${native.post.userMessageId}`
+        || native.dom.assistantIdentity !== `group:assistant:${native.post.userMessageId}`
+        || native.dom.acceptedUserIdentity !== c.submission.acceptedUserIdentity
+        || native.dom.assistantIdentity !== c.submission.assistantIdentity
+        || JSON.stringify(native.initialTurnIdentities) !== JSON.stringify(c.submission.initialTurnIdentities)
+        || JSON.stringify(native.dom.acceptedTurnIdentities) !== JSON.stringify(c.submission.acceptedTurnIdentities)) fail();
+      const watch = tab.nativeSubmissionWatch;
+      watch?.checkContents();
+      const live = watch?.snapshot();
+      const saved = native.hostWatch;
+      if (!sameScope(watch?.scope, { ...watch?.scope, operationId: c.identity.operationId,
+          executionKey: c.identity.executionKey, roundKey: c.identity.roundKey })) fail();
+      if (!live || !saved || native.sendId !== live.sendId || !live.active || live.gap || live.conflict
+        || live.currentSendId !== native.sendId || live.binding?.stage.kind !== "final"
+        || !sameBinding(native.binding, live.binding) || !sameBinding(saved.binding, live.binding)
+        || native.binding.roundKey !== c.identity.roundKey
+        || !live.flush.stable || live.flush.pending !== 0 || live.postCount !== 1 || live.identities.length !== 1
+        || live.boundConversationId !== savedConversationId(c.conversation.url)
+        || (native.expectedConversationId !== undefined
+          && (native.expectedConversationId !== live.initialConversationId
+            || native.expectedConversationId !== savedConversationId(c.conversation.url)))
+        || saved.version !== 1 || saved.sendId !== live.sendId || saved.traceId !== traceId
+        || saved.currentSendId !== live.currentSendId || saved.totalPostCount !== live.totalPostCount
+        || JSON.stringify(saved.segments) !== JSON.stringify(live.segments)
+        || JSON.stringify(saved.latePosts) !== JSON.stringify(live.latePosts)
+        || saved.sessionEpoch !== live.sessionEpoch || saved.documentEpoch !== live.documentEpoch
+        || !Number.isSafeInteger(saved.seq) || saved.seq < 0 || saved.seq > live.seq || !saved.active || saved.gap !== false || saved.conflict !== false
+        || saved.postCount !== 1 || saved.flush?.stable !== true || saved.flush?.pending !== 0
+        || saved.flush?.throughSeq !== saved.seq
+        || JSON.stringify(saved.host) !== JSON.stringify(live.host)
+        || JSON.stringify(saved.lease) !== JSON.stringify(live.lease)
+        || JSON.stringify(saved.identities) !== JSON.stringify(live.identities)) fail();
+      const post = live.identities[0];
+      for (const key of ["userMessageId", "payloadSha256", "parentMessageId", "conversationId", "action"]) {
+        if (JSON.stringify(native.post[key]) !== JSON.stringify(post[key])) fail();
+      }
+      const user = native.dom.acceptedUserIdentity, assistant = native.dom.assistantIdentity;
+      if (!Array.isArray(native.initialTurnIdentities) || !Array.isArray(native.dom.acceptedTurnIdentities)
+        || native.initialTurnIdentities.includes(user) || native.initialTurnIdentities.includes(assistant)
+        || new Set(native.dom.acceptedTurnIdentities).size !== native.dom.acceptedTurnIdentities.length
+        || !native.dom.acceptedTurnIdentities.includes(user) || !native.dom.acceptedTurnIdentities.includes(assistant)
+        || native.dom.acceptedTurnIdentities.some(id => !native.initialTurnIdentities.includes(id)
+          && id !== user && id !== assistant)) fail();
+    }
     const digest = createHash("sha256").update(JSON.stringify(c)).digest("hex");
     if (register) {
       if (helperPid !== tab.helperPid || (tab.observationDigest && tab.observationDigest !== digest)) fail();
       tab.observationDigest = digest;
+      if (c.version === 2) tab.nativeObservationSendId = c.submission.native.sendId;
     } else if (tab.observationDigest !== digest) fail();
     // Observation does not rotate the surface, replace helperPid, activate a writer or navigate.
     tab.lastHeartbeatAt = Date.now();
     return { ok: true };
+  }
+
+  async observeTurnWithNativeWatch(traceId, helperPid, surfaceId, observation, register = false) {
+    const tab = [...this.turnTabs.values()].find(candidate => candidate.traceId === traceId);
+    if (observation?.version === 2) await tab?.nativeSubmissionWatch?.read();
+    return this.observeTurn(traceId, helperPid, surfaceId, observation, register);
+  }
+
+  async nativeSubmissionWatch(request) {
+    const { traceId, helperPid, surfaceId, sendId, action, host, targetId, observation } = request;
+    const tab = [...this.turnTabs.values()].find(candidate => candidate.traceId === traceId);
+    const fail = (reason = "watch_state_rejected") => {
+      const error = browserWriterConflict("The original native submission watch is unavailable");
+      error.nativeWatchReason = reason;
+      throw error;
+    };
+    const ownerHelperPid = tab?.helperPid;
+    const valid = () => tab && this.turnTabs.get(tab.id) === tab && host && host.pid === process.pid
+      && host.instanceId === this.observationInstanceId && host.profile === this.profile && host.partition === this.partition
+      && tab.traceId === traceId && tab.helperPid === ownerHelperPid
+      && tab.interactionMode === "automatic" && tab.leaseFencing === true
+      && tab.surfaceId === surfaceId && !tab.view.webContents.isDestroyed()
+      && targetId === tab.view.webContents.getOrCreateDevToolsTargetId()
+      && !tab.authenticationRequired && !this.userCancelledTurnOwners.has(traceId);
+    if (!valid()) fail("owner_fence_rejected");
+    if (!["start", "read", "stage-complete", "final-complete", "cancel-request", "cancel-terminal"].includes(action) || !Number.isSafeInteger(helperPid) || helperPid < 1
+      || typeof sendId !== "string" || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(sendId)) fail("request_schema_rejected");
+    if (helperPid !== tab.helperPid) {
+      if (action !== "read" || observation?.version !== 2 || observation.submission?.native?.sendId !== sendId) fail();
+      // Metadata reads must still expose a later conflict/gap. Authenticate the immutable
+      // original checkpoint, without granting the reader DOM recovery or writer authority.
+      const digest = createHash("sha256").update(JSON.stringify(observation)).digest("hex");
+      if (tab.observationDigest !== digest || observation.traceId !== traceId
+        || observation.host?.instanceId !== this.observationInstanceId
+        || observation.lease?.helperPid !== tab.helperPid || observation.lease?.surfaceId !== surfaceId
+        || observation.lease?.targetId !== targetId) fail();
+    } else if (action !== "read") {
+      if (tab.bootstrapReady !== true) fail("bootstrap_unready");
+      if (tab.status !== "running" || tab.failedAt !== undefined || tab.expiryCancellation
+        || tab.nativeSubmissionWriterEnded) fail("turn_state_rejected");
+    }
+    let watch = tab.nativeSubmissionWatch;
+    if (action === "start" && (!validSlot(request.slot) || !validScope(request.scope)
+      || request.scope.traceId !== traceId || request.scope.roundKey !== request.slot.roundKey)) fail("scope_rejected");
+    if (watch && !watch.segments.has(sendId)) fail();
+    if (watch && action === "start" && (watch.segment.sendId !== sendId
+      || !sameScope(request.scope, watch.scope) || request.slot.roundKey !== watch.segment.slot?.roundKey
+      || JSON.stringify(request.slot.stage) !== JSON.stringify(watch.segment.slot?.stage))) fail();
+    if (action === "final-complete" && watch?.segment.sendId !== sendId) fail();
+    if (!watch) {
+      if (action !== "start") fail(); // Read never creates a zero-POST replacement collector.
+      if (request.slot.stage.kind === "part" && request.slot.stage.index !== 1) fail();
+      watch = new NativeSubmissionObserver(tab.view.webContents, {
+        traceId, sendId,
+        host: { pid: process.pid, instanceId: this.observationInstanceId, profile: this.profile, partition: this.partition },
+        lease: { helperPid: tab.helperPid, surfaceId: tab.surfaceId, targetId },
+      }, { slot: request.slot, scope: request.scope });
+      tab.nativeSubmissionWatch = watch; // Reserve synchronously before any attach/enable await.
+      await watch.start();
+    }
+    if (watch.starting) await watch.starting;
+    await watch.read();
+    if (!valid() || tab.nativeSubmissionWatch !== watch) fail();
+    try {
+      if (action === "stage-complete") {
+        if (request.receipt?.record?.sendId !== sendId) fail();
+        watch.rotate(sendId, request.receipt, request.next);
+      } else if (action === "final-complete") {
+        if (request.receipt?.record?.sendId !== sendId) fail();
+        watch.complete(request.receipt, request.resultReady);
+      } else if (action === "cancel-request") {
+        if (watch.segment.sendId !== sendId) fail();
+        watch.requestCancellation(request.intent, request.acknowledgement, request.dispatchAttempted);
+      } else if (action === "cancel-terminal") {
+        if (watch.segment.sendId !== sendId) fail();
+        watch.cancelTerminal(request.terminal, request.acknowledgement, request.notDispatchedReceipt);
+      }
+    } catch { fail(); }
+    // Include events arriving between the flush promise and this continuation; pending work
+    // is explicitly unstable and cannot be mistaken for a completed empty read.
+    return watch.snapshot(undefined, action === "stage-complete" ? request.next.sendId : sendId);
+  }
+
+  nativeReleaseRead(request) {
+    const fail = () => { throw browserWriterConflict("The original sealed release metadata is unavailable"); };
+    const { traceId, helperPid, surfaceId, sendId, host, targetId, binding, sessionEpoch, scope, authorization } = request;
+    if (!Number.isSafeInteger(helperPid) || helperPid < 1 || !host || host.pid !== process.pid
+      || host.instanceId !== this.observationInstanceId || host.profile !== this.profile || host.partition !== this.partition
+      || !sameHost(binding?.host, host) || binding?.lease?.surfaceId !== surfaceId || binding?.lease?.targetId !== targetId
+      || !validScope(scope) || scope.traceId !== traceId || scope.roundKey !== binding?.roundKey) fail();
+    const sealed = this.nativeReleaseReceipts?.get(sendId);
+    const tab = sealed ? undefined : [...this.turnTabs.values()].find(t => t.traceId === traceId);
+    const watch = tab?.nativeSubmissionWatch;
+    const meta = sealed || (watch?.segment.sendId === sendId ? {
+      traceId, scope: watch.scope, binding: watch.segment.binding, sessionEpoch: watch.sessionEpoch,
+      resultReadyDigest: watch.resultReady?.digest, observationDigest: tab.observationDigest,
+      cancelId: watch.cancellation?.cancelId, terminalDigest: watch.cancellation?.terminalDigest,
+    } : undefined);
+    if (!meta || meta.traceId !== traceId || !sameScope(meta.scope, scope)
+      || !sameBinding(meta.binding, binding) || meta.sessionEpoch !== sessionEpoch || !authorization) fail();
+    const keys = Object.keys(authorization);
+    if (keys.length === 1 && keys[0] === "resultReadyDigest") {
+      if (!meta.resultReadyDigest || authorization.resultReadyDigest !== meta.resultReadyDigest) fail();
+    } else if (keys.length === 1 && keys[0] === "observation") {
+      const c = authorization.observation;
+      if (!meta.observationDigest || c?.version !== 2 || c.traceId !== traceId || c.submission?.native?.sendId !== sendId
+        || createHash("sha256").update(JSON.stringify(c)).digest("hex") !== meta.observationDigest) fail();
+    } else if (keys.length === 3 && ["cancelId", "terminalDigest", "intentDigest"].every(k => keys.includes(k))) {
+      // Parent/replacement presents its own PID. This capability only reads an already sealed
+      // cancellation release; it never impersonates the writer or infers release from intent.
+      if (!sealed || sealed.receipt.outcome !== "cancelled" || !meta.cancelId || authorization.cancelId !== meta.cancelId
+        || !meta.intentDigest || authorization.intentDigest !== meta.intentDigest
+        || !meta.terminalDigest || authorization.terminalDigest !== meta.terminalDigest) fail();
+    } else if (keys.length === 2 && keys.includes("cancelId") && keys.includes("terminalDigest")) {
+      if (helperPid !== binding.lease.helperPid || !meta.cancelId || authorization.cancelId !== meta.cancelId
+        || !meta.terminalDigest || authorization.terminalDigest !== meta.terminalDigest) fail();
+    } else fail();
+    // No webContents/CDP/DOM access, no touch of liveness/ownership, no synthetic release.
+    return sealed ? structuredClone(sealed.receipt) : null;
+  }
+
+  prepareNativeRelease(tab, outcome, options) {
+    const watch = tab.nativeSubmissionWatch;
+    const binding = watch.segment.binding, sessionEpoch = watch.sessionEpoch, sendId = watch.segment.sendId;
+    const terminalDigest = watch.releaseWitness(outcome);
+    const receipt = { version: 1, releaseId: randomUUID(), sendId, roundKey: binding.roundKey, sessionEpoch,
+      host: structuredClone(binding.host), lease: structuredClone(binding.lease), documentEpoch: binding.documentEpoch,
+      outcome, terminalDigest };
+    const retained = outcome === "completed" && options.retain && !!tab.conversationKey
+      && (!tab.connectorIdentity || options.connectorBound);
+    const metadata = { traceId: tab.traceId, scope: structuredClone(watch.scope), binding: structuredClone(binding),
+      sessionEpoch, resultReadyDigest: watch.resultReady?.digest, observationDigest: tab.observationDigest,
+      cancelId: watch.cancellation?.cancelId, intentDigest: watch.cancellation?.intentDigest, terminalDigest, receipt,
+      cleanup: { state: "pending", disposition: retained ? "retained" : "removed", pending: [], failures: [], warnings: [] } };
+    const contents = tab.view.webContents;
+    const stillOwned = () => tab.traceId === metadata.traceId && tab.helperPid === binding.lease.helperPid
+      && tab.surfaceId === binding.lease.surfaceId && tab.nativeSubmissionWatch === watch;
+    const mayTouchContents = () => stillOwned() && (retained ? this.turnTabs.get(tab.id) === tab
+      : ![...this.turnTabs.values()].some(t => t.view === tab.view));
+    const ownedRemoval = () => {
+      if (!stillOwned() || [...this.turnTabs.values()].some(t => t.view === tab.view)) {
+        throw new Error("native_release_cleanup_view_reassigned");
+      }
+    };
+    const steps = new Map([
+      ["observer_listeners", () => watch.cleanupFinishedListeners()],
+      ["background_throttling", () => { if (mayTouchContents() && !contents.isDestroyed()) contents.setBackgroundThrottling(true); }],
+      ...(!retained ? [
+        ["view_detach", () => {
+          ownedRemoval();
+          const parent = this.window?.contentView;
+          if (parent?.children && !parent.children.includes(tab.view)) return;
+          parent?.removeChildView(tab.view);
+        }],
+        ["contents_close", () => {
+          ownedRemoval();
+          if (!contents.isDestroyed()) contents.close();
+          if (!contents.isDestroyed()) throw new Error("native_release_contents_close_pending");
+        }],
+        ["selected_view", () => {
+          if (this.selectedTabId === tab.id && !this.turnTabs.has(tab.id)) {
+            this.selectedTabId = [...this.turnTabs.keys()].at(-1) || "home";
+            if (this.selectedTabId === "home" && !this.activeTraceId
+              && this.view?.webContents?.getURL?.() === IDLE_BROWSER_URL) this.hide?.();
+          }
+        }],
+      ] : []),
+      ["power", () => this.syncPowerSaveBlocker()],
+      ["visibility", () => this.syncViewVisibility()],
+      ["publish", () => this.publishState?.(this.snapshot())],
+      ["descriptor", () => this.writeDescriptor()],
+      ["hide", () => { if (options.hideAfterTurn && !this.activeTraceId && mayTouchContents()) this.hide(); }],
+      ["log", () => this.logger.info("browser.native_release_committed", { traceId: metadata.traceId, sendId, releaseId: receipt.releaseId, outcome })],
+      ...(!retained ? [["standby", () => this.prepareStandbyView()]] : []),
+    ]);
+    metadata.cleanup.pending = [...steps.keys()];
+    this.nativeReleaseReceipts ??= new Map();
+    this.nativeReleaseCleanups ??= new Map();
+    return { metadata, tab, watch, retained, options, steps, running: new Map(), done: new Set() };
+  }
+
+  commitNativeRelease(job) {
+    const { tab, watch, metadata, retained, options } = job;
+    const { receipt } = metadata;
+    if (this.turnTabs.get(tab.id) !== tab || tab.nativeSubmissionWatch !== watch
+      || tab.traceId !== metadata.traceId || tab.helperPid !== metadata.binding.lease.helperPid
+      || tab.surfaceId !== metadata.binding.lease.surfaceId
+      || !watch.finishConfirmed(receipt.outcome, receipt.terminalDigest)) throw browserWriterConflict();
+    // Commit point: plain owned state / Map writes only, no Electron/UI/logger/file callbacks.
+    // The original terminal and owned detach are already confirmed. Host lease disposition
+    // and its sealed receipt become visible in one synchronous segment before cleanup can run.
+    tab.nativeSubmissionWriterEnded = true;
+    tab.status = receipt.outcome === "completed" ? "ready" : "aborted";
+    tab.approvalPending = false;
+    tab.turnProgress = undefined;
+    tab.activity = undefined;
+    tab.message = receipt.outcome === "completed" ? "Task completed" : "ChatGPT turn cancelled";
+    tab.loading = false;
+    if (retained) {
+      tab.connectorBound = options.connectorBound === true;
+      tab.lastHeartbeatAt = Date.now();
+    } else this.turnTabs.delete(tab.id);
+    this.nativeReleaseReceipts.set(receipt.sendId, metadata);
+    this.nativeReleaseCleanups.set(receipt.sendId, job);
+    delete tab.nativeReleaseCommit;
+    this.retryNativeReleaseCleanup(receipt.sendId);
+    return { cancelledByUser: receipt.outcome === "cancelled", nativeRelease: structuredClone(receipt) };
+  }
+
+  nativeReleaseCleanupSnapshot() {
+    return [...(this.nativeReleaseReceipts?.values() || [])].filter(m => m.cleanup).map(m => ({
+      sendId: m.receipt.sendId, releaseId: m.receipt.releaseId, ...structuredClone(m.cleanup),
+    }));
+  }
+
+  retryNativeReleaseCleanup(sendId) {
+    const jobs = sendId ? [this.nativeReleaseCleanups?.get(sendId)].filter(Boolean)
+      : [...(this.nativeReleaseCleanups?.values() || [])];
+    for (const job of jobs) {
+      const health = job.metadata.cleanup;
+      const update = () => {
+        health.pending = [...job.steps.keys()].filter(name => !job.done.has(name));
+        health.warnings = structuredClone(job.watch.finishWarnings);
+        health.state = health.pending.length ? "pending" : "complete";
+        if (!health.pending.length) this.nativeReleaseCleanups.delete(job.metadata.receipt.sendId);
+      };
+      const settled = (name, failed = false, error) => {
+        let failure = health.failures.find(f => f.step === name);
+        if (failed) {
+          if (!failure) { failure = { step: name, attempts: 0 }; health.failures.push(failure); }
+          failure.attempts++;
+          failure.errorType = typeof error?.name === "string" ? error.name : "Error";
+          failure.resolved = false;
+          try { this.logger.warn("browser.native_release_cleanup_pending", {
+            sendId: job.metadata.receipt.sendId, releaseId: job.metadata.receipt.releaseId,
+            step: name, errorType: failure.errorType,
+          }); } catch { /* The health record, not a logger callback, owns this failure. */ }
+        } else {
+          job.done.add(name);
+          if (failure) failure.resolved = true;
+        }
+        job.running.delete(name);
+        update();
+      };
+      for (const [name, action] of job.steps) {
+        if (job.done.has(name) || job.running.has(name)) continue;
+        // A synchronous Electron/UI callback can reenter end or the sweep before returning.
+        job.running.set(name, true);
+        try {
+          const result = action();
+          if (result && typeof result.then === "function") {
+            // Own both success and rejection; no detached prepareStandbyView promise.
+            const task = Promise.resolve(result).then(() => settled(name), error => settled(name, true, error));
+            job.running.set(name, task);
+          } else settled(name);
+        } catch (error) { settled(name, true, error); }
+      }
+      update();
+    }
   }
 
   setTurnApprovalPending(traceId, helperPid, pending, surfaceId) {
@@ -1679,6 +2126,9 @@ class BrowserHost {
   }
 
   refreshTurnLeases(reason, now = Date.now()) {
+    for (const tab of this.turnTabs.values()) {
+      if (tab.nativeSubmissionWatch && !tab.nativeSubmissionWriterEnded) tab.nativeSubmissionWatch.gap("host_suspended");
+    }
     const refreshed = refreshTurnLeasesAfterSuspension(
       [...this.turnTabs.values()],
       now,
@@ -1706,7 +2156,11 @@ class BrowserHost {
   }
 
   reapExpiredTurnTabs(now = Date.now()) {
-    void this.prepareStandbyView();
+    this.retryNativeReleaseCleanup();
+    // This recurring trigger must also own standby failure while retrying release cleanup.
+    void Promise.resolve().then(() => this.prepareStandbyView()).catch(error => {
+      try { this.logger.warn("browser.standby_prepare_failed", { errorType: error?.name || "Error" }); } catch {}
+    });
     const cancellations = [];
     const lastSweepAt = this.lastTurnSweepAt;
     this.lastTurnSweepAt = now;
@@ -1717,6 +2171,9 @@ class BrowserHost {
       return;
     }
     for (const tab of [...this.turnTabs.values()]) {
+      // Helper death/heartbeat loss is not browser completion. Preserve the original lease and
+      // continuous collector, including poisoned/unknown watches; no TTL may erase that evidence.
+      if (tab.nativeSubmissionWatch && !tab.nativeSubmissionWriterEnded) continue;
       if (tab.failedAt !== undefined) {
         if (now - tab.failedAt < RETAINED_TURN_TAB_TTL_MS) continue;
         this.logger.info("browser.failed_tab_expired", { tabId: tab.id, traceId: tab.traceId });
@@ -1931,6 +2388,11 @@ class BrowserHost {
 
   removeTurnTab(tab, abortRunning) {
     if (!this.turnTabs.has(tab.id)) return;
+    if (tab.nativeSubmissionWatch && !tab.nativeSubmissionWriterEnded
+      && !this.userCancelledTurnOwners.has(tab.traceId)) {
+      tab.nativeSubmissionWatch.gap("host_release_unproven");
+      return;
+    }
     this.turnTabs.delete(tab.id);
     if (tab.interactionMode === "manual") {
       if (tab.manualDeadlineTimer) clearTimeout(tab.manualDeadlineTimer);
@@ -2662,6 +3124,10 @@ class BrowserHost {
     }
     const conversationId = savedConversationId(conversationUrl);
     if (conversationUrl !== undefined && !conversationId) throw new Error("Saved conversation identity is invalid");
+    if ([...this.turnTabs.values()].some(tab => tab.nativeSubmissionWatch && !tab.nativeSubmissionWriterEnded
+      && (tab.traceId === traceId || (conversationKey && tab.conversationKey === conversationKey)
+        || (conversationId && (tab.conversationId === conversationId
+          || savedConversationId(tab.view.webContents.getURL()) === conversationId))))) throw browserWriterConflict();
     // BrowserHost is shared by QA and Full. Connector names must not partition writer ownership.
     const conflict = [...this.turnTabs.values()].some(tab => tab.status === "running" && (
       tab.traceId === traceId
@@ -2696,6 +3162,13 @@ class BrowserHost {
     const existing = sameTrace?.status === "running" ? sameTrace : exactRetained;
     if (existing) {
       const reused = existing.status === "ready";
+      // A completed writer may start a genuinely new turn. Its old watch was sealed by /end;
+      // an unresolved watch cannot reach this branch.
+      if (existing.nativeSubmissionWriterEnded) {
+        delete existing.nativeSubmissionWatch;
+        delete existing.nativeSubmissionWriterEnded;
+        delete existing.nativeObservationSendId;
+      }
       if (existing.status === "running" && existing.helperPid !== helperPid) {
         if (processRunning(existing.helperPid)) {
           throw new Error(`ChatGPT browser turn ${traceId} is owned by another helper process`);
@@ -2789,7 +3262,18 @@ class BrowserHost {
     retain = false,
     connectorBound = false,
     surfaceId,
+    nativeRelease,
   ) {
+    const sealed = nativeRelease && this.nativeReleaseReceipts?.get(nativeRelease.sendId);
+    if (sealed) {
+      if (sealed.traceId !== traceId || sealed.binding.lease.helperPid !== helperPid
+        || sealed.binding.lease.surfaceId !== surfaceId || !sameBinding(sealed.binding, nativeRelease.binding)
+        || sealed.sessionEpoch !== nativeRelease.sessionEpoch || sealed.terminalDigest !== nativeRelease.terminalDigest
+        || sealed.receipt.outcome !== status || sealed.binding.host.instanceId !== this.observationInstanceId)
+        throw browserWriterConflict();
+      this.retryNativeReleaseCleanup(sealed.receipt.sendId);
+      return { cancelledByUser: status === "cancelled", nativeRelease: structuredClone(sealed.receipt) };
+    }
     const tab = [...this.turnTabs.values()].find((candidate) => candidate.traceId === traceId);
     if (!tab) {
       const closedOwner = this.closedTurnOwners.get(traceId);
@@ -2807,14 +3291,39 @@ class BrowserHost {
         `Browser helper ownership mismatch: expected ${tab.helperPid}, received ${helperPid}`,
       );
     }
-    const cancelledByUser = this.userCancelledTurnOwners.get(traceId) === helperPid;
+    let cancelledByUser = this.userCancelledTurnOwners.get(traceId) === helperPid;
+    const nativeWatch = tab.nativeSubmissionWatch;
+    if (nativeWatch) {
+      if (!["completed", "cancelled"].includes(status) || tab.authenticationRequired
+        || tab.failedAt !== undefined || !nativeRelease || nativeRelease.sendId !== nativeWatch.segment.sendId
+        || !sameBinding(nativeRelease.binding, nativeWatch.segment.binding)
+        || !sameHost(nativeRelease.binding.host, { pid: process.pid, instanceId: this.observationInstanceId, profile: this.profile, partition: this.partition })
+        || nativeRelease.sessionEpoch !== nativeWatch.sessionEpoch) throw browserWriterConflict();
+      if (!nativeWatch.finishConfirmed(status, nativeRelease.terminalDigest)) await nativeWatch.read();
+      if (this.nativeReleaseReceipts?.has(nativeRelease.sendId)) {
+        return this.endTurn(traceId, helperPid, status, hideAfterTurn, message, retain, connectorBound, surfaceId, nativeRelease);
+      }
+      if (this.turnTabs.get(tab.id) !== tab || tab.helperPid !== helperPid || tab.surfaceId !== surfaceId
+        || tab.nativeSubmissionWatch !== nativeWatch || tab.nativeSubmissionWriterEnded) throw browserWriterConflict();
+      if (nativeRelease.terminalDigest !== nativeWatch.releaseWitness(status)) throw browserWriterConflict();
+      const job = tab.nativeReleaseCommit ??= this.prepareNativeRelease(tab, status, { retain, connectorBound, hideAfterTurn });
+      if (job.metadata.receipt.outcome !== status || job.metadata.terminalDigest !== nativeRelease.terminalDigest) throw browserWriterConflict();
+      try { nativeWatch.finish(status); }
+      catch (error) {
+        if (!nativeWatch.finishConfirmed(status, nativeRelease.terminalDigest)) {
+          throw browserWriterConflict("Native submission terminal detach is unresolved");
+        }
+        nativeWatch.finishWarning("finish_callback", error);
+      }
+      return this.commitNativeRelease(job);
+    } else if (nativeRelease || status === "cancelled") throw browserWriterConflict();
     if (tab.failedAt !== undefined) {
       if (status !== "failed") throw new Error(`Browser turn ${traceId} already failed`);
       return { cancelledByUser };
     }
     const authenticationRequired = tab.authenticationRequired === true;
     if (authenticationRequired && status === "completed") status = "failed";
-    tab.status = status === "completed" ? "ready" : status === "aborted" ? "aborted" : "error";
+    tab.status = status === "completed" ? "ready" : (status === "aborted" || status === "cancelled") ? "aborted" : "error";
     tab.approvalPending = false;
     tab.turnProgress = undefined;
     tab.activity = undefined;
@@ -3434,6 +3943,8 @@ class BrowserHost {
       surfaceTargets,
       createdAt: new Date().toISOString(),
       observationInstanceId: this.observationInstanceId,
+      hostVersion: HOST_VERSION,
+      hostClosureDigest: HOST_CLOSURE_DIGEST,
     };
     writePrivateFileAtomic(this.descriptorPath, `${JSON.stringify(descriptor, null, 2)}\n`);
   }

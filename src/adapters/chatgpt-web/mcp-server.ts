@@ -478,6 +478,8 @@ export interface ChatGptMcpServerOptions {
   readinessEvidence?: McpReadinessEvidence;
   /** Local-only admission evidence; never read from tool arguments, results or metadata. */
   onClaimNotDispatched?: (requestId: string | number, proof: BrokerPreconnectFailure | BrokerClaimRejection) => void;
+  /** Local handler evidence, never accepted from tool arguments or remote results. */
+  onToolNotDispatched?: (requestId:string|number) => void;
 }
 
 /** The tool contract and broker authorization are independent of the wire transport. */
@@ -555,6 +557,7 @@ export function createChatGptMcpServer(options: ChatGptMcpServerOptions): McpSer
     );
   };
 
+  const nativeDispatchAttempts=new Set<string|number>();
   const withClaimedTurn = async <T>(
     toolName: string,
     turnToken: string,
@@ -562,13 +565,19 @@ export function createChatGptMcpServer(options: ChatGptMcpServerOptions): McpSer
     action: (claimed: ClaimedTurn) => Promise<T> | T,
   ): Promise<T> => {
     const claimed = await claimTurn(toolName, turnToken, extra);
+    let localRejection=false;
     try {
       return await action(claimed);
+    } catch(error) {
+      localRejection=!nativeDispatchAttempts.has(extra.requestId);
+      throw error;
     } finally {
+      nativeDispatchAttempts.delete(extra.requestId);
       // The broker's terminal fence treats even a fully local inventory lookup as live MCP work.
       // Settle the lease without the request AbortSignal: cancellation must not strand activity
       // and silently prevent every later completion candidate from committing.
       await settleTurnActivity(turnToken, claimed.activityId);
+      if (localRejection && contract==="native" && !extra.signal?.aborted) options.onToolNotDispatched?.(extra.requestId);
     }
   };
 
@@ -605,6 +614,7 @@ export function createChatGptMcpServer(options: ChatGptMcpServerOptions): McpSer
     payload: { arguments?: Record<string, unknown>; input?: string },
     extra: McpRequestExtra,
   ) => {
+    nativeDispatchAttempts.add(extra.requestId);
     const timeoutMs = chatGptMcpInvocationTimeout(bound);
     const invocationId = mcpInvocationId(bindingId, extra.requestId, wireName(tool));
     const request = {

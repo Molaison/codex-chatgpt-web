@@ -1,3 +1,5 @@
+require("./health-identity.cjs"); // Freeze the Launcher CJS closure before normal startup.
+const { HealthMaintenanceDelivery } = require("./health-maintenance.cjs");
 const { configureWindowsTrust } = require("./windows-trust.cjs");
 configureWindowsTrust();
 const languages = require("./languages.json");
@@ -86,6 +88,7 @@ installProcessDiagnosticGuards({
   filePath: path.join(launcherUserData, "logs", "process-stream-errors.log"),
 });
 
+let maintenanceDelivery = null;
 let mainWindow = null;
 let mainWindowReadyToShow = false;
 let mainWindowShowRequested = false;
@@ -558,6 +561,10 @@ function registerIpc({ logger, stateStore }) {
   const handle = (channel, handler) => registerLoggedIpc(ipcMain, logger, channel, async (...args) => {
     if (runtimeChannels.has(channel)) await runtimeStartup;
     return handler(...args);
+  });
+  handle("launcher:maintenance-ack", (event, value) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) return false;
+    return maintenanceDelivery?.acknowledge(value?.eventId) ?? false;
   });
   handle("launcher:limits", () => limitsController.snapshot());
   handle("launcher:limits-setup", async () => {
@@ -1156,6 +1163,7 @@ async function start() {
 
   smokePhase("launcher-state");
   const stateStore = createStateStore(path.join(app.getPath("userData"), "launcher-state.json"));
+  maintenanceDelivery = new HealthMaintenanceDelivery({ stateStore, publishOperation });
   limitsController = new LimitsController(path.join(app.getPath("userData"), "limits.json"), {
     getInteractionMode: () => stateStore.read().browserInteractionMode,
   });
@@ -1253,6 +1261,9 @@ async function start() {
     cancelTurn: IS_DEV_PROFILE ? undefined : (traceId, reason) => runtimeSupervisor.cancelBrowserTurn(traceId, reason),
     getConnectorName: () => runtimeHost.browserConnectorName(),
     getUseSavedChats: () => runtimeHost.runtimeConfigSnapshot().config?.useSavedChats === true,
+    getAccountId: () => runtimeHost.runtimeConfigSnapshot().config?.accountId,
+    getHealthPinPath: () => runtimeHost.runtimeConfigSnapshot().config?.qaHealthPinPath,
+    publishHealth: event => maintenanceDelivery.report(event),
     helper: { executable: process.execPath, script: BROWSER_HELPER_PATH },
     logger,
     loginWithPasskey: onProgress => runtimeHost.capturePasskeyLogin(onProgress),

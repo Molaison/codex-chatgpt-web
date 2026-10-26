@@ -18,6 +18,7 @@ import { limitsCopyFor } from "./limits-copy";
 import { useLimits } from "./useLimits";
 import { describeTurnActivity } from "./turn-activity";
 import type {
+  HealthMaintenanceEvent,
   BrowserInteractionMode,
   BrowserState,
   DoctorReport,
@@ -39,6 +40,7 @@ const MCP_GUIDE_MEDIA = [
 ] as const;
 
 export function App() {
+  const [maintenance, setMaintenance] = useState<HealthMaintenanceEvent | null>(null);
   const [snapshot, setSnapshot] = useState<LauncherSnapshot | null>(null);
   const [browser, setBrowser] = useState<BrowserState | null>(null);
   const [operation, setOperation] = useState<OperationState | null>(null);
@@ -57,6 +59,7 @@ export function App() {
     void api.snapshot().then((next) => {
       if (cancelled) return;
       setSnapshot(next);
+      setMaintenance(next.state.maintenanceDelivery?.event ?? next.operation?.maintenance ?? null);
       setBrowser(next.browser);
       setLogs(next.logs);
       setOperation(next.operation);
@@ -81,6 +84,7 @@ export function App() {
     const unsubscribeBrowser = api.onBrowserState(setBrowser);
     const unsubscribeOperation = api.onOperation((next) => {
       setOperation(next);
+      if (next.maintenance) setMaintenance({ ...next.maintenance });
       if (next.name === "catalog-verification") {
         if (next.status === "failed") catalogError.current = next.message;
         if (next.status === "completed") {
@@ -105,6 +109,12 @@ export function App() {
       unsubscribeUpdate();
     };
   }, []);
+
+  // A passive effect runs after React has committed the visible maintenance state.
+  // Receiving IPC or calling setState alone is not a delivery acknowledgement.
+  useEffect(() => {
+    if (api && snapshot && maintenance) void api.acknowledgeMaintenance({ eventId: maintenance.eventId }).catch(() => {});
+  }, [maintenance, Boolean(snapshot)]);
 
   const updateState = useCallback((state: LauncherState) => {
     setSnapshot((current) => current
@@ -131,6 +141,12 @@ export function App() {
       data-profile={snapshot.profile}
       data-theme="dark"
     >
+      {maintenance && <div role="status" data-maintenance-event={maintenance.eventId} className="health-maintenance-status"
+        style={{ position: "absolute", bottom: 8, left: 8, right: 8, zIndex: 500, padding: "8px 12px", background: "#202127", color: "#fff", borderRadius: 8, fontSize: 12, pointerEvents: "none" }}>
+        {maintenance.state === "ready" ? "QA account health recovered." : "QA account health needs attention; new account assignments are paused."}
+        {" "}{maintenance.accountKey}: {maintenance.state}
+        {" · "}{new Date(maintenance.observedAt).toLocaleTimeString()}
+      </div>}
       <AnimatePresence mode="wait">
         {!snapshot.state.onboardingComplete ? (
           <Onboarding

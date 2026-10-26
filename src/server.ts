@@ -1,3 +1,4 @@
+import { createRuntimeQaHealth } from "./qa-health";
 import { ReleaseAdmission, releaseTrackedResponse } from "./release-admission";
 import { parseChatGptSessionEffort } from "./chatgpt-session-effort";
 import {
@@ -8,8 +9,9 @@ import {
   type GeneratedFileReplay,
 } from "./generated-files";
 import { fetchLauncherAuthenticatedBytes } from "./launcher-browser-host";
-import { chatGptWebTraceId, createChatGptWebAdapter } from "./adapters/chatgpt-web";
+import { chatGptWebTraceId, createChatGptWebAdapter, restoreChatGptObserverRound } from "./adapters/chatgpt-web";
 import { closeChatGptBrowserWorkers } from "./adapters/chatgpt-web/browser-worker";
+import { assertChatGptQuestionAnswerProvenance } from "./adapters/chatgpt-web/prompt";
 import { closeTurnBrokers, TurnBroker } from "./adapters/chatgpt-web/turn-broker";
 import { bearerAuthorizer, loadNativeApiAuthorizer } from "./native-api-auth";
 import { chatGptTurnRoundKey, chatGptTurnSessions } from "./adapters/chatgpt-web/turn-execution";
@@ -34,7 +36,8 @@ import { providerConfig } from "./config";
 import { AsyncEventQueue } from "./event-queue";
 import { readJsonRequestBody } from "./http-body";
 import { httpStatusFromTerminalError } from "./lib/errors";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { ExplicitNativeCancellation } from "./adapters/chatgpt-web/native-execution";
 import { augmentNativeModelCatalog, localChatGptWebModelCatalog } from "./model-catalog";
 import {
   readCodexModelContextOverride,
@@ -385,8 +388,8 @@ export function routeChatGptWebRequest(parsed: CodexParsedRequest, config: AppCo
     throw new Error("A persistent selector cannot request a temporary effort suffix");
   }
   if (route.sessionMode || selection) parsed._chatgptSessionMode = route.sessionMode ?? selection!.mode;
-  if (route.toolAccess) parsed._chatgptLocalTools = route.toolAccess === "tools";
-  else delete parsed._chatgptLocalTools;
+  parsed._chatgptLocalTools = route.toolAccess ? route.toolAccess === "tools"
+    : config.mode === "full" && (config.browserInteractionMode === "manual" || config.mcpProvider === "external-http");
   if (route.interactionMode === "automatic" && route.modelFamily) parsed._chatgptModelFamily = route.modelFamily;
   else delete parsed._chatgptModelFamily;
   if (route.requiresPro) parsed._chatgptProModel = true;
@@ -750,7 +753,9 @@ export async function responseRequest(
     if (!compaction) {
       if (options.rememberState !== false) {
         rememberSavedChatResponseAlias(provider, parsed, response);
-        rememberResponseState(parsed._rawBody, response, { force: true });
+        rememberResponseState(parsed._rawBody, response, {
+          force: true, replaceObservedItems: !!parsed._chatgptObserverRoundKey,
+        });
       }
       return;
     }
@@ -796,11 +801,22 @@ export async function responseRequest(
     parsed.context.messages.push({ role: "user", content: COMPACT_PROMPT, timestamp: Date.now() });
   }
 
+  if (parsed._chatgptLocalTools === false) {
+    try { assertChatGptQuestionAnswerProvenance(parsed); }
+    catch (error) {
+      if (!(error instanceof ChatGptWebAdapterError)) throw error;
+      return new Response(JSON.stringify({ error: { type: error.errorType, code: error.code,
+        message: error.message, retryable: error.retryable } }), {
+        status: error.status, headers: { "content-type": "application/json" },
+      });
+    }
+  }
   const provider = providerConfig(executionConfig);
   let traceId: string | undefined;
   let replayIdentity: string | undefined;
   try {
     traceId = chatGptWebTraceId(provider, parsed);
+    restoreChatGptObserverRound(provider, parsed);
     {
       replayIdentity = createHash("sha256")
         .update(JSON.stringify([traceId, chatGptTurnRoundKey(parsed)]))
@@ -1108,6 +1124,7 @@ export function startServer(
   const releaseAdmission = config.releaseControl ? new ReleaseAdmission("web", config.releaseControl, () => ({...activity(), active_model_catalog: modelCatalogFetches.activeCount()})) : undefined;
   if (releaseAdmission) { draining = releaseAdmission.draining; turnBroker?.setExternalOwnersAccepted(!draining); }
   const controlAuthorized = bearerAuthorizer(config.controlToken);
+  const readQaHealth = createRuntimeQaHealth(config, () => !draining && !releaseAdmission?.sealed);
   async function fetchWeb(req: Request): Promise<Response> {
       const url = new URL(req.url);
       // Loopback is reachable from any web page, cross-site or same-origin after DNS rebinding,
@@ -1132,6 +1149,11 @@ export function startServer(
         return estuaryFile instanceof Response
           ? estuaryFile
           : await redownloadGeneratedFile(req, estuaryFile, config, downloadDirectory);
+      }
+      if (req.method === "POST" && url.pathname === "/admin/qa-health") {
+        if (!controlAuthorized(req)) return new Response("Unauthorized", { status: 401 });
+        try { return Response.json(await readQaHealth(await req.json()), { headers: { "cache-control": "no-store" } }); }
+        catch { return Response.json({ error: "qa_health_unavailable" }, { status: 503 }); }
       }
       if (req.method === "GET" && url.pathname === "/healthz") {
         return Response.json({
@@ -1223,7 +1245,8 @@ export function startServer(
             { status: 400 },
           );
         }
-        const reason = new DOMException("Codex turn interrupted", "AbortError");
+        const reason = new ExplicitNativeCancellation({version:1, cancelId:randomUUID(), source:"native_interrupt",
+          threadId:identity.threadId, turnId:identity.turnId, requestedAt:Date.now()});
         const browserCancellation = chatGptTurnSessions.cancelNativeTurn(
           identity.threadId,
           identity.turnId,

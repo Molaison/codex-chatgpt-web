@@ -1,3 +1,4 @@
+import { namespacedToolName } from "../../types";
 import { mcpInvocationId } from "./mcp-observation";
 import { nativeExecutionReceipt } from "./native-terminal-receipt";
 import { OperationJournal, operationRuntimeDirectory, operationDigest } from "./operation-journal";
@@ -117,6 +118,11 @@ interface DurableToolChannel {
   version: 1;
   observationIngressHash?: string;
   receiptRecovery?: true;
+  receiptContinuation?: {
+    acceptedResults: Record<string, string>;
+    environmentHash: string;
+    resumed: boolean;
+  };
   traceId: string;
   tokenHash: string;
   bindingHash?: string;
@@ -165,10 +171,12 @@ interface BrokerRequest {
     | "release"
     | "invoke"
     | "owner_status"
+    | "owner_release_status"
     | "owner_invocation_receipt"
     | "read_tool_receipt"
     | "public_delivery_lost"
     | "owner_receipt_recovery"
+    | "owner_receipt_resume"
     | "owner_register"
     | "owner_register_safe"
     | "owner_update"
@@ -195,6 +203,7 @@ interface BrokerRequest {
   rpcId?: string | number;
   acceptedResults?: Record<string, string>;
   retryReadOnly?: boolean;
+  recoveryToken?: string;
   wireName?: string;
   freeform?: boolean;
   arguments?: Record<string, unknown>;
@@ -362,6 +371,7 @@ export interface TurnBrokerOwner {
   requestCompaction(token: string, queuedResult: BrokerToolResult): number | Promise<number>;
   compactionDeliveryCount(token: string): number | Promise<number>;
   recoverCompletedReceipts?(token: string, acceptedResults: Record<string, string>, retryReadOnly?: boolean): CompletedReceiptRecovery | undefined | Promise<CompletedReceiptRecovery | undefined>;
+  resumeAfterReceiptRecovery?(token: string, recoveryToken: string, acceptedResults: Record<string, string>): boolean | Promise<boolean>;
   rotateForRecovery?(token: string): string | undefined | Promise<string | undefined>;
   beginCompletionFence(token: string): number | undefined | Promise<number | undefined>;
   commitCompletionFence(token: string, revision: number): boolean | Promise<boolean>;
@@ -411,6 +421,43 @@ export class TurnBroker implements TurnBrokerOwner {
   private checkpoint(channel: TurnChannel): void {
     channel.durable.observationState = { activeActivityRefs: [...channel.activities].map(operationDigest).sort(), revision: channel.activityRevision };
     this.journal.write(channel.durable.tokenHash, channel.durable);
+  }
+
+  releaseStatus(): Record<string, number> {
+    const counts = { durable_live_turns:[...this.channels.values()].filter(c=>!c.completionCommitted).length,
+      durable_unknown_calls:0,durable_native_continuations:0,durable_active_mcp_requests:0,durable_inventory_errors:0 };
+    try {
+      const records=this.journal.readAll<Partial<DurableToolChannel> & {ownerTokenHash?:string}>();
+      const channels=new Set<string>(), references:string[]=[];
+      for (const record of records) {
+        if (!record || typeof record !== "object") throw new Error("Invalid inventory");
+        if (!record.calls) {
+          // Binding and ingress indexes refer to the primary receipt; they are not executions.
+          if ((Object.keys(record).length===1 && /^[a-f0-9]{64}$/.test(record.tokenHash ?? ""))
+            || (record.version===1 && /^[a-f0-9]{64}$/.test(record.ownerTokenHash ?? "")
+              && typeof record.traceId === "string" && Object.keys(record).length===3)) {
+            references.push(record.ownerTokenHash ?? record.tokenHash!); continue;
+          }
+          throw new Error("Unrecognized inventory record");
+        }
+        if (record.version!==1 || !/^[a-f0-9]{64}$/.test(record.tokenHash ?? "") || Array.isArray(record.calls)
+          || !record.observationState || !Array.isArray(record.observationState.activeActivityRefs)) throw new Error("Invalid channel inventory");
+        channels.add(record.tokenHash!);
+        counts.durable_active_mcp_requests += record.observationState.activeActivityRefs.length;
+        for (const call of Object.values(record.calls)) {
+          if (!call || !call.request || !["proposed","unknown","completed"].includes(call.state)) throw new Error("Invalid call inventory");
+          if (call.state!=="completed" || (call.observerLost && !call.reconciliation)) counts.durable_unknown_calls++;
+          if (call.state==="completed") {
+            if (!call.result || call.resultHash!==operationDigest(JSON.stringify(call.result))) throw new Error("Invalid retained receipt");
+            if (["exec_command","write_stdin"].includes(call.request.wireName) && !call.request.freeform
+              && nativeExecutionReceipt(call.result).state==="unknown") counts.durable_unknown_calls++;
+          }
+        }
+        counts.durable_native_continuations += this.nativeSessions(record as DurableToolChannel).open.size;
+      }
+      if (references.some(reference=>!channels.has(reference))) throw new Error("Missing primary receipt");
+    } catch { counts.durable_inventory_errors++; }
+    return counts;
   }
 
   /** Read-only proof from the original dead local owner. Never restores a token/binding or reconciles a call. */
@@ -520,7 +567,7 @@ export class TurnBroker implements TurnBrokerOwner {
     if (Object.keys(args).some(key => !["session_id", "chars", "yield_time_ms", "max_output_tokens"].includes(key))) return false;
     if (args.yield_time_ms !== undefined && (!Number.isSafeInteger(args.yield_time_ms)
       || (args.yield_time_ms as number) < 250 || (args.yield_time_ms as number) > 30_000)) return false;
-    return Object.values(channel.calls).some(call => this.completedCallHasSession(call, args.session_id));
+    return this.nativeSessions(channel).open.has(Number(args.session_id));
   }
 
   private completedCallHasSession(call: DurableToolCall, sessionId: unknown): boolean {
@@ -780,10 +827,11 @@ export class TurnBroker implements TurnBrokerOwner {
     const channel = owner ? this.channels.get(owner) : undefined;
     if (!channel || channel.safe || channel.completionCommitted || !channel.bindingId
       || (channel.ingressToken ?? owner) !== request.token
-      || !["string", "number"].includes(typeof request.rpcId) || !request.wireName) return { recorded: false };
-    const identity = operationDigest(mcpInvocationId(channel.bindingId, request.rpcId!, request.wireName));
-    const call = Object.values(channel.durable.calls).find(call => call.requestId === identity);
-    if (!call || call.request.wireName !== request.wireName) return { recorded: false };
+      || !["string", "number"].includes(typeof request.rpcId)) return { recorded: false };
+    const matches = Object.values(channel.durable.calls).filter(call => (!request.wireName || call.request.wireName === request.wireName)
+      && call.requestId === operationDigest(mcpInvocationId(channel.bindingId!, request.rpcId!, call.request.wireName)));
+    if (matches.length !== 1) return { recorded:false };
+    const call=matches[0]!;
     call.publicDeliveryLost = true;
     this.checkpoint(channel);
     console.info(`[chatgpt-web] public_delivery_lost=${JSON.stringify({ trace: channel.traceId,
@@ -794,32 +842,25 @@ export class TurnBroker implements TurnBrokerOwner {
   recoverCompletedReceipts(token: string, acceptedResults: Record<string, string>, retryReadOnly = false): CompletedReceiptRecovery | undefined {
     this.prune();
     const channel = this.channels.get(token);
-    if (!channel || channel.safe || channel.completionCommitted || (channel.durable.receiptRecovery && !retryReadOnly)
+    if (!channel || channel.safe || channel.completionCommitted || (channel.durable.receiptRecovery && !retryReadOnly
+        && !Object.values(channel.durable.calls).some(call => call.publicDeliveryLost
+          && !channel.durable.receiptContinuation?.acceptedResults[call.request.callId]))
       || channel.invocations.size || channel.activities.size || channel.queuedCallIds.length || channel.deliveredCallIds.size) return undefined;
     const calls = Object.values(channel.durable.calls);
     if (!calls.length || !calls.some(call => call.publicDeliveryLost)
       || calls.length !== Object.keys(acceptedResults).length) return undefined;
-    const handles = new Set<number>();
-    for (const call of calls) {
-      if (call.state !== "completed" || !call.result || !call.resultHash
-        || call.resultHash !== operationDigest(JSON.stringify(call.result))
-        || acceptedResults[call.request.callId] !== call.resultHash
-        || (call.observerLost && !call.reconciliation)
-        || call.request.freeform || !["exec_command", "write_stdin"].includes(call.request.wireName)) return undefined;
-      const receipt = nativeExecutionReceipt(call.result);
-      if (receipt.state === "unknown") return undefined;
-      if (receipt.state === "running") handles.add(receipt.sessionId);
-      else if (call.request.wireName === "write_stdin" && Number.isSafeInteger(call.request.arguments?.session_id)) {
-        handles.delete(Number(call.request.arguments!.session_id));
-      }
-    }
-    if (handles.size) return undefined;
+    if (!this.acceptedRecoveryCalls(channel, acceptedResults)) return undefined;
     const ingress = opaqueId("turn");
     const ingressHash = operationDigest(ingress);
     this.journal.write(`ingress:${ingressHash}`, { version: 1, ownerTokenHash: channel.durable.tokenHash, traceId: channel.traceId });
-    channel.durable = { ...channel.durable, receiptRecovery: true, observationIngressHash: ingressHash };
-    // One atomic owner transition: no old page or new recovery page may redispatch Native tools.
+    channel.durable = { ...channel.durable, receiptRecovery: true, observationIngressHash: ingressHash,
+      receiptContinuation: { acceptedResults: { ...acceptedResults },
+        environmentHash: this.recoveryEnvironmentHash(channel), resumed: false } };
+    // The owner must accept the reconstructed context before the fresh page gets execution.
+    // Old bindings retain exact-result query access, never admission to new calls.
     this.checkpoint(channel);
+    if (channel.bindingId) this.bindings.delete(channel.bindingId);
+    channel.bindingId = undefined;
     if (channel.ingressToken) this.recoveryIngress.delete(channel.ingressToken);
     channel.ingressToken = ingress;
     this.recoveryIngress.set(ingress, token);
@@ -827,6 +868,102 @@ export class TurnBroker implements TurnBrokerOwner {
       receipts: calls.map(call => ({ call_ref: operationDigest(call.request.callId), result_hash: call.resultHash })), native_redispatch: false })}`);
     return { token: ingress, receipts: calls.map(call => ({ request: structuredClone(call.request),
       result: structuredClone(call.result!), resultHash: call.resultHash! })) };
+  }
+
+  private recoveryEnvironmentHash(channel: TurnChannel): string {
+    return operationDigest(JSON.stringify([environmentIdentity(channel.environment), channel.environment.tools]));
+  }
+
+  private acceptedRecoveryCalls(channel: TurnChannel, accepted: Record<string, string>): boolean {
+    const calls = Object.values(channel.durable.calls);
+    return calls.length > 0 && calls.length === Object.keys(accepted).length && calls.every(call => {
+      if (call.state !== "completed" || !call.result || !call.resultHash
+        || call.resultHash !== operationDigest(JSON.stringify(call.result))
+        || accepted[call.request.callId] !== call.resultHash
+        || (call.observerLost && !call.reconciliation)) return false;
+      if (["exec_command", "write_stdin"].includes(call.request.wireName)) {
+        return !call.request.freeform && nativeExecutionReceipt(call.result).state !== "unknown";
+      }
+      // Arbitrary exec programs may yield nested asynchronous work. Do not infer their
+      // lifetime from a completed outer RPC. Declared synchronous/custom tool results
+      // (including apply_patch and failures) are themselves the accepted call outcome.
+      const declared = channel.environment.tools.find(tool => namespacedToolName(tool.namespace, tool.name) === call.request.wireName
+        && (tool.freeform === true) === call.request.freeform);
+      return !!declared && !["exec", "wait"].includes(declared.name);
+    });
+  }
+
+  resumeAfterReceiptRecovery(token: string, recoveryToken: string, acceptedResults: Record<string, string>): boolean {
+    this.prune();
+    const channel = this.channels.get(token);
+    const recovery = channel?.durable.receiptContinuation;
+    if (!channel || !recovery || channel.ingressToken !== recoveryToken || channel.completionCommitted
+      || channel.compactionRequested || channel.invocations.size || channel.activities.size
+      || recovery.environmentHash !== this.recoveryEnvironmentHash(channel)
+      || !this.acceptedRecoveryCalls(channel, acceptedResults)
+      || Object.keys(recovery.acceptedResults).length !== Object.keys(acceptedResults).length
+      || Object.entries(recovery.acceptedResults).some(([id, hash]) => acceptedResults[id] !== hash)) return false;
+    channel.durable = { ...channel.durable, receiptContinuation: { ...recovery, resumed: true } };
+    this.checkpoint(channel);
+    return true;
+  }
+
+  /** Terminal handle evidence dominates late running replies from concurrent polls. */
+  private nativeSessions(channel: DurableToolChannel): { open: Set<number>; closed: Set<number> } {
+    const open = new Set<number>(), closed = new Set<number>();
+    for (const call of Object.values(channel.calls)) {
+      if (call.state !== "completed" || !call.result
+        || !["exec_command", "write_stdin"].includes(call.request.wireName) || call.request.freeform) continue;
+      const receipt = nativeExecutionReceipt(call.result);
+      if (receipt.state === "terminal" && call.request.wireName === "write_stdin"
+        && Number.isSafeInteger(call.request.arguments?.session_id)) {
+        const id = Number(call.request.arguments!.session_id);
+        closed.add(id); open.delete(id);
+      } else if (receipt.state === "running") {
+        if (call.request.wireName === "exec_command") closed.delete(receipt.sessionId);
+        if (!closed.has(receipt.sessionId)) open.add(receipt.sessionId);
+      }
+    }
+    return { open, closed };
+  }
+
+  private assertReceiptContinuation(channel: TurnChannel, request: BrokerRequest): void {
+    const recovery = channel.durable.receiptContinuation;
+    if (!recovery?.resumed || recovery.environmentHash !== this.recoveryEnvironmentHash(channel)) {
+      throw new Error("Native execution is closed until the owner accepts receipt recovery under the current permissions");
+    }
+    if (!channel.environment.tools.some(tool => namespacedToolName(tool.namespace, tool.name) === request.wireName?.trim()
+      && (tool.freeform === true) === (request.freeform === true))) {
+      throw new Error("Native continuation tool is not authorized in the current turn");
+    }
+    const original = Object.keys(recovery.acceptedResults).map(id => channel.durable.calls[id]!);
+    const emptyPoll = this.isKnownHandlePoll(channel.durable, request);
+    if (!emptyPoll && original.some(call => this.recoveryActionSignature(call.request) === this.recoveryActionSignature(request))) {
+      throw new Error("Recovered action is already accepted; query its original receipt, never repeat its side effects");
+    }
+    if (request.wireName?.trim() === "write_stdin") {
+      const session = request.arguments?.session_id;
+      if (this.nativeSessions(channel.durable).closed.has(Number(session))) {
+        throw new Error("Native session is already terminal; query the retained receipt");
+      }
+      if (original.some(call => this.completedCallHasSession(call, session)) && !emptyPoll) {
+        const polled = Object.values(channel.durable.calls).some(call => !recovery.acceptedResults[call.request.callId]
+          && call.state === "completed" && call.request.wireName === "write_stdin"
+          && call.request.arguments?.session_id === session
+          && (call.request.arguments?.chars ?? "") === ""
+          && call.result && nativeExecutionReceipt(call.result).state !== "unknown");
+        if (!polled) throw new Error("Recover the original native handle with a short empty poll before sending new stdin");
+      }
+    }
+  }
+
+  private recoveryActionSignature(request: Pick<BrokerRequest, "wireName" | "freeform" | "input" | "arguments">): string {
+    // Poll/output budgets do not make a repeated command or stdin side effect a new step.
+    const args = { ...request.arguments };
+    if (["exec_command", "write_stdin"].includes(request.wireName?.trim() ?? "")) {
+      delete args.yield_time_ms; delete args.max_output_tokens;
+    }
+    return this.invocationSignature({ id: "recovery", method: "invoke", ...request, arguments: args });
   }
 
   /** Rotate only a channel which has NEVER admitted an MCP action. Owner/poll identity stays stable. */
@@ -1327,7 +1464,7 @@ export class TurnBroker implements TurnBrokerOwner {
     if (!request || typeof request !== "object" || typeof request.id !== "string" || request.id.length === 0 || request.id.length > 256) {
       throw new Error("turn broker request id is invalid");
     }
-    if (!["claim", "resolve", "release", "invoke", "owner_status", "owner_invocation_receipt", "read_tool_receipt", "public_delivery_lost", "owner_receipt_recovery", "owner_register", "owner_register_safe", "owner_update", "owner_safe_sent", "owner_next", "owner_complete", "owner_recovery_rotate", "owner_completion_fence_begin", "owner_completion_fence_commit", "owner_wait_retirement", "owner_revoke", "owner_safe_wait_start", "owner_safe_wait_completion", "owner_request_compaction", "owner_compaction_delivery_count", "safe_start", "safe_complete", "activity_complete", "submit_compaction_handoff"].includes(request.method)) {
+    if (!["claim", "resolve", "release", "invoke", "owner_status", "owner_release_status", "owner_invocation_receipt", "read_tool_receipt", "public_delivery_lost", "owner_receipt_recovery", "owner_receipt_resume", "owner_register", "owner_register_safe", "owner_update", "owner_safe_sent", "owner_next", "owner_complete", "owner_recovery_rotate", "owner_completion_fence_begin", "owner_completion_fence_commit", "owner_wait_retirement", "owner_revoke", "owner_safe_wait_start", "owner_safe_wait_completion", "owner_request_compaction", "owner_compaction_delivery_count", "safe_start", "safe_complete", "activity_complete", "submit_compaction_handoff"].includes(request.method)) {
       throw new Error("turn broker method is invalid");
     }
     if (request.invocationId !== undefined && (typeof request.invocationId !== "string"
@@ -1337,10 +1474,16 @@ export class TurnBroker implements TurnBrokerOwner {
   }
 
   private async dispatch(request: BrokerRequest, socketSignal?: AbortSignal): Promise<unknown> {
+    if (request.method === "owner_release_status") return {contract:"broker-durable-release-v1",...this.releaseStatus()};
     if (request.method === "public_delivery_lost") return this.notePublicDeliveryLost(request);
     if (request.method === "owner_receipt_recovery") {
       if (!request.token || !request.acceptedResults || typeof request.acceptedResults !== "object" || Array.isArray(request.acceptedResults)) throw new Error("Native accepted-result proof is required");
       return { recovery: this.recoverCompletedReceipts(request.token, request.acceptedResults, request.retryReadOnly === true) ?? null };
+    }
+    if (request.method === "owner_receipt_resume") {
+      if (!request.token || !request.recoveryToken || !request.acceptedResults
+        || typeof request.acceptedResults !== "object" || Array.isArray(request.acceptedResults)) throw new Error("Native accepted-result proof is required");
+      return { resumed: this.resumeAfterReceiptRecovery(request.token, request.recoveryToken, request.acceptedResults) };
     }
     if (request.method === "read_tool_receipt") {
       if (!request.bindingId) throw new Error("The original turn binding is required");
@@ -1370,7 +1513,7 @@ export class TurnBroker implements TurnBrokerOwner {
       const live = this.bindings.get(request.bindingId)?.channel.durable;
       const link = this.journal.read<{ tokenHash: string }>(`binding:${operationDigest(request.bindingId)}`);
       const saved = live ?? (link && this.journal.read<DurableToolChannel>(link.tokenHash));
-      if (!saved || saved.bindingHash !== operationDigest(request.bindingId)) throw new Error("The original invocation binding is unavailable; execution remains unknown");
+      if (!saved || (!live && !link)) throw new Error("The original invocation binding is unavailable; execution remains unknown");
       const call = Object.values(saved.calls).find(call => call.requestId === this.invocationIdentity(request));
       if (!call) return { state: "not_found", execution_state: "unknown", retryable: false, delivery: "unknown" };
       if (call.signature !== this.invocationSignature(request)) throw new Error("Tool request identity conflicts with its accepted invocation");
@@ -1643,9 +1786,6 @@ export class TurnBroker implements TurnBrokerOwner {
       return structuredClone(result);
     }
 
-    if (binding.channel.durable.receiptRecovery) {
-      throw new Error("Native execution is closed for receipt-only context recovery; use the retained results, never repeat an action");
-    }
     const wireName = request.wireName?.trim();
     if (!wireName) throw new Error("wire tool name is required");
     const requestId = this.invocationIdentity(request);
@@ -1666,6 +1806,7 @@ export class TurnBroker implements TurnBrokerOwner {
       }
       throw new Error("Tool invocation retained; no second dispatch is permitted");
     }
+    if (binding.channel.durable.receiptRecovery) this.assertReceiptContinuation(binding.channel, request);
     if (Object.values(binding.channel.durable.calls).some(call => call.observerLost && !call.reconciliation)
       && !this.isKnownHandlePoll(binding.channel.durable, request)) {
       throw new Error("Tool execution retained with unknown outcome; new side effects are blocked. Query the same receipt or empty-poll a known native session handle; do not resubmit");
@@ -2130,6 +2271,12 @@ export class RemoteTurnBroker implements TurnBrokerOwner {
     const response = await callTurnBroker<{ recovery: CompletedReceiptRecovery | null }>(this.socketPath,
       { method: "owner_receipt_recovery", token, acceptedResults, retryReadOnly }, 5_000);
     return response.recovery ?? undefined;
+  }
+
+  async resumeAfterReceiptRecovery(token: string, recoveryToken: string, acceptedResults: Record<string, string>): Promise<boolean> {
+    const response = await callTurnBroker<{ resumed: boolean }>(this.socketPath,
+      { method: "owner_receipt_resume", token, recoveryToken, acceptedResults }, 5_000);
+    return response.resumed === true;
   }
 
   async rotateForRecovery(token: string): Promise<string | undefined> {

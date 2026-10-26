@@ -8,6 +8,7 @@ export type Surface = "browser" | "setup" | "mcp" | "activity" | "limits" | "set
 
 export interface LauncherState {
   version: 1;
+  maintenanceDelivery?: { event: HealthMaintenanceEvent; attempts: number; acknowledgedAt: number | null };
   language: Language | null;
   onboardingComplete: boolean;
   githubOpened: boolean;
@@ -98,7 +99,14 @@ export interface DoctorReport {
   checks: DoctorCheck[];
 }
 
+export interface HealthMaintenanceEvent {
+  eventId: string; accountKey: string;
+  state: "ready" | "signed_out" | "unknown" | "runtime_unavailable" | "binding_mismatch" | "draining";
+  observedAt: number;
+}
+
 export interface OperationState {
+  maintenance?: HealthMaintenanceEvent;
   name: string;
   status: "running" | "completed" | "failed";
   message: string;
@@ -138,6 +146,7 @@ export interface LauncherSnapshot {
 }
 
 export interface LauncherApi {
+  acknowledgeMaintenance(value: { eventId: string }): Promise<boolean>;
   snapshot(): Promise<LauncherSnapshot>;
   getLimits(): Promise<LimitsSnapshot>;
   setupLimits(): Promise<LimitsSnapshot>;

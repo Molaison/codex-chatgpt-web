@@ -62,11 +62,12 @@ test("real public HTTP abort retains Native, verified result rebuilds once, both
   } finally {
     await fetch(server.url.origin + "/mcp", { method: "DELETE", headers: { "mcp-session-id": session, "MCP-Protocol-Version": "2025-11-25", accept: "application/json, text/event-stream" } });
     await fetch(server.url.origin + "/admin/release/drain", { method: "POST", headers: { authorization: "Bearer 115-isolated-test-only-release-key" } });
+    broker.revoke(token);
     await server.close(); await broker.close(); closeSync(fd); rmSync(root, { recursive: true, force: true });
   }
 }, 15_000);
 
-test("ongoing process, unknown outcome and unrelated RPC never authorize receipt migration", async () => {
+test("a proven running receipt stays read-only until owner resume; unrelated RPC is not loss evidence", async () => {
   const root = mkdtempSync(join(process.env.Q39_TEST_ROOT!, "115-gate-")), fd = openSync(root, "r"), socket = `/proc/${process.pid}/fd/${fd}/b.sock`;
   const broker = TurnBroker.forSocket(socket); await broker.listen();
   const token = await broker.register({ cwd: root, roots: [root], writableRoots: [], sandboxPolicy: { type: "readOnly", networkAccess: false }, tools: [] });
@@ -83,6 +84,10 @@ test("ongoing process, unknown outcome and unrelated RPC never authorize receipt
     broker.completeTool(token, call!.callId, running); await invoked;
     await callTurnBroker(socket, { method: "activity_complete", token, activityId });
     const proof = { [call!.callId]: operationDigest(JSON.stringify(running)) };
-    expect(broker.recoverCompletedReceipts(token, proof)).toBeUndefined();
+    const recovery=broker.recoverCompletedReceipts(token,proof)!;
+    expect(recovery).toBeDefined();
+    const fresh=await callTurnBroker<any>(socket,{method:"claim",token:recovery.token,activityId:"activity_115runningreadonly00"});
+    await expect(callTurnBroker(socket,{method:"invoke",bindingId:fresh.bindingId,invocationId:"forbidden-before-owner-resume",wireName:"exec_command",arguments:{cmd:"must not execute"}})).rejects.toThrow("execution is closed");
+    await callTurnBroker(socket,{method:"activity_complete",token:recovery.token,activityId:"activity_115runningreadonly00"});
   } finally { await broker.close(); closeSync(fd); rmSync(root, { recursive: true, force: true }); }
 }, 10_000);

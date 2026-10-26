@@ -39,12 +39,17 @@ const QUESTION_ANSWER_EXCLUDED_KINDS = new Set([
   "skills.selected_skill_instructions",
 ]);
 
-function qaUserContent(item: { content?: unknown }, kinds: string[] | undefined): string | CodexContentPart[] {
+function qaUserContent(item: { content?: unknown }, kinds: string[] | undefined): {
+  qaContent?: string | CodexContentPart[]; qaProvenance: "native" | "unresolved";
+} {
   const parts = typeof item.content === "string" ? [{ type: "input_text", text: item.content }] : item.content;
-  if (!Array.isArray(kinds) || !Array.isArray(parts) || kinds.length !== parts.length) {
-    return inputContentParts(item.content as unknown[] | string | undefined);
+  if (kinds === undefined) return { qaProvenance: "unresolved" };
+  if (!Array.isArray(kinds) || !kinds.every(kind => typeof kind === "string")
+    || !Array.isArray(parts) || kinds.length !== parts.length) {
+    return { qaContent: inputContentParts(item.content as unknown[] | string | undefined), qaProvenance: "unresolved" };
   }
-  return inputContentParts(parts.filter((_part, index) => !QUESTION_ANSWER_EXCLUDED_KINDS.has(kinds[index]!)));
+  return { qaContent: inputContentParts(parts.filter((_part, index) => !QUESTION_ANSWER_EXCLUDED_KINDS.has(kinds[index]!))),
+    qaProvenance: "native" };
 }
 
 function inputContentParts(blocks: unknown[] | string | undefined): string | CodexContentPart[] {
@@ -423,13 +428,14 @@ export function parseRequest(body: unknown): CodexParsedRequest {
             const content = inputContentParts(msg.content as unknown[] | string | undefined);
             const kinds = msg.internal_chat_message_metadata_passthrough?.content_item_kinds;
             const selectedSkill = msg.role === "user" && kinds?.length === 1
+              && (typeof msg.content === "string" || Array.isArray(msg.content) && msg.content.length === 1)
               && kinds[0] === "skills.selected_skill_instructions";
             messages.push({
               role: msg.role,
               content,
               timestamp: now,
               ...(selectedSkill ? { origin: "codex_skill" as const } : {}),
-              ...(msg.role === "user" ? { qaContent: qaUserContent(msg, kinds) } : {}),
+              ...(msg.role === "user" ? qaUserContent(msg, kinds) : {}),
             });
             break;
           }

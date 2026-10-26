@@ -39,6 +39,13 @@ export class McpAdmissionBook {
     receipt.claimNotDispatched = true;
     return true;
   }
+  /** Called only by the local SDK handler after proving it never entered Native invoke. */
+  noteLocalNotDispatched(id:string|number): boolean {
+    const receipt=this.receipts.get(id);
+    if (!receipt?.pending) return false;
+    receipt.claimNotDispatched=true;
+    return true;
+  }
   duplicate(message: Message): Promise<Response> | undefined {
     const prior = this.receipts.get(message.id);
     if (!prior) return;

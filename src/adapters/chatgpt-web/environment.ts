@@ -254,7 +254,18 @@ function isDelegatedInstruction(item: Record<string, unknown> | undefined): bool
 function isNativeInstruction(
   item: Record<string, unknown> | undefined,
   metadata?: Record<string, unknown>,
+  questionAnswer = false,
 ): item is Record<string, unknown> {
+  if (questionAnswer && item?.type === "message" && item.role === "user") {
+    const parts = typeof item.content === "string" ? [item.content] : item.content;
+    const kinds = record(item.internal_chat_message_metadata_passthrough)?.content_item_kinds;
+    if (Array.isArray(parts) && Array.isArray(kinds) && kinds.length === parts.length
+      && kinds.every(kind => typeof kind === "string")) {
+      if (kinds.some(kind => ["user.text", "user.image", "user.file", "user.audio"].includes(kind))) return true;
+      if (kinds.every(kind => ["agents_md.instructions", "environments.environment_context",
+        "skills.selected_skill_instructions", "additional_content.codex_apps_open_page"].includes(kind))) return false;
+    }
+  }
   if (item?.type === "message" && item.role === "user") return !contextualUserMessage(item);
   if (isDelegatedInstruction(item)) return true;
   if (item?.type !== "agent_message" || typeof item.id !== "string" || !item.id
@@ -323,7 +334,7 @@ function latestChatGptTurnUserRevision(parsed: CodexParsedRequest, expectedTurnI
   const metadata = clientTurnMetadata(parsed);
   const recovered = recoverCheckpoint ? recoverCompactionInstruction(parsed, extractChatGptTurnIdentity(parsed)) : undefined;
   for (let index = input.length - 1; index >= 0; index -= 1) {
-    const revision = userRevision(input[index], expectedTurnId, metadata);
+    const revision = userRevision(input[index], expectedTurnId, metadata, parsed._chatgptLocalTools === false);
     if (revision) {
       // v1 retains the older human message but drops a synthetic delegation. Recover the
       // actual task only for an exact producer-authenticated retained representation before
@@ -336,9 +347,9 @@ function latestChatGptTurnUserRevision(parsed: CodexParsedRequest, expectedTurnI
   return recovered?.source;
 }
 
-function userRevision(value: unknown, expectedTurnId?: string, metadata?: Record<string, unknown>): ChatGptTurnUserRevision | undefined {
+function userRevision(value: unknown, expectedTurnId?: string, metadata?: Record<string, unknown>, questionAnswer = false): ChatGptTurnUserRevision | undefined {
   const item = record(value);
-  if (!isNativeInstruction(item, metadata)) return undefined;
+  if (!isNativeInstruction(item, metadata, questionAnswer)) return undefined;
   const messageTurnId = itemTurnId(item);
   // An abort notice is contextual only when native metadata identifies its earlier turn.
   if (item.type === "message" && isTurnAbortedNotice(item) && expectedTurnId !== undefined
@@ -358,11 +369,11 @@ export function chatGptTurnUserRevisionHistory(parsed: CodexParsedRequest): Chat
   const recovered = recoverCompactionInstruction(parsed, extractChatGptTurnIdentity(parsed));
   const input = Array.isArray(body?.input) ? body.input : [];
   const prefix = recovered?.sourceWasDelegation ? input.slice(0, recovered.summaryIndex) : [];
-  const retained = prefix.map(value => userRevision(value, turnId, metadata)).filter(value => value !== undefined).at(-1);
+  const retained = prefix.map(value => userRevision(value, turnId, metadata, parsed._chatgptLocalTools === false)).filter(value => value !== undefined).at(-1);
   const recoverDelegation = recovered?.sourceWasDelegation && (!retained
     || isAcceptedCompactionContinuation(parsed, extractChatGptTurnIdentity(parsed), retained));
   const revisions = input.slice(recoverDelegation ? recovered!.summaryIndex + 1 : 0).flatMap(value => {
-    const revision = userRevision(value, turnId, metadata);
+    const revision = userRevision(value, turnId, metadata, parsed._chatgptLocalTools === false);
     return revision ? [revision] : [];
   });
   if (recoverDelegation) return [recovered!.source, ...revisions];

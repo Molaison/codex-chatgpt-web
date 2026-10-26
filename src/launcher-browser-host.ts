@@ -56,6 +56,8 @@ export interface LauncherBrowserHostDescriptor {
   surfaceTargets: Record<string, string>;
   createdAt: string;
   observationInstanceId?: string;
+  hostVersion?: string;
+  hostClosureDigest?: string;
 }
 
 export interface LauncherBrowserConnection {
@@ -147,6 +149,8 @@ function assertDescriptorShape(value: unknown): LauncherBrowserHostDescriptor {
     surfaceId: descriptor.surfaceId,
     surfaceTargets: targets,
     createdAt: descriptor.createdAt,
+    ...(typeof descriptor.hostVersion === "string" ? { hostVersion: descriptor.hostVersion } : {}),
+    ...(typeof descriptor.hostClosureDigest === "string" && /^[a-f0-9]{64}$/.test(descriptor.hostClosureDigest) ? { hostClosureDigest: descriptor.hostClosureDigest } : {}),
     ...(typeof descriptor.observationInstanceId === "string" && /^[A-Za-z0-9_-]{32}$/.test(descriptor.observationInstanceId)
       ? { observationInstanceId: descriptor.observationInstanceId } : {}),
   };
@@ -369,7 +373,174 @@ export const LAUNCHER_CAPABILITY_INSPECTION_TIMEOUT_MS = 120_000;
 
 export class LauncherBrowserWriterConflictError extends Error {}
 
+export type NativeWatchField = { presence: "absent" | "null" } | { presence: "value"; value: string };
+export type NativeWatchStage = { kind: "final" } | { kind: "part"; index: number; total: number };
+export interface NativeWatchBinding {
+  roundKey: string;
+  stage: NativeWatchStage;
+  host: LauncherNativeSubmissionWatch["host"];
+  lease: LauncherNativeSubmissionWatch["lease"];
+  documentEpoch: string;
+}
+/** Structural mirrors of native-execution.ts; this transport layer owns no durable journal. */
+export interface NativeWatchOperationScope {
+  operationId: string; executionKey: string; roundKey: string;
+  threadId?: string; turnId: string; traceId: string;
+}
+export interface NativeWatchCancelIntent {
+  version: 1; cancelId: string; source: "native_interrupt";
+  threadId: string; turnId: string; requestedAt: number;
+  scope: NativeWatchOperationScope; sendId: string; binding: NativeWatchBinding;
+}
+export interface NativeWatchCancelTerminal {
+  cancelId: string; sendId: string; sessionEpoch: string; watchSeq: number;
+  proof: "same-bound-generation-stopped" | "same-bound-generation-completed" | "not_dispatched";
+  assistantIdentity?: string; observedAt: number; dispatchAttempted: boolean;
+}
+/** Full ready was ACKed by parent first. Host receives no answer, only this sealed metadata. */
+export interface NativeWatchResultReadyMetadata {
+  version: 1; scope: NativeWatchOperationScope; sendId: string; completedDigest: string;
+  answerSha256: string; readyAt: number; digest: string;
+}
+export interface NativeHostReleaseRequest {
+  sendId: string; binding: NativeWatchBinding; sessionEpoch: string; terminalDigest: string;
+}
+export interface NativeHostReleaseReceipt {
+  version: 1; releaseId: string; sendId: string; roundKey: string; sessionEpoch: string;
+  host: NativeWatchBinding["host"]; lease: NativeWatchBinding["lease"];
+  documentEpoch: string; outcome: "completed" | "cancelled"; terminalDigest: string;
+}
+export interface LauncherNativeReleaseReadRequest {
+  phase: "native-release-read";
+  traceId: string; helperPid: number; surfaceId: string; sendId: string;
+  host: NativeWatchBinding["host"]; targetId: string; binding: NativeWatchBinding;
+  sessionEpoch: string; scope: NativeWatchOperationScope;
+  authorization: { resultReadyDigest: string }
+    | { observation: import("./adapters/chatgpt-web/observation-recovery").BrowserObservationCheckpoint }
+    | { cancelId: string; terminalDigest: string }
+    | { cancelId: string; terminalDigest: string; intentDigest: string };
+}
+export interface NativeWatchCompletion {
+  proof: "same-bound-assistant-completed";
+  assistantIdentity: string;
+  userMessageId: string;
+  payloadSha256: string;
+  watchSeq: number;
+  observedAt: number;
+}
+/** Exact acknowledged native record, not a projection: digest = sha256(JSON.stringify(record)). */
+export interface NativeWatchDurableReceipt {
+  record: {
+    version: 1;
+    sendId: string;
+    revision: number;
+    phase: "stage_acknowledged" | "completed";
+    binding: NativeWatchBinding;
+    initialTurnIdentities: string[];
+    post: Pick<LauncherNativeSubmissionWatch["identities"][number],
+      "userMessageId" | "payloadSha256" | "parentMessageId" | "conversationId" | "action" | "observedAt">;
+    dom: { acceptedUserIdentity: string; assistantIdentity: string; acceptedTurnIdentities: string[];
+      proof: "same-bound-assistant-progress" | "same-bound-assistant-completed"; observedAt: number };
+    hostWatch: LauncherNativeSubmissionWatch;
+    stageAcknowledgement?: { expectedSha256: string; actualSha256: string; assistantIdentity: string };
+    completion?: NativeWatchCompletion;
+  };
+  acknowledgement: { sendId: string; revision: number; digest: string };
+}
+export interface NativeWatchNotDispatchedReceipt {
+  record: {
+    version: 1; sendId: string; revision: number; phase: "watch_ready";
+    initialTurnIdentities: string[]; binding: NativeWatchBinding; hostWatch: LauncherNativeSubmissionWatch;
+  };
+  acknowledgement: NativeWatchDurableReceipt["acknowledgement"];
+}
+export interface NativeWatchSegment {
+  sendId: string;
+  binding: NativeWatchBinding;
+  state: "watching" | "stage-completed" | "completed";
+  postCount: number;
+  identities: LauncherNativeSubmissionWatch["identities"];
+  initialConversationId: string | null;
+  /** Compact retained proof; never embeds the full record or recursively nests watch snapshots. */
+  durableReceipt?: {
+    acknowledgement: NativeWatchDurableReceipt["acknowledgement"];
+    watchSeq: number;
+    stageAcknowledgement?: NonNullable<NativeWatchDurableReceipt["record"]["stageAcknowledgement"]>;
+    completion?: NativeWatchCompletion;
+  };
+}
+export interface LauncherNativeSubmissionWatch {
+  version: 1;
+  scope: NativeWatchOperationScope | null;
+  resultReady?: NativeWatchResultReadyMetadata;
+  cancellation?: { cancelId: string; intentDigest: string; requestedAt: number; dispatchAttempted: boolean;
+    terminal?: NativeWatchCancelTerminal; terminalDigest?: string; notDispatchedDigest?: string };
+  traceId: string;
+  sendId: string;
+  currentSendId: string;
+  binding: NativeWatchBinding | null;
+  segmentState: NativeWatchSegment["state"];
+  totalPostCount: number;
+  /** Previously closed segments; their proofs stay present after rotation. */
+  segments: NativeWatchSegment[];
+  latePosts: Array<{ observedDuringSendId: string; originalSendId: string;
+    identity: LauncherNativeSubmissionWatch["identities"][number] }>;
+  host: { pid: number; instanceId: string; profile: string; partition: string };
+  lease: { helperPid: number; surfaceId: string; targetId: string };
+  sessionEpoch: string;
+  documentEpoch: string | null;
+  mainFrame: { frameId: string; loaderId: string } | null;
+  seq: number;
+  active: boolean;
+  gap: boolean;
+  gapReasons: string[];
+  conflict: boolean;
+  conflictReasons: string[];
+  postCount: number;
+  identities: Array<{
+    ordinal: number;
+    watchOrdinal: number;
+    endpoint: "/backend-api/conversation" | "/backend-api/f/conversation";
+    requestId: string;
+    frameId: string;
+    loaderId: string;
+    userMessageId: string;
+    payloadSha256: string;
+    action: NativeWatchField;
+    parentMessageId: NativeWatchField;
+    conversationId: NativeWatchField;
+    observedAt: number;
+  }>;
+  startedAt: number;
+  readAt: number;
+  stoppedAt?: number;
+  initialConversationId: string | null;
+  boundConversationId: string | null;
+  flush: { stable: boolean; pending: number; throughSeq: number };
+}
+interface LauncherNativeSubmissionWatchOwner {
+  phase: "native-submission-watch";
+  traceId: string;
+  helperPid: number;
+  surfaceId: string;
+  sendId: string;
+  host: LauncherNativeSubmissionWatch["host"];
+  targetId: string;
+}
+export type LauncherNativeSubmissionWatchRequest = LauncherNativeSubmissionWatchOwner & (
+  | { action: "start"; slot: Pick<NativeWatchBinding, "roundKey" | "stage">; scope: NativeWatchOperationScope }
+  | { action: "read"; observation?: import("./adapters/chatgpt-web/observation-recovery").BrowserObservationCheckpoint }
+  | { action: "stage-complete"; receipt: NativeWatchDurableReceipt;
+      next: { sendId: string; binding: NativeWatchBinding } }
+  | { action: "final-complete"; receipt: NativeWatchDurableReceipt; resultReady: NativeWatchResultReadyMetadata }
+  | { action: "cancel-request"; intent: NativeWatchCancelIntent; acknowledgement: { digest: string }; dispatchAttempted: boolean }
+  | { action: "cancel-terminal"; terminal: NativeWatchCancelTerminal; acknowledgement: { digest: string };
+      notDispatchedReceipt?: NativeWatchNotDispatchedReceipt }
+);
+
 export type LauncherTurnActivity =
+  | LauncherNativeReleaseReadRequest
+  | LauncherNativeSubmissionWatchRequest
   | {
       phase: "observe-ready" | "observe";
       traceId: string;
@@ -425,7 +596,8 @@ export type LauncherTurnActivity =
       traceId: string;
       helperPid: number;
       surfaceId?: string;
-      status: "completed" | "failed" | "aborted";
+      status: "completed" | "cancelled" | "failed" | "aborted";
+      nativeRelease?: NativeHostReleaseRequest;
       message?: string;
       retain?: boolean;
       connectorBound?: boolean;
@@ -675,6 +847,8 @@ export async function notifyLauncherTurn(
   cancelledByUser?: boolean;
   authenticationRequired?: boolean;
   trackUsage?: boolean;
+  nativeSubmissionWatch?: LauncherNativeSubmissionWatch;
+  nativeRelease?: NativeHostReleaseReceipt | null;
 }> {
   const descriptor = readLauncherBrowserHostDescriptor(descriptorPath);
   const controller = new AbortController();
@@ -708,6 +882,87 @@ export async function notifyLauncherTurn(
       throw new Error(`HTTP ${response.status}${detail ? `: ${detail}` : ""}`);
     }
     const body = await response.json().catch(() => ({})) as Record<string, unknown>;
+    let release: NativeHostReleaseReceipt | null | undefined;
+    if (activity.phase === "native-release-read" || activity.phase === "end" && activity.nativeRelease) {
+      const r = body.nativeRelease as NativeHostReleaseReceipt | null | undefined;
+      const sealedCancel = activity.phase === "native-release-read" && "intentDigest" in activity.authorization
+        ? activity.authorization : undefined;
+      const expected = activity.phase === "end" ? activity.nativeRelease! : activity;
+      if (body.ok !== true || r === undefined || (r === null && activity.phase === "end")
+        || (sealedCancel && (!r || r.outcome !== "cancelled" || r.terminalDigest !== sealedCancel.terminalDigest))
+        || (r !== null && (!r || Object.keys(r).length !== 10 || r.version !== 1
+          || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(r.releaseId)
+          || r.sendId !== expected.sendId || r.roundKey !== expected.binding.roundKey
+          || r.sessionEpoch !== expected.sessionEpoch || r.documentEpoch !== expected.binding.documentEpoch
+          || !["pid", "instanceId", "profile", "partition"].every(k =>
+            r.host?.[k as keyof typeof r.host] === expected.binding.host[k as keyof typeof r.host])
+          || !["helperPid", "surfaceId", "targetId"].every(k =>
+            r.lease?.[k as keyof typeof r.lease] === expected.binding.lease[k as keyof typeof r.lease])
+          || !["completed", "cancelled"].includes(r.outcome) || !/^[a-f0-9]{64}$/.test(r.terminalDigest)
+          || (activity.phase === "end" && (r.outcome !== activity.status || r.terminalDigest !== activity.nativeRelease!.terminalDigest))))) {
+        throw new Error("Launcher returned invalid original release metadata");
+      }
+      release = r;
+      if (activity.phase === "native-release-read") return { nativeRelease: release };
+    }
+    if (activity.phase === "native-submission-watch") {
+      const watch = body.nativeSubmissionWatch as LauncherNativeSubmissionWatch | undefined;
+      const expectedSendId = activity.action === "stage-complete" ? activity.next.sendId : activity.sendId;
+      const observation = activity.action === "read" ? activity.observation : undefined;
+      if (body.ok !== true || !watch || watch.version !== 1 || watch.traceId !== activity.traceId
+        || watch.sendId !== expectedSendId || watch.host?.pid !== activity.host.pid
+        || watch.host?.instanceId !== activity.host.instanceId || watch.host?.profile !== activity.host.profile
+        || watch.host?.partition !== activity.host.partition || watch.lease?.surfaceId !== activity.surfaceId
+        || watch.lease?.targetId !== activity.targetId
+        || watch.lease?.helperPid !== (observation?.lease.helperPid ?? activity.helperPid)
+        || !watch.scope || watch.scope.traceId !== activity.traceId || watch.scope.roundKey !== watch.binding?.roundKey
+        || (activity.action === "start" && (Object.hasOwn(watch.scope, "threadId") !== Object.hasOwn(activity.scope, "threadId")
+          || ["operationId", "executionKey", "roundKey", "threadId", "turnId", "traceId"]
+            .some(k => watch.scope![k as keyof NativeWatchOperationScope] !== activity.scope[k as keyof NativeWatchOperationScope])))
+        || (activity.action === "final-complete" && JSON.stringify(watch.resultReady) !== JSON.stringify(activity.resultReady))
+        || (activity.action === "cancel-request" && (watch.cancellation?.cancelId !== activity.intent.cancelId
+          || watch.cancellation?.intentDigest !== activity.acknowledgement.digest
+          || watch.cancellation?.dispatchAttempted !== activity.dispatchAttempted))
+        || (activity.action === "cancel-terminal" && (watch.cancellation?.terminalDigest !== activity.acknowledgement.digest
+          || JSON.stringify(watch.cancellation?.terminal) !== JSON.stringify(activity.terminal)))
+        || typeof watch.currentSendId !== "string" || !["watching", "stage-completed", "completed"].includes(watch.segmentState)
+        || !Number.isSafeInteger(watch.totalPostCount) || watch.totalPostCount < watch.postCount
+        || !Array.isArray(watch.segments) || !Array.isArray(watch.latePosts)
+        || (watch.binding !== null && (!watch.binding || typeof watch.binding.roundKey !== "string"
+          || !watch.binding.roundKey || watch.binding.documentEpoch !== watch.documentEpoch
+          || JSON.stringify(watch.binding.host) !== JSON.stringify(watch.host)
+          || JSON.stringify(watch.binding.lease) !== JSON.stringify(watch.lease)))
+        || !Number.isSafeInteger(watch.seq) || watch.seq < 0
+        || typeof watch.sessionEpoch !== "string" || !watch.sessionEpoch
+        || (watch.documentEpoch !== null && (typeof watch.documentEpoch !== "string" || !watch.mainFrame
+          || typeof watch.mainFrame.frameId !== "string" || !watch.mainFrame.frameId
+          || typeof watch.mainFrame.loaderId !== "string" || !watch.mainFrame.loaderId
+          || watch.documentEpoch !== JSON.stringify([watch.mainFrame.frameId, watch.mainFrame.loaderId])))
+        || (watch.active && watch.documentEpoch === null)
+        || typeof watch.active !== "boolean" || typeof watch.gap !== "boolean" || typeof watch.conflict !== "boolean"
+        || !Array.isArray(watch.identities) || !Array.isArray(watch.gapReasons) || !Array.isArray(watch.conflictReasons)
+        || !Number.isSafeInteger(watch.postCount) || watch.postCount < watch.identities.length
+        || watch.identities.some(post => !post || typeof post.userMessageId !== "string"
+          || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(post.userMessageId)
+          || typeof post.payloadSha256 !== "string" || !/^[a-f0-9]{64}$/.test(post.payloadSha256)
+          || !["/backend-api/conversation", "/backend-api/f/conversation"].includes(post.endpoint)
+          || post.frameId !== watch.mainFrame?.frameId || post.loaderId !== watch.mainFrame?.loaderId
+          || typeof post.requestId !== "string" || !post.requestId
+          || !Number.isSafeInteger(post.ordinal) || post.ordinal < 1 || post.ordinal > watch.postCount
+          || !Number.isSafeInteger(post.watchOrdinal) || post.watchOrdinal < 1 || post.watchOrdinal > watch.totalPostCount
+          || !Number.isSafeInteger(post.observedAt) || post.observedAt < 1
+          || [post.action, post.parentMessageId, post.conversationId].some(field => !field
+            || (field.presence === "absent" || field.presence === "null"
+              ? Object.keys(field).length !== 1
+              : field.presence !== "value" || typeof field.value !== "string"
+                || !field.value || Object.keys(field).length !== 2)))
+        || typeof watch.flush?.stable !== "boolean" || !Number.isSafeInteger(watch.flush?.pending)
+        || watch.flush.pending < 0 || watch.flush.throughSeq !== watch.seq
+        || (watch.flush.stable && watch.flush.pending !== 0)) {
+        throw new Error("Launcher returned an invalid original submission watch");
+      }
+      return { nativeSubmissionWatch: watch };
+    }
     if (activity.phase === "start") {
       if (typeof body.surfaceId !== "string" || !/^[A-Za-z0-9_-]{32}$/.test(body.surfaceId)) {
         throw new Error("Launcher browser control channel returned an invalid turn surface id");
@@ -734,6 +989,7 @@ export async function notifyLauncherTurn(
       }
       return {
         cancelledByUser: body.cancelledByUser,
+        ...(release ? { nativeRelease: release } : {}),
         ...(body.authenticationRequired === true ? { authenticationRequired: true } : {}),
       };
     }

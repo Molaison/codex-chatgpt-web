@@ -25,6 +25,9 @@ test("daemon streams browser lifecycle through the real helper process", async (
       if (turn.modelFamily !== "5.6") throw new Error("Pinned model family lost in helper IPC");
       await turn.onPreparedSelected(false);
       const prepared = await turn.prepare();
+      if (turn.recoveryDeadlineAt !== 9000000000000) throw new Error("Absolute operation deadline lost in helper IPC");
+      if (!await turn.authorizeRecovery("transport_retry")) throw new Error("Shared transport recovery was denied");
+      if ((await turn.prepare()).text !== prepared.text) throw new Error("Transport retry reset the selected context");
       if (prepared.skillFiles?.[0]?.text !== "<skill>\\n<name>ipc</name>\\n<path>/skills/ipc/SKILL.md</path>\\ncheck IPC\\n</skill>") throw new Error("Skill file lost in IPC");
       if (prepared.multipart.parts.length !== 6) throw new Error("Multipart context was lost");
       for (let index = 1; index < prepared.multipart.parts.length; index++) {
@@ -91,6 +94,7 @@ test("daemon streams browser lifecycle through the real helper process", async (
   const checkpoints: unknown[] = [];
   const acknowledgedStages: number[] = [];
   const recoveryPhases: Array<string | undefined> = [];
+  const recoveryReasons: Array<string | undefined> = [];
   let sendActivated = false;
   let submitted = false;
   let heartbeats = 0;
@@ -100,6 +104,8 @@ test("daemon streams browser lifecycle through the real helper process", async (
   try {
     const result = await client.run({
       traceId: "abcdef123456",
+      recoveryDeadlineAt: 9000000000000,
+      authorizeRecovery: async reason => { recoveryReasons.push(reason); return true; },
       modelId: "gpt-5.6-sol",
       reasoning: "high",
       modelFamily: "5.6",
@@ -123,6 +129,7 @@ test("daemon streams browser lifecycle through the real helper process", async (
       captureLunaCheckpoint: true,
       onLunaCheckpoint: checkpoint => checkpoints.push(checkpoint),
     });
+    expect(recoveryReasons).toEqual(["transport_retry"]);
     expect(result).toBe("done");
     expect(reasoning).toEqual([
       { text: "Reading project", continuation: false },

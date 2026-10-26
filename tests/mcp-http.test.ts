@@ -128,37 +128,45 @@ test("invalid HTTP configuration fails closed and stdio rejects HTTP-only flags"
 });
 
 
-test("HTTP disconnect cancels its in-flight request without poisoning another request", async () => {
+test("HTTP disconnect retains its accepted request without releaseControl and exact retry returns the original result", async () => {
   const { http, environment } = fixture();
   let reached!: () => void;
-  let cancelled!: () => void;
+  let complete!: (value: unknown) => void;
+  let brokerSignal: AbortSignal | undefined;
+  let invocations = 0;
   const received = new Promise<void>(resolve => { reached = resolve; });
-  const aborted = new Promise<void>(resolve => { cancelled = resolve; });
   const broker = spyOn(brokerCalls, "callTurnBroker").mockImplementation(async (_path, request, _timeout, signal) => {
     if (request.method === "claim") return { bindingId: "fixture-binding", environment } as any;
     if (request.method === "activity_complete" || request.method === "release") return {} as any;
+    if (request.method === "public_delivery_lost") return { recorded: true } as any;
     if (request.method === "invoke") {
+      invocations++;
+      brokerSignal = signal;
       reached();
-      return await new Promise<any>((_resolve, reject) => {
-        signal!.addEventListener("abort", () => { cancelled(); reject(new Error("fixture aborted")); }, { once: true });
-      });
+      return await new Promise<any>(resolve => { complete = resolve; });
     }
     throw new Error("Unexpected fixture broker method");
   });
   cleanup.push(() => broker.mockRestore());
   const { transport } = await connect(http.url);
   const controller = new AbortController();
-  const call = fetch(http.url, { method: "POST", headers: { ...headers, "Mcp-Session-Id": transport.sessionId! }, signal: controller.signal,
-    body: JSON.stringify({ jsonrpc: "2.0", id: 7, method: "tools/call", params: {
-      name: "codex_exec", arguments: { turn_token: "fixture_turn_01234567890123456789", cmd: "fixture pending" },
-    } }),
-  }).catch(error => error);
+  const body = JSON.stringify({ jsonrpc: "2.0", id: 7, method: "tools/call", params: {
+    name: "codex_exec", arguments: { turn_token: "fixture_turn_01234567890123456789", cmd: "fixture pending" },
+  } });
+  const requestHeaders = { ...headers, "Mcp-Session-Id": transport.sessionId! };
+  const call = fetch(http.url, { method: "POST", headers: requestHeaders, signal: controller.signal, body }).catch(error => error);
   await received;
   controller.abort();
   await call;
-  await aborted;
+  expect(brokerSignal!.aborted).toBeFalse();
+  const result = { content: [{ type: "text", text: "Wall time: 0 seconds\nProcess exited with code 7\nOutput:\noriginal result" }] };
+  complete(result);
+  const replay = await fetch(http.url, { method: "POST", headers: requestHeaders, body });
+  expect((await replay.json()).result).toEqual(result);
+  expect(invocations).toBe(1);
   expect((await rpc(http.url, "tools/list")).status).toBe(200);
 }, 5_000);
+
 
 test("SDK cancellation isolates HTTP requests for distinct simulated broker turns", async () => {
   const { http, environment } = fixture();

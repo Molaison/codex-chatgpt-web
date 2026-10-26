@@ -122,7 +122,7 @@ test("Full canonical HTTP round restores only observation from terminal native r
     const store = new OperationJournal(root), saved: OperationRecord = { version: 1, operationId: c.identity.operationId, executionKey, traceId,
       ownerKey: `${namespace}:${chatGptThreadOwnershipKey(parsed)}`, threadId: c.identity.threadId, turnId: c.identity.turnId,
       requestIds: [], conversationKey: c.conversation.key, submission: "accepted", generation: "running", delivery: "detached", recovery: "none",
-      seq: 1, attempt: 1, updatedAt: Date.now(), rounds: { [roundKey]: { events: [{ type: "text_delta", text: "Prefix", phase: "final_answer" }], reasoning: [], completed: false } },
+      seq: 1, attempt: 1, updatedAt: Date.now(), startedAt: Date.now(), rounds: { [roundKey]: { events: [{ type: "text_delta", text: "Prefix", phase: "final_answer" }], reasoning: [], completed: false } },
       observation: c, observationRound: { roundKey, deliveredToolResults: accepted } };
     store.write(executionKey, saved);
     const worker = ChatGptBrowserWorker.forProvider(provider); const originalRun = worker.run;
@@ -151,19 +151,24 @@ test("provider notices have bounded independent persistence and cannot enter ass
   const root = mkdtempSync(join(tmpdir(), "42-provider-notice-"));
   try {
     const journal = new OperationJournal(root); const record: OperationRecord = { version: 1, operationId: "op_notice", executionKey: "execution_notice", traceId: "trace_notice",
-      requestIds: [], submission: "accepted", generation: "running", delivery: "attached", recovery: "none", seq: 0, attempt: 1, updatedAt: Date.now(), rounds: {} };
+      requestIds: [], submission: "accepted", generation: "running", delivery: "attached", recovery: "none", seq: 0, attempt: 1, updatedAt: Date.now(), startedAt: Date.now(), rounds: {} };
     const operation = new DurableOperation(journal, record);
     for (let i = 0; i < 35; i++) operation.notice(i % 2 ? "reconnecting" : "resumed");
     const restored = new DurableOperation(journal, journal.read<OperationRecord>(record.executionKey)!);
     const notices: AdapterEvent[] = []; const stop = restored.observeNotices(notice => notices.push({ type: "provider_notice", notice })); stop();
-    expect(notices.length).toBe(32); expect(restored.record.noticeSeq).toBe(35); expect(restored.record.rounds).toEqual({});
+    expect(notices.length).toBe(2); expect(restored.record.noticeSeq).toBe(2);
+    expect(new Set(notices.map(event => event.type === "provider_notice" ? event.notice.id : "")).size).toBe(2);
+    for (let i = 0; i < 35; i++) restored.notice("tool_waiting");
+    expect(restored.record.notices).toHaveLength(32);
+    expect(restored.record.noticeSeq).toBe(37);
+    expect(restored.record.rounds).toEqual({});
     const events: AdapterEvent[] = [...notices, { type: "text_delta", text: "Only answer" }, { type: "done" }];
     async function* source() { yield* events; }
     const frames = await new Response(bridgeToResponsesSSE(source(), "fixture-model")).text();
     const noticeFrames = frames.split("\n\n").filter(frame => frame.startsWith("event: response.provider_notice"))
       .map(frame => JSON.parse(frame.split("\ndata: ")[1]!));
-    expect(noticeFrames.length).toBe(32); expect(Object.keys(noticeFrames[0]).sort()).toEqual(["notice", "type"]);
-    expect(noticeFrames[0].notice.id).toBe(record.notices![0]!.id); expect(noticeFrames.at(-1).notice.seq).toBe(35);
+    expect(noticeFrames.length).toBe(2); expect(Object.keys(noticeFrames[0]).sort()).toEqual(["notice", "type"]);
+    expect(noticeFrames[0].notice.id).toBe(record.notices![0]!.id); expect(noticeFrames.at(-1).notice.seq).toBe(2);
     expect(noticeFrames.every(frame => Buffer.byteLength(frame.notice.message, "utf8") <= 512 && frame.notice.source === "chatgpt-web" && frame.notice.evidence === "observed")).toBe(true);
     const output = buildResponseJSON(events, "fixture-model").output;
     expect(JSON.stringify(output)).toContain("Only answer"); expect(JSON.stringify(output)).not.toContain("notice");

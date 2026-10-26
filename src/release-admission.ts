@@ -23,8 +23,8 @@ export class ReleaseAdmission {
     this.draining = saved?.draining === true;
     this.sealed = this.draining && saved?.sealed === true;
   }
-  status() {
-    const counters = { active_http: this.activeHttp, ...this.counters() };
+  status(extraCounters: Record<string, number> = {}) {
+    const counters = { active_http: this.activeHttp, ...this.counters(), ...extraCounters };
     return { status: "ok", contract: this.role+"-native-v1", owner_instance: this.instance,
       pid: process.pid, phase: this.sealed ? "sealed" : this.draining ? "draining" : "accepting", accepting_new: !this.draining, ...counters,
       safe_to_stop: this.draining && Object.values(counters).every(value => value === 0) };
@@ -36,20 +36,25 @@ export class ReleaseAdmission {
     renameSync(temp, this.config.stateFile);
     this.draining = draining;
   }
-  control(request: Request): Response | undefined {
-    const path = new URL(request.url).pathname;
-    if (!path.startsWith("/admin/release/")) return undefined;
+  authorizeControl(request: Request): Response | undefined {
     const supplied = createHash("sha256").update(request.headers.get("authorization") ?? "").digest();
     if (!timingSafeEqual(supplied, this.digest)) return new Response("Unauthorized", {status: 401});
     if (request.method === "POST" && request.headers.has("origin")) return new Response("Origin refused", {status: 403});
+    return undefined;
+  }
+  control(request: Request, extraCounters: Record<string, number> = {}): Response | undefined {
+    const path = new URL(request.url).pathname;
+    if (!path.startsWith("/admin/release/")) return undefined;
+    const refused = this.authorizeControl(request);
+    if (refused) return refused;
     if (request.method === "POST" && path === "/admin/release/drain") this.fence(true);
     else if (request.method === "POST" && path === "/admin/release/seal") {
-      if (!this.status().safe_to_stop) return Response.json({...this.status(), error: "Native work is not drained"}, {status: 409});
+      if (!this.status(extraCounters).safe_to_stop) return Response.json({...this.status(extraCounters), error: "Native work is not drained"}, {status: 409});
       this.sealed = true; this.fence(true);
     }
     else if (request.method === "POST" && path === "/admin/release/resume") this.fence(false);
     else if (!(request.method === "GET" && path === "/admin/release/status")) return new Response("Not found", {status: 404});
-    return Response.json(this.status(), {headers: {"cache-control": "no-store"}});
+    return Response.json(this.status(extraCounters), {headers: {"cache-control": "no-store"}});
   }
   enter() {
     this.activeHttp++;

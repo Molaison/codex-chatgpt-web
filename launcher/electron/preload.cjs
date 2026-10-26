@@ -7,6 +7,7 @@ function subscription(channel, listener) {
 }
 
 contextBridge.exposeInMainWorld("codexWebLauncher", {
+  acknowledgeMaintenance: (value) => ipcRenderer.invoke("launcher:maintenance-ack", value),
   snapshot: () => ipcRenderer.invoke("launcher:snapshot"),
   getLimits: () => ipcRenderer.invoke("launcher:limits"),
   setupLimits: () => ipcRenderer.invoke("launcher:limits-setup"),

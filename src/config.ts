@@ -120,6 +120,8 @@ export interface AppConfig {
   storageStatePath: string;
   /** Stable profile name used to isolate browser state and retained conversations. */
   accountId?: string;
+  /** Original-owner enrollment metadata; never inferred from a first login. */
+  qaHealthPinPath?: string;
   /** Portable saved-chat mappings. Relative paths resolve under the account home. */
   conversationStoreDirectory?: string;
   /** Public base URL used for generated-file download links. */
@@ -485,6 +487,7 @@ function parseConfig(value: unknown, path: string): AppConfig {
     && (typeof parsed.accountId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(parsed.accountId))) {
     throw new Error(`Invalid accountId in ${path}`);
   }
+  if (parsed.qaHealthPinPath !== undefined && (typeof parsed.qaHealthPinPath !== "string" || !isAbsolute(parsed.qaHealthPinPath))) throw new Error("Invalid qaHealthPinPath");
   if (parsed.conversationStoreDirectory !== undefined
     && (typeof parsed.conversationStoreDirectory !== "string"
       || !parsed.conversationStoreDirectory.trim() || parsed.conversationStoreDirectory.includes("\0"))) {

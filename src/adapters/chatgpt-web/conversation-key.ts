@@ -19,7 +19,7 @@ export function forkedFromThreadId(parsed: CodexParsedRequest): string | undefin
   return typeof parent === "string" ? parent : undefined;
 }
 
-function messageText(item: Record<string, unknown>): string | undefined {
+function messageText(item: { content?: unknown }): string | undefined {
   const content = item.content;
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return undefined;
@@ -115,6 +115,15 @@ export function retainedConversationResumeRequest(
   const lastAssistant = parsed.context.messages.findLastIndex(message => message.role === "assistant"
     && (!options.questionAnswer || (message.phase !== "commentary"
       && message.content.some(part => part.type === "text" && part.text.trim().length > 0))));
+  const lastInterrupted = parsed.context.messages.findLastIndex(message => message.role === "user"
+    && /^<turn_aborted>[\s\S]*<\/turn_aborted>$/.test(messageText(message)?.trim() ?? ""));
+  if (lastInterrupted > lastAssistant) {
+    // A tool-call/partial assistant is not a completed task boundary. Keeping only
+    // its suffix would send "aborted by user + go on" while claiming context is
+    // complete. This marker chooses more canonical context, never cancellation
+    // authority or evidence that an old command did/did not execute.
+    return { ...parsed, context: { ...parsed.context, messages: [...parsed.context.messages] } };
+  }
   if (!options.questionAnswer && lastAssistant < 0) return undefined;
   // Incremental API requests may contain no previous assistant at all. A queued
   // full-history request may also arrive before that answer exists in the client.

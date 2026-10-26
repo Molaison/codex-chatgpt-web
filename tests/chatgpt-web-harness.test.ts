@@ -3025,7 +3025,7 @@ describe("ChatGPT outer-native harness v4", () => {
       expect(turn.capabilities.localToolsEnabled).toBe(true);
       const prepared = await turn.prepare();
       try {
-        expect(prepared.text).toContain("For local work required by the task, use the attached Codex Native tools directly");
+        expect(prepared.text).toContain("attached tools' actual descriptions and schemas");
         expect(prepared.text).not.toContain("with no Codex Native bridge");
         const token = prepared.text.match(/turn_token (turn_[A-Za-z0-9_-]+)/)?.[1];
         if (!token) throw new Error("turn token missing from compiled Pro prompt");

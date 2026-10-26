@@ -10,6 +10,8 @@ import { chatGptHtmlToMarkdown } from "../src/adapters/chatgpt-web/markdown";
 import { TurnBroker } from "../src/adapters/chatgpt-web/turn-broker";
 import { parseRequest } from "../src/responses/parser";
 import type { AdapterEvent, CodexParsedRequest, CodexProviderConfig } from "../src/types";
+import { writePromptTestDescriptor } from "./44_prompt_fixture";
+import { mkdtempSync, rmSync } from "node:fs";
 
 const capabilities = { localToolsEnabled: false, solAvailable: true, extraHighAvailable: true, proAvailable: true };
 
@@ -29,7 +31,7 @@ test.each([
   expect(parsed.context.messages.at(-2)?.role).toBe("toolResult");
   expect(parsed.context.messages.at(-2)?.content).toBe(output);
   expect(result.text).toContain("Delegated task:\nExplain <sample> & its meaning.");
-  expect(result.text).toContain("a -tools model is required");
+  expect(result.text).toBe("Delegated task:\nExplain <sample> & its meaning.");
   expect(result.text).not.toContain("INTERNAL_");
   expect(result.text).not.toContain("/private/work");
   for (const mutation of [
@@ -95,11 +97,14 @@ test("account identity isolates browser workers even before different paths are 
 
 test("browser-only follow-up reuses the account conversation and sends only the new question", async () => {
   const id = randomUUID();
+  const root = mkdtempSync(join(tmpdir(), "qa-prompt-"));
+  const descriptor = join(root, "launcher.json");
+  writePromptTestDescriptor(descriptor);
   const socketPath = join(tmpdir(), "qa-" + id + ".sock");
   const provider: CodexProviderConfig = {
     adapter: "chatgpt-web", baseUrl: "browser://qa-" + id,
     chatgptWeb: {
-      accountId: id, browserHost: "launcher", browserHostDescriptorPath: join(tmpdir(), "qa-" + id + ".json"),
+      accountId: id, browserHost: "launcher", browserHostDescriptorPath: descriptor,
       brokerSocketPath: socketPath, ...capabilities,
     },
   };
@@ -133,6 +138,7 @@ test("browser-only follow-up reuses the account conversation and sends only the 
   } finally {
     run.mockRestore();
     await TurnBroker.forSocket(socketPath).close();
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

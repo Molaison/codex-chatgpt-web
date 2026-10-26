@@ -504,10 +504,18 @@ export class ChatGptThreadEnvironmentStore {
         throw error;
       }
       if (sameThread) {
+        const rawMetadata = record(record(parsed._rawBody)?.client_metadata)?.["x-codex-turn-metadata"];
+        const metadata = record(typeof rawMetadata === "string" ? JSON.parse(rawMetadata) : rawMetadata);
+        if (metadata?.network_access !== undefined || metadata?.cwd !== undefined
+          && (typeof metadata.cwd !== "string" || !isAbsolute(metadata.cwd)
+            || pathIdentity(metadata.cwd) !== pathIdentity(sameThread.cwd))) {
+          error.resolutionBranch = "current_context_unverified";
+          throw error;
+        }
         // Upgrade an old optional proof only from its exact already-verified witness.
         // Permissions, original digest/length and authority expiry remain unchanged.
         const proof = sameThread.acceptedHistory;
-        if (proof && !proof.forkIndependent) {
+        if (proof && !proof.forkIndependent && identity.agentName === "/root") {
           const prefix = verifiedAcceptedPrefix(parsed, sameThread);
           const digest = prefix && forkIndependentDigest(prefix, identity.threadId);
           if (digest) {
@@ -545,7 +553,7 @@ export class ChatGptThreadEnvironmentStore {
         sandboxPolicy: parent.sandboxPolicy,
         tools: parsed.context.tools ?? [],
       };
-      this.set(lineage.threadId, inherited);
+      this.set(lineage.threadId, inherited, undefined, parent.updatedAt);
       return inherited;
     }
   }

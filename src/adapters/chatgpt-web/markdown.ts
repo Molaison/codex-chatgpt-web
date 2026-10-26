@@ -79,8 +79,8 @@ turndown.addRule("preserveKatexSource", {
   },
 });
 
-function preserveKatexSource(html: string): string | HTMLElement {
-  if (!html.includes("katex")) return html;
+function markdownConversionContent(html: string): string | HTMLElement {
+  if (!/<span\b/i.test(html) && !html.includes("katex")) return html;
   const root = createDocument().createElement("div");
   root.innerHTML = html;
   for (const math of Array.from(root.querySelectorAll(".katex"))) {
@@ -94,6 +94,16 @@ function preserveKatexSource(html: string): string | HTMLElement {
     math.setAttribute("data-codex-latex", source);
     math.textContent = source;
   }
+  // Streaming text spans are presentation, not Markdown boundaries. Turndown
+  // escapes e.g. "200. " at the start of EACH text node as a numbered list;
+  // hydration later merges those spans and would change an already sent block.
+  for (const span of Array.from(root.querySelectorAll("span"))) {
+    if (span.closest("pre, code, .katex, .katex-display")) continue;
+    const parent = span.parentNode!;
+    while (span.firstChild) parent.insertBefore(span.firstChild, span);
+    parent.removeChild(span);
+  }
+  root.normalize();
   return root;
 }
 
@@ -194,7 +204,7 @@ function linkObsidianWikiLinks(markdown: string): string {
 
 export function chatGptHtmlToMarkdown(html: string): string {
   if (!html.trim()) return "";
-  return linkObsidianWikiLinks(turndown.turndown(preserveKatexSource(html))).trim();
+  return linkObsidianWikiLinks(turndown.turndown(markdownConversionContent(html))).trim();
 }
 
 export interface ChatGptMarkdownSegment {
@@ -362,6 +372,23 @@ export class ChatGptMarkdownBuffer {
   ): ChatGptMarkdownSegment[] | ChatGptMarkdownConsistencyError {
     if (this.committed.length === 0 || segments.length === 0) return segments;
 
+    const sameContent = (a: CommittedChatGptMarkdownSegment, b: CommittedChatGptMarkdownSegment) => (
+      a.tag === b.tag && a.text === b.text
+      && JSON.stringify(a.linkTargets ?? []) === JSON.stringify(b.linkTargets ?? [])
+    );
+    const completePrefix = segments.length >= this.committed.length
+      && this.committed.every((committed, index) => {
+        const observed = segments[index]!;
+        const keyedIndex = this.committed.findIndex(candidate => candidate.key === observed.key);
+        return sameContent(committed, observed) && (keyedIndex < 0 || keyedIndex === index)
+          && (observed.sourceStart === undefined || (committed.sourceStart === undefined && keyedIndex === index)
+            || observed.sourceStart === committed.sourceStart);
+      })
+      && this.committed.some((committed, index) => {
+        const observed = segments[index]!;
+        return observed.key === committed.key
+          || (committed.sourceStart !== undefined && observed.sourceStart === committed.sourceStart);
+      });
     const pending: ChatGptMarkdownSegment[] = [];
     let lastRangedIndex = this.committed.findLastIndex(segment => segment.sourceEnd !== undefined);
     let lastRangedCommitted = this.committed[lastRangedIndex];
@@ -381,7 +408,8 @@ export class ChatGptMarkdownBuffer {
         }
         previousSourceStart = segment.sourceStart;
       }
-      const committedIndex = this.committedIndex(segment, highestCommittedIndex, matchedCommitted);
+      const committedIndex = completePrefix && observedIndex < this.committed.length
+        ? observedIndex : this.committedIndex(segment, highestCommittedIndex, matchedCommitted);
       if (committedIndex instanceof ChatGptMarkdownConsistencyError) return committedIndex;
       if (committedIndex !== undefined) {
         const committed = this.committed[committedIndex]!;

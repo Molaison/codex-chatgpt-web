@@ -11,6 +11,7 @@ import { TurnBroker } from "../src/adapters/chatgpt-web/turn-broker";
 import { defaultConfig, loadConfig, providerConfig } from "../src/config";
 import { parseRequest } from "../src/responses/parser";
 import type { AdapterEvent, CodexParsedRequest, CodexProviderConfig } from "../src/types";
+import { writePromptTestDescriptor } from "./44_prompt_fixture";
 
 const roots: string[] = [];
 const originalHome = process.env.CODEX_CHATGPT_WEB_HOME;
@@ -36,6 +37,7 @@ function root() {
 }
 function provider(accountId: string, overrides: CodexProviderConfig["chatgptWeb"] = {}): CodexProviderConfig {
   const home = root();
+  writePromptTestDescriptor(join(home, "launcher.json"));
   return { adapter: "chatgpt-web", baseUrl: "browser://portable-test", chatgptWeb: {
     ...capabilities, accountId, browserHost: "launcher", useSavedChats: true,
     browserHostDescriptorPath: join(home, "launcher.json"),
@@ -129,7 +131,7 @@ test("fork seeds supplied human history once and keeps parent and child prompts 
     await adapter!.runTurn(request(parent, [message("user", "Continue parent only")]), { headers: new Headers() }, () => {});
   });
   expect(submitted.map(item => item.resumed)).toEqual([false, false, true, true]);
-  expect(submitted[1]!.prompt).toBe("Conversation history; answer the latest user message:\n\nUser:\nRemember baseline marker ORCHID\n\nAssistant:\nRemembered ORCHID\n\nUser:\nUse that marker in this branch");
+  expect(submitted[1]!.prompt).toBe("User:\nRemember baseline marker ORCHID\n\nAssistant:\nRemembered ORCHID\n\nUser:\nUse that marker in this branch");
   expect(submitted[2]!.prompt).toBe("Continue child only");
   expect(submitted[3]!.prompt).toBe("Continue parent only");
   expect(submitted[0]!.key).toBe(submitted[3]!.key);

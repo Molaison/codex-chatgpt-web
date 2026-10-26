@@ -17,6 +17,8 @@ export interface CodexParsedRequest {
   _replayPrefixLen?: number;
   /** Server-verified durable alias; a fresh browser prompt must not replace the saved chat. */
   _chatgptSavedConversationContinuation?: boolean;
+  /** Journal-proven partial output receipt; only the trusted Web route/adapter may set this. */
+  _chatgptObserverRoundKey?: string;
   /**
    * Dedicated native compaction, identified by compaction_trigger or canonical responses/memento
    * metadata. Both run without local tools; their output contracts differ.
@@ -52,6 +54,8 @@ export interface CodexUserMessage {
   content: string | CodexContentPart[];
   /** 纯问答历史用的同一消息问答子集；由原生 content_item_kinds 决定，不从正文推断。 */
   qaContent?: string | CodexContentPart[];
+  /** Whether native part kinds proved this projection; unresolved never implies runtime origin. */
+  qaProvenance?: "native" | "unresolved";
   timestamp: number;
 }
 

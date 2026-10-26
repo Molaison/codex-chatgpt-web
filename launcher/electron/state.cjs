@@ -1,3 +1,4 @@
+const { validDelivery } = require("./health-maintenance.cjs");
 const languages = require("./languages.json");
 const fs = require("node:fs");
 const { writePrivateFileAtomic } = require("./atomic-file.cjs");
@@ -40,6 +41,7 @@ function readState(filePath) {
     const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
     if (!parsed || parsed.version !== 1) return { ...DEFAULT_STATE };
     const state = { ...DEFAULT_STATE, ...parsed };
+    if (!validDelivery(state.maintenanceDelivery)) delete state.maintenanceDelivery;
     delete state.bridgeEnabled;
     if (state.language !== null && (typeof state.language !== "string" || !Object.hasOwn(languages, state.language))) {
       state.language = DEFAULT_STATE.language;
