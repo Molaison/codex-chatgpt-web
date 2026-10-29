@@ -34,7 +34,7 @@ import { ChatGptWebAdapterError, chatGptToolTimeoutError } from "./adapter-error
 import { ChatGptBrowserWorker, chatGptSuspensionClock, remainingStageBudgetMs, type BrowserTurn } from "./browser-worker";
 import { chatGptEnvironmentDiagnostic, extractChatGptTurnEnvironment, extractChatGptTurnIdentity, MissingTrustedCodexEnvironmentError, priorChatGptAbortedTurnIds } from "./environment";
 import { CHATGPT_WEB_LUNA_MODEL_ID, resolveChatGptWebModelMode, type ChatGptWebCapabilities } from "./model";
-import { chatGptReadOnlyContextWarning, compileChatGptWebPrompt } from "./prompt";
+import { chatGptInstructionFingerprint, chatGptInstructionResumeRequest, chatGptReadOnlyContextWarning, compileChatGptWebPrompt } from "./prompt";
 import { createChatGptStructuredOutputValidator } from "./output-validation";
 import { chatGptWebTurnRetryPolicy } from "./retry-policy";
 import { TurnBroker, type BrokerToolRequest, type BrokerToolResult, type TurnBrokerOwner } from "./turn-broker";
@@ -1202,13 +1202,19 @@ export function createChatGptWebAdapter(
       };
     }
     if (!environment) throw new Error("Tool-capable ChatGPT web mode requires a trusted Codex environment");
+    const instructionFingerprint = conversationKey
+      ? chatGptInstructionFingerprint(checkpointInput.parsed, turnCapabilities, compileOptionsFor(checkpointInput.parsed))
+      : undefined;
     const token = deferred<string>();
     const externalProgress = new ChatGptExternalTurnProgress();
     let tokenSettled = false;
     let activeToken: string | undefined;
     let browserToken: string | undefined;
     let receiptRecoveryInput: CodexParsedRequest | undefined;
-    const prepareWith = async (input: CodexParsedRequest) => {
+    const prepareWith = async (
+      input: CodexParsedRequest,
+      continuation?: { includeSystemPrompt: boolean; incremental: boolean },
+    ) => {
       const turnToken = activeToken ?? await broker.register(
         environment,
         timeoutMs === undefined ? undefined : timeoutMs + 60_000,
@@ -1221,7 +1227,10 @@ export function createChatGptWebAdapter(
           input,
           turnCapabilities,
           browserToken,
-          { ...compileOptionsFor(input), ...(receiptRecoveryInput ? { completedNativeReceiptRecovery: true } : {}) },
+          { ...compileOptionsFor(input),
+            ...(continuation ? { includeSystemPrompt: continuation.includeSystemPrompt,
+              continuation: continuation.incremental, replaceInstructions: continuation.includeSystemPrompt } : {}),
+            ...(receiptRecoveryInput ? { completedNativeReceiptRecovery: true } : {}) },
         );
         // Publish only after preparation succeeds: otherwise its failure revokes the token
         // before the response observer uses it and masks the cause as an expired capability.
@@ -1291,9 +1300,18 @@ export function createChatGptWebAdapter(
       ...(parsed._chatgptModelFamily ? { modelFamily: parsed._chatgptModelFamily } : {}),
       ...(parsed._chatgptProModel ? { proModel: true } : {}),
       capabilities: turnCapabilities,
+      instructionFingerprint,
       canonicalHistory: canonicalConversationHistory(checkpointInput.parsed),
       prepare: () => observedPreparation("fresh", () => prepareWith(receiptRecoveryInput ?? checkpointInput.parsed)),
-      ...(resumeInput ? { prepareResume: () => observedPreparation("restored", () => prepareWith(resumeInput)) } : {}),
+      ...(resumeInput ? { prepareResume: (selection?: { includeSystemPrompt: boolean }) => observedPreparation(
+        "restored",
+        () => prepareWith(chatGptInstructionResumeRequest(
+          checkpointInput.parsed, resumeInput, selection?.includeSystemPrompt ?? true,
+        ), {
+          includeSystemPrompt: selection?.includeSystemPrompt ?? true,
+          incremental: selection?.includeSystemPrompt === false,
+        }),
+      ) } : {}),
       ...(retainConversation ? { retainConversation: true, conversationKey } : {}),
       abortSignal: browserAbort.signal,
       ...(parsed._compactionRequest ? { compaction: true } : {}),

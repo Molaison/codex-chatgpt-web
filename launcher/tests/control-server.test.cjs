@@ -131,7 +131,7 @@ test("disconnect cancels pending browser initialization and destroys only its ow
         pendingTab = { id: `pending-${stalledAt}`, traceId, helperPid, surfaceId: "a".repeat(32),
           status: "running", interactionMode: "automatic", initializingSurface: true, view: { webContents: contents } };
         this.turnTabs.set(pendingTab.id, pendingTab);
-        try { await this.initializeTurnTab(pendingTab, signal); return pendingTab; }
+        try { await this.initializeTurnTab(pendingTab, signal, "https://chatgpt.com/"); return pendingTab; }
         finally { settled(); }
       },
     });

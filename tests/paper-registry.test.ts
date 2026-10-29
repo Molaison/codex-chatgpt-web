@@ -7,10 +7,105 @@ import { join } from "node:path";
 import { createQaPool, type QaPoolConfig } from "../src/qa-pool";
 import { ChatGptConversationStore } from "../src/adapters/chatgpt-web/conversation-persistence";
 import { chatGptQuestionAnswerKey, chatGptQuestionAnswerNamespace } from "../src/adapters/chatgpt-web/qa-conversation-key";
-import { poolSessionHash } from "../src/paper-registry";
+import { PaperRegistry, poolSessionHash } from "../src/paper-registry";
 import { installReadyQaHealthFixture } from "./qa-pool-health-fixture";
 
 installReadyQaHealthFixture();
+
+test("legacy paper rows migrate to the empty session key without changing their thread", () => {
+  const root=mkdtempSync(join(tmpdir(),"paper-schema-")), db=new Database(join(root,"pool.sqlite"));
+  try {
+    db.exec(`CREATE TABLE papers (
+      paper_id TEXT PRIMARY KEY, account_id TEXT NOT NULL, project_id TEXT NOT NULL,
+      thread_id TEXT NOT NULL, session_hash TEXT NOT NULL UNIQUE, state TEXT NOT NULL,
+      upload_token TEXT, expires_at INTEGER, conversation_url TEXT, pdf_sha256 TEXT, in_flight INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE paper_aliases (alias_id TEXT PRIMARY KEY, paper_id TEXT NOT NULL REFERENCES papers(paper_id));
+      CREATE TABLE paper_events (id INTEGER PRIMARY KEY, paper_id TEXT NOT NULL, at TEXT NOT NULL, event TEXT NOT NULL, detail TEXT);`);
+    const paperId="doi:10.1234/schema",thread="paper-legacy",hash=poolSessionHash(["cpr","papers"],thread);
+    db.query(`INSERT INTO papers VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+      paperId,"account","g-p-"+"a".repeat(32),thread,hash,"ready",null,null,
+      `https://chatgpt.com/g/g-p-${"a".repeat(32)}/c/legacy`,"b".repeat(64),0,
+    );
+    db.query("INSERT INTO paper_aliases VALUES(?,?)").run("sha256:"+"b".repeat(64),paperId);
+    db.query("INSERT INTO paper_events(paper_id,at,event,detail) VALUES(?,?,?,?)").run(paperId,"2026-01-01","legacy_event","kept");
+    const registry=new PaperRegistry(db),row=registry.get(paperId)!;
+    expect(row).toMatchObject({paper_id:paperId,session_key:"",thread_id:thread,state:"ready"});
+    expect(registry.get("sha256:"+"b".repeat(64))).toMatchObject({paper_id:paperId,session_key:"",thread_id:thread});
+    expect(db.query<{session_key:string},[string]>("SELECT session_key FROM paper_events WHERE event='legacy_event'").get(paperId)!.session_key).toBe("");
+  } finally { db.close(); rmSync(root,{recursive:true,force:true}); }
+});
+
+test("one paper can own independent ChatGPT sessions with separate upload and turn state", async () => {
+  const root=mkdtempSync(join(tmpdir(),"paper-sessions-"));
+  const key="s".repeat(32),projectId="g-p-"+"c".repeat(32),accountId="account-s";
+  const nativeToken="n".repeat(43);
+  writeFileSync(join(root,"key"),key);
+  writeFileSync(join(root,"native.key"),nativeToken,{mode:0o600});
+  const store=new ChatGptConversationStore(join(root,"conversations"),accountId),calls:any[]=[];
+  const authorizations:string[]=[];
+  const backend=Bun.serve({hostname:"127.0.0.1",port:0,async fetch(request) {
+    const body=await request.json() as any; calls.push(body); authorizations.push(request.headers.get("authorization") ?? "");
+    const thread=JSON.parse(body.client_metadata["x-codex-turn-metadata"]).thread_id;
+    const nativeKey=chatGptQuestionAnswerKey(thread,chatGptQuestionAnswerNamespace(accountId));
+    if (!store.lookup(nativeKey)) store.bind(nativeKey,store.reserve(nativeKey),`https://chatgpt.com/g/${projectId}/c/${thread}`);
+    return new Response(new ReadableStream({start(controller) {
+      controller.enqueue(new TextEncoder().encode(": opened\n\n"));
+      controller.enqueue(new TextEncoder().encode('data: '+JSON.stringify({type:"response.completed",response:{id:"response-"+calls.length,status:"completed",output:[]}})+'\n\n'));
+      controller.close();
+    }}),{headers:{"content-type":"text/event-stream"}});
+  }});
+  const config:QaPoolConfig={host:"127.0.0.1",port:0,databasePath:join(root,"sessions.sqlite"),clients:[{id:"cpr-reading",keyFile:join(root,"key")}],
+    accounts:[{id:accountId,origin:backend.url.origin,models:["standard"],sessionModes:true,conversationStoreDirectory:join(root,"conversations"),nativeApiTokenFile:join(root,"native.key")}],
+    projectRoutes:[{name:"reading",sessionNamespace:"reading",accountId,projectId,paperRegistry:true}]};
+  const pool=createQaPool(config);
+  const request=(metadata:object,input:unknown="paper registry lookup") => pool.fetch(new Request("http://pool/project/reading/v1/responses",{method:"POST",headers:{authorization:"Bearer "+key,"content-type":"application/json"},body:JSON.stringify({model:"standard",input,stream:false,client_metadata:{"x-codex-turn-metadata":JSON.stringify(metadata)}})}));
+  const resolve=async(id:string,session:string,extra:object={}) => {
+    const response=await request({paper_id:id,paper_operation:"resolve",paper_session_id:session,...extra});
+    expect(response.status).toBe(200);
+    return JSON.parse((await response.json() as any).output[0].content[0].text);
+  };
+  const pdf=Buffer.from("%PDF-1.4\nmulti-session paper\n%%EOF"),sha=createHash("sha256").update(pdf).digest("hex");
+  const input=[{role:"user",content:[{type:"input_file",filename:"paper.pdf",file_data:"data:application/pdf;base64,"+pdf.toString("base64")},{type:"input_text",text:"question"}]}];
+  const id="doi:10.1234/multi-session";
+  try {
+    const a=await resolve(id,"session-a"),b=await resolve(id,"session-b");
+    expect(a.status).toBe("missing"); expect(b.status).toBe("missing");
+    expect(a.thread_id).not.toBe(b.thread_id);
+    expect(a.paper_registry_version).toBe(2); expect(a.paper_session_id).toBe("session-a");
+    expect(b.paper_session_id).toBe("session-b");
+    const chat=async(session:string,token:string) => {
+      const response=await request({paper_id:id,paper_operation:"chat",paper_session_id:session,paper_upload_token:token,paper_pdf_sha256:sha},input);
+      expect(response.status).toBe(200);
+      await response.text();
+      return response;
+    };
+    await chat("session-a",a.upload_token);
+    const readyA=await resolve(id,"session-a"),stillB=await resolve(id,"session-b",{paper_upload_token:b.upload_token});
+    expect(readyA.status).toBe("ready");
+    expect(readyA.thread_id).toBe(a.thread_id);
+    expect(stillB.status).toBe("missing");
+    expect(stillB.thread_id).toBe(b.thread_id);
+    expect(stillB.upload_token).toBe(b.upload_token);
+    await chat("session-b",b.upload_token);
+    const readyB=await resolve(id,"session-b");
+    expect(readyB.status).toBe("ready");
+    expect(readyB.thread_id).toBe(b.thread_id);
+    expect(readyB.conversation_url).not.toBe(readyA.conversation_url);
+    const otherSha=createHash("sha256").update("%PDF-1.4\nanother paper\n%%EOF").digest("hex");
+    const conflict=await request({paper_id:id,paper_operation:"resolve",paper_session_id:"session-c",paper_pdf_sha256:otherSha});
+    expect(conflict.status).toBe(409);
+    expect((await conflict.json() as any).error.code).toBe("paper_identity_conflict");
+    const follow=await request({paper_id:id,paper_operation:"chat",paper_session_id:"session-a"},input.map(part => ({...part,content:part.content.filter((value:any) => value.type!=="input_file")})));
+    expect(follow.status).toBe(200);
+    await follow.text();
+    const db=new Database(config.databasePath);
+    expect(db.query<{n:number},[string]>("SELECT count(*) n FROM papers WHERE paper_id=?").get(id)!.n).toBe(2);
+    expect(db.query<{n:number},[string]>("SELECT count(*) n FROM paper_events WHERE paper_id=? AND event='dispatch_started'").get(id)!.n).toBe(3);
+    expect(authorizations).toHaveLength(3);
+    expect(authorizations.every(value=>value==="Bearer "+nativeToken)).toBe(true);
+    db.close();
+  } finally {pool.close();backend.stop(true);rmSync(root,{recursive:true,force:true});}
+});
 
 test("paper protocol persists reservations and saved identity, strips repeats, serializes turns and refuses unsafe migration", async () => {
   const root = mkdtempSync(join(tmpdir(),"paper-registry-"));
@@ -34,7 +129,7 @@ test("paper protocol persists reservations and saved identity, strips repeats, s
   }});
   const config:QaPoolConfig={host:"127.0.0.1",port:0,databasePath:join(root,"sessions.sqlite"),clients:[{id:"cpr",keyFile:join(root,"key")}],
     accounts:[{id:accountId,origin:backend.url.origin,models:["standard"],sessionModes:true,conversationStoreDirectory:join(root,"conversations")}],
-    projectRoutes:[{name:"papers",sessionNamespace:"papers",accountId,projectId}]};
+    projectRoutes:[{name:"papers",sessionNamespace:"papers",accountId,projectId,paperRegistry:true}]};
   let pool=createQaPool(config);
   const request=(metadata:object,input:unknown="paper registry lookup",stream=false) => pool.fetch(new Request("http://pool/project/papers/v1/responses",{method:"POST",headers:{authorization:"Bearer "+key,"content-type":"application/json"},body:JSON.stringify({model:"standard",input,stream,client_metadata:{"x-codex-turn-metadata":JSON.stringify(metadata)}})}));
   const resolve=async(id:string,extra:object={}) => {
@@ -154,7 +249,7 @@ test("a confirmed pre-send attachment failure keeps the reservation retryable wh
   }});
   const config:QaPoolConfig={host:"127.0.0.1",port:0,databasePath:join(root,"sessions.sqlite"),clients:[{id:"cpr",keyFile:join(root,"key")}],
     accounts:[{id:accountId,origin:backend.url.origin,models:["standard"],sessionModes:true,conversationStoreDirectory:join(root,"conversations")}],
-    projectRoutes:[{name:"papers",sessionNamespace:"papers",accountId,projectId}]};
+    projectRoutes:[{name:"papers",sessionNamespace:"papers",accountId,projectId,paperRegistry:true}]};
   const pool=createQaPool(config);
   const request=(metadata:object,input:unknown="paper registry lookup",stream=false) => pool.fetch(new Request("http://pool/project/papers/v1/responses",{method:"POST",headers:{authorization:"Bearer "+key,"content-type":"application/json"},body:JSON.stringify({model:"standard",input,stream,client_metadata:{"x-codex-turn-metadata":JSON.stringify(metadata)}})}));
   const resolve=async(id:string,extra:object={}) => {

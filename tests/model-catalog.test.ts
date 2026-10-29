@@ -65,12 +65,14 @@ describe("native /models augmentation", () => {
       const selectors = models.filter(model => String(model.slug).startsWith("chatgpt-web/") && model.visibility === "list");
       expect(selectors).toHaveLength(8);
       for (const model of selectors) {
-        expect(model.default_reasoning_level).toBe(defaultEffort);
-        expect(model.multi_agent_reasoning_effort).toBe(defaultEffort);
-        expect((model.supported_reasoning_levels as Array<{ effort: string }>).map(level => level.effort)).toEqual([...efforts]);
+        const expectedDefault = String(model.slug).startsWith("chatgpt-web/gpt-6-") && !extraHighAvailable ? "low" : defaultEffort;
+        expect(model.default_reasoning_level).toBe(expectedDefault);
+        expect(model.multi_agent_reasoning_effort).toBe(expectedDefault);
+        expect((model.supported_reasoning_levels as Array<{ effort: string }>).map(level => level.effort))
+          .toEqual(String(model.slug).startsWith("chatgpt-web/gpt-6-") ? ["low", ...efforts] : [...efforts]);
         const request = parseRequest({ model: model.slug, input: "hello" });
-        expect(routeChatGptWebRequest(request, config).adapterEffort).toBe(defaultEffort);
-        expect(request.options.reasoning).toBe(defaultEffort);
+        expect(routeChatGptWebRequest(request, config).adapterEffort).toBe(expectedDefault);
+        expect(request.options.reasoning).toBe(expectedDefault);
         for (const unavailable of [!extraHighAvailable && "xhigh", !proAvailable && "max"].filter(Boolean)) {
           expect(() => routeChatGptWebRequest(parseRequest({ model: model.slug, input: "hello", reasoning: { effort: unavailable } }), config))
             .toThrow("does not support effort");
@@ -121,7 +123,7 @@ describe("native /models augmentation", () => {
       });
       expect(model).not.toHaveProperty("comp_hash");
       expect((model.supported_reasoning_levels as Array<{ effort: string }>).map(level => level.effort))
-        .toEqual(["high", "xhigh", "max"]);
+        .toEqual(route.interactionMode === "automatic" && route.modelFamily === "6" ? ["low", "high", "xhigh", "max"] : ["high", "xhigh", "max"]);
       expect(model.shell_type).toBe(route.toolAccess === "chat" ? "disabled" : "shell_command");
     }
     expect((legacy.find(model => model.slug === "chatgpt-web/gpt-5.6-sol")!.supported_reasoning_levels as Array<{ effort: string }>).map(level => level.effort))
@@ -346,7 +348,8 @@ describe("native /models augmentation", () => {
     expect(models[1]!.context_window).toBe(300_000);
     expect(models[1]!.auto_compact_token_limit).toBe(270_000);
     for (const model of models.slice(3)) {
-      const instant = String(model.slug).endsWith("sol-instant") || model.slug === "chatgpt-web/light";
+      const instant = String(model.slug).endsWith("sol-instant") || model.slug === "chatgpt-web/light"
+        || /^chatgpt-web\/gpt-6-(chat|tools)-/.test(String(model.slug));
       // The native override must not inflate any Web window, including selectors whose
       // preferred xhigh effort is unavailable on this Plus account.
       expect(model.context_window).toBe(instant ? 41_000 : 90_000);

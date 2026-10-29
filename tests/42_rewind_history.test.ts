@@ -25,6 +25,23 @@ test("incremental saved-response API usage is not mistaken for rewind", () => {
   expect(canonicalConversationHistory(request(["new"], { previous_response_id: "resp_old" }))).toBeUndefined();
 });
 
+test("paper-session increments are not mistaken for rewind", () => {
+  const metadata = JSON.stringify({
+    paper_registry_version: 2,
+    paper_id: "doi:10.9999/example",
+    paper_session_id: "local-session-a",
+    paper_operation: "chat",
+  });
+  expect(canonicalConversationHistory(request(["follow-up"], {
+    client_metadata: { "x-codex-turn-metadata": metadata },
+  }))).toBeUndefined();
+  expect(canonicalConversationHistory(request(["follow-up"], {
+    client_metadata: {
+      "x-codex-turn-metadata": metadata.replace('"chat"', '"history"'),
+    },
+  }))).toHaveLength(1);
+});
+
 test("new identical native instruction IDs are not text-deduplicated", () => {
   const a = request(["same"], { input: [{ type: "message", role: "user", id: "msg_old", content: "same" }] });
   const b = request(["same"], { input: [{ type: "message", role: "user", id: "msg_new", content: "same" }] });

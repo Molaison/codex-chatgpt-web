@@ -60,6 +60,7 @@ interface RunMessage {
     requireRetainedConversation?: boolean;
     conversationKey?: string;
     canonicalHistory?: string[];
+    instructionFingerprint?: string;
     compaction?: boolean;
     captureLunaCheckpoint?: boolean;
     externalProgress?: boolean;
@@ -241,6 +242,10 @@ async function run(message: RunMessage): Promise<void> {
     || !message.turn.canonicalHistory.length || message.turn.canonicalHistory.some(item => typeof item !== "string" || !/^[a-f0-9]{64}$/.test(item)))) {
     throw new Error("Browser helper canonical history witness is invalid");
   }
+  if (message.turn.instructionFingerprint !== undefined && (typeof message.turn.instructionFingerprint !== "string"
+    || !/^[a-f0-9]{64}$/.test(message.turn.instructionFingerprint))) {
+    throw new Error("Browser helper instruction fingerprint is invalid");
+  }
   if (message.turn.nativeConnector !== undefined && typeof message.turn.nativeConnector !== "boolean") {
     throw new Error("Browser helper native connector flag is invalid");
   }
@@ -340,6 +345,7 @@ async function run(message: RunMessage): Promise<void> {
     ...(message.turn.requireRetainedConversation ? { requireRetainedConversation: true } : {}),
     ...(message.turn.conversationKey ? { conversationKey: message.turn.conversationKey } : {}),
     ...(message.turn.canonicalHistory ? { canonicalHistory: message.turn.canonicalHistory } : {}),
+    ...(message.turn.instructionFingerprint ? { instructionFingerprint: message.turn.instructionFingerprint } : {}),
     abortSignal: abortController.signal,
     ...(message.turn.compaction ? { compaction: true } : {}),
     ...(progress ? {
@@ -422,8 +428,8 @@ async function run(message: RunMessage): Promise<void> {
     } : {}),
     onHeartbeat: () => writeProtocol({ type: "event", id: message.id, event: "heartbeat" }),
     onGenerationProgress: () => writeProtocol({ type: "event", id: message.id, event: "generation_progress" }),
-    onPreparedSelected: reused => {
-      if (!writeProtocol({ type: "event", id: message.id, event: "prepared_selected", reused })) {
+    onPreparedSelected: (reused, includeInstructions) => {
+      if (!writeProtocol({ type: "event", id: message.id, event: "prepared_selected", reused, includeInstructions })) {
         throw new Error("Browser helper could not request prompt selection");
       }
       return promptSelection.wait().then(() => undefined);
@@ -803,4 +809,4 @@ process.once("SIGTERM", () => {
 });
 
 // Advertise the optional frames this helper understands so the daemon can negotiate them explicitly.
-writeProtocol({ type: "ready", features: ["progress", "tool-boundary-ack", "completion-fence", "multipart-stage-ack", "skill-attachments", "send-activation-ack", "submission-ack", "browser-lease-events", "durable-observation", "context-recovery", "recovery-clock", "native-submission-v1", "native-execution-v1"] });
+writeProtocol({ type: "ready", features: ["progress", "tool-boundary-ack", "completion-fence", "multipart-stage-ack", "skill-attachments", "send-activation-ack", "submission-ack", "browser-lease-events", "durable-observation", "context-recovery", "recovery-clock", "native-submission-v1", "native-execution-v1", "instruction-dedup-v1"] });

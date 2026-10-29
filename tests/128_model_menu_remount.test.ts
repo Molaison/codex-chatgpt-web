@@ -76,6 +76,20 @@ test("existing non-observer usage still returns an early assistant without a new
   expect((await value.run(false)).identity).toBe(assistant);
   expect(value.waits()).toBe(0);
 });
+test("HTTP acceptance binds native identity only after the submitted user is visible", async () => {
+  const value = assistantBeforeUser();
+  let phase = "post_observed";
+  let accepts = 0;
+  value.baseline.nativeSubmission = {
+    observed: async () => ({ phase, post: { userMessageId: "accepted" } }),
+    accept: async () => { accepts += 1; phase = "accepted"; },
+  };
+  const binding = await value.run(true);
+  expect(value.waits()).toBe(1);
+  expect(accepts).toBe(1);
+  expect(value.baseline.acceptedUserIdentity).toBe(user);
+  expect(binding.identity).toBe(assistant);
+});
 test("waiting for the user witness respects cancellation without accepting another turn", async () => {
   await expect(assistantBeforeUser(true).run(true)).rejects.toThrow("aborted");
 });

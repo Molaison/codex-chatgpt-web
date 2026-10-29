@@ -3,7 +3,7 @@ const HEALTH_FRESHNESS_MS = 60_000;
 const HEALTH_REFRESH_MS = 20_000;
 const { digestUserId, HOST_VERSION, HOST_CLOSURE_DIGEST } = require("./health-identity.cjs");
 
-// Authentication metadata only. Never reads a page or owns a turn.
+// Authentication metadata only. Never inspects the DOM or owns a turn.
 class PassiveSessionHealth {
   constructor({ identity, session, available, timeoutMs, pin = () => null, now = Date.now }) {
     Object.assign(this, { identity, session, available, timeoutMs, pin, now });
@@ -16,6 +16,7 @@ class PassiveSessionHealth {
   invalidate() {
     this.cookieRevision++;
     this.proof = null;
+    if (!this.pending) this.lastAttemptAt = -Infinity;
   }
   async read() {
     const identity = this.identity();
@@ -25,7 +26,7 @@ class PassiveSessionHealth {
     if (!this.available()) return this.unknown(identity);
     if (this.pending) { await this.pending; return this.current(identity); }
     if (this.now() - this.lastAttemptAt < HEALTH_REFRESH_MS) return this.current(identity);
-    const cookieRevision = this.cookieRevision;
+    let cookieRevision = this.cookieRevision;
     this.lastAttemptAt = this.now();
     const observedAt = this.lastAttemptAt; // Never mint a newer timestamp by reading cached evidence.
     // Publish the tracked read before invoking Electron: even a synchronous cookie
@@ -35,6 +36,8 @@ class PassiveSessionHealth {
       try {
         const session = this.session();
         result = await readChatGptAuthSession(session.fetch.bind(session), "https://chatgpt.com", this.timeoutMs, digestUserId);
+        if (result.sessionAuthenticated && result.sessionPrincipalDigest === pin
+          && Number.isSafeInteger(session.healthCookieRevision)) cookieRevision = session.healthCookieRevision;
       } catch { result = { sessionCheckError: "unknown" }; }
       if (cookieRevision !== this.cookieRevision || key !== JSON.stringify([this.identity(), this.pin()]) || !this.available()) return;
       this.proof = {

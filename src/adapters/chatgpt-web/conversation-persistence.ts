@@ -14,10 +14,18 @@ export interface SavedChatConversation {
   pendingProject?: { id: string; name: string };
   /** Accepted canonical message fingerprints, not text or permission authority. */
   history?: string[];
+  instructionFingerprint?: string;
+  instructionHistoryFingerprint?: string;
   previous?: Array<Pick<SavedChatConversation, "claim" | "state" | "url" | "createdAt" | "history" | "pendingProject">>;
 }
 
 function hash(value: string): string { return createHash("sha256").update(value).digest("hex"); }
+
+export function hasAcceptedChatGptInstructions(saved: SavedChatConversation | undefined, fingerprint?: string): boolean {
+  return Boolean(saved?.state === "bound" && saved.history?.length && fingerprint
+    && saved.instructionFingerprint === fingerprint
+    && saved.instructionHistoryFingerprint === hash(JSON.stringify(saved.history)));
+}
 
 function validConversationDetails(value: Pick<SavedChatConversation, "history" | "pendingProject">): boolean {
   return (value.history === undefined || (Array.isArray(value.history) && value.history.length > 0
@@ -80,6 +88,10 @@ export class ChatGptConversationStore {
         || !/^[a-f0-9-]{36}$/.test(value.claim) || typeof value.createdAt !== "string"
         || !Number.isFinite(Date.parse(value.createdAt))
         || !validConversationDetails(value)
+        || (value.instructionFingerprint !== undefined && (typeof value.instructionFingerprint !== "string"
+          || !/^[a-f0-9]{64}$/.test(value.instructionFingerprint)))
+        || (value.instructionHistoryFingerprint !== undefined && (typeof value.instructionHistoryFingerprint !== "string"
+          || !/^[a-f0-9]{64}$/.test(value.instructionHistoryFingerprint)))
         || (value.previous !== undefined && (!Array.isArray(value.previous) || value.previous.some(old => !old
           || !/^[a-f0-9-]{36}$/.test(old.claim) || !Number.isFinite(Date.parse(old.createdAt))
           || !validConversationDetails(old)
@@ -161,13 +173,28 @@ export class ChatGptConversationStore {
     return record;
   }
 
-  recordHistory(key: string, expected: SavedChatConversation, history: string[]): SavedChatConversation {
+  recordHistory(
+    key: string,
+    expected: SavedChatConversation,
+    history: string[],
+    instructionFingerprint?: string,
+  ): SavedChatConversation {
     const current = this.lookup(key);
     if (!current || current.claim !== expected.claim || current.account !== expected.account
-      || !history.length || history.some(item => !/^[a-f0-9]{64}$/.test(item))) {
+      || !history.length || history.some(item => !/^[a-f0-9]{64}$/.test(item))
+      || (instructionFingerprint !== undefined && (typeof instructionFingerprint !== "string"
+        || !/^[a-f0-9]{64}$/.test(instructionFingerprint)))) {
       throw conversationPersistenceError("saved_conversation_conflict", "Only the accepted conversation owner may checkpoint its canonical history.");
     }
-    const record = { ...current, history: [...history] };
+    const { instructionFingerprint: _instructionFingerprint,
+      instructionHistoryFingerprint: _instructionHistoryFingerprint, ...previous } = current;
+    const record = {
+      ...previous,
+      history: [...history],
+      ...(instructionFingerprint !== undefined ? {
+        instructionFingerprint, instructionHistoryFingerprint: hash(JSON.stringify(history)),
+      } : {}),
+    };
     const temporary = this.writeTemporary(key, record);
     try { renameSync(temporary, this.path(key)); this.flushDirectory(); } catch (error) {
       try { unlinkSync(temporary); } catch {}

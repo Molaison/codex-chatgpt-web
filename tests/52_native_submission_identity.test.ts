@@ -27,12 +27,18 @@ function owner() {
 function pageFixture() {
   const frame = {};
   const page = Object.assign(new EventEmitter(), {mainFrame:()=>frame});
-  const emit = (id: string = randomUUID(), extra: Record<string, unknown> = {}, requestExtra: Record<string, unknown> = {}) => {
+  const emitRequest = (id: string = randomUUID(), extra: Record<string, unknown> = {}, requestExtra: Record<string, unknown> = {}) => {
     const body = {action:"next", parent_message_id:"client-created-root", messages:[{id, author:{role:"user"}, content:{parts:["identical user question"]}}], ...extra};
-    page.emit("request", {method:()=>"POST", url:()=>"https://chatgpt.com/backend-api/f/conversation", frame:()=>frame, postData:()=>JSON.stringify(body), ...requestExtra});
-    return id;
+    const request = {method:()=>"POST", url:()=>"https://chatgpt.com/backend-api/f/conversation", frame:()=>frame,
+      postData:()=>JSON.stringify(body), ...requestExtra};
+    page.emit("request", request);
+    return {id, request};
   };
-  return {page, emit};
+  const emit = (id: string = randomUUID(), extra: Record<string, unknown> = {}, requestExtra: Record<string, unknown> = {}) =>
+    emitRequest(id, extra, requestExtra).id;
+  const respond = (request: unknown, status = 200, contentType = "text/event-stream; charset=utf-8") =>
+    page.emit("response", {request:()=>request, status:()=>status, headers:()=>({"content-type":contentType})});
+  return {page, emit, emitRequest, respond};
 }
 function pair(id:string) { return [`group:user:${id}`, `group:assistant:${id}`]; }
 
@@ -74,6 +80,24 @@ test("unacknowledged POST cannot grant acceptance and failed durable ACK remains
   await failing.activate(second.page as any,[]); failing.arm();const id2=second.emit();
   await expect(failing.accept(pair(id2),"same-bound-assistant-completed")).rejects.toThrow("durable identity acknowledgement failed");
   failing.dispose();
+});
+
+test("response acceptance requires the owned conversation POST to return 200 SSE", async()=>{
+  const rejected=pageFixture(),ok=pageFixture();
+  const wrongType=new NativeSubmissionCollector(()=>{}),accepted=new NativeSubmissionCollector(()=>{});
+  await wrongType.activate(rejected.page as any,[]);wrongType.arm();wrongType.dispatching();
+  await accepted.activate(ok.page as any,[]);accepted.arm();accepted.dispatching();
+  let wrongAccepted=false,acceptedResponse=false;
+  void wrongType.waitForResponseAccepted().then(()=>{wrongAccepted=true;});
+  const waiting=accepted.waitForResponseAccepted().then(()=>{acceptedResponse=true;});
+  rejected.respond(rejected.emitRequest().request,200,"application/json");
+  await new Promise(resolve=>setTimeout(resolve,10));
+  expect(wrongAccepted).toBe(false);
+  ok.respond(ok.emitRequest().request);
+  await waiting;
+  expect(acceptedResponse).toBe(true);
+  expect((await accepted.observed())?.phase).toBe("post_observed");
+  wrongType.dispose();accepted.dispose();
 });
 
 for(const mode of ["duplicate-post","foreign-id","wrong-action","multi-user","missing-body","foreign-frame"] as const) {

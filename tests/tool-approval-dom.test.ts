@@ -19,6 +19,34 @@ async function withPage(run: (page: Page) => Promise<void>) {
   try { await run(await browser.newPage()); } finally { await browser.close(); }
 }
 
+domTest("the owned current native tool card approves once in Chinese and English", async () => {
+  await withPage(async page => {
+    for (const nativeTool of ["Run a native Codex command", "Call any tool from the current Codex harness"]) for (const chinese of [false, true]) {
+      const question = chinese ? "允许 ChatGPT 使用 Codex Native2 吗？" : "Allow ChatGPT to use Codex Native2?";
+      const once = chinese ? "允许一次 ⏎" : "Allow once";
+      const deny = chinese ? "拒绝 Esc" : "Deny";
+      const always = chinese ? "始终允许" : "Always allow";
+      await page.setContent(`<div data-turn-key="current"><div><div role="alert"><p>${question}</p><p>${nativeTool}</p></div><button>${always}</button><button>${deny}</button><button onclick="document.body.dataset.chosen=this.textContent;this.parentElement.remove()">${once}</button></div></div>`);
+      expect(await resolveChatGptToolConfirmation(page, "Codex Native2", true, undefined, 100, undefined, undefined, page.locator('[data-turn-key="current"]'))).toBeTrue();
+      expect(await page.locator("body").getAttribute("data-chosen")).toBe(once);
+    }
+  });
+}, 20_000);
+
+domTest("native inline approval never borrows controls outside the owned turn or trusts another tool", async () => {
+  await withPage(async page => {
+    for (const content of [
+      `<div><div data-turn-key="current"><div role="alert">Allow ChatGPT to use Codex Native2?<p>Run a native Codex command</p></div></div><button>Deny</button><button>Allow once</button></div>`,
+      `<div data-turn-key="current">${inlineApproval.replace("Run a native Codex command", "Delete an account")}</div>`,
+      `<div data-turn-key="current"><div class="markdown">${inlineApproval}</div></div>`,
+      `<div data-turn-key="old">${inlineApproval}</div><div data-turn-key="current"></div>`,
+    ]) {
+      await page.setContent(content);
+      expect(await resolveChatGptToolConfirmation(page, "Codex Native2", true, undefined, 100, undefined, undefined, page.locator('[data-turn-key="current"]'))).toBeFalse();
+    }
+  });
+}, 20_000);
+
 domTest("the current inline permission card explains the setting even when the configured plugin name differs", async () => {
   await withPage(async page => {
     await page.setContent(`<div data-turn-key="current">${inlineApproval}</div>`);

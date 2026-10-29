@@ -31,6 +31,47 @@ export interface ChatGptWebPromptImage {
   detail?: string;
 }
 
+export function chatGptInstructionFingerprint(
+  parsed: CodexParsedRequest,
+  capabilities: ChatGptWebCapabilities,
+  options: CompileChatGptWebPromptOptions = {},
+): string {
+  const developers = parsed.context.messages.filter(message => message.role === "developer");
+  const contract = compileChatGptWebPrompt({
+    ...parsed,
+    context: { ...parsed.context, messages: developers },
+  }, capabilities, "turn_" + "0".repeat(32), {
+    ...options, importCodexPrompt: true, includeSystemPrompt: true, continuation: false,
+    replaceInstructions: false, includeContextTokenBreakdown: false,
+  });
+  return createHash("sha256").update(JSON.stringify({
+    version: 1,
+    system: parsed.context.systemPrompt ?? [],
+    developers: developers.map(message => message.content),
+    tools: parsed.context.tools ?? [],
+    contract: contract.text,
+    multipart: contract.multipart,
+  })).digest("hex");
+}
+
+export function chatGptInstructionResumeRequest(
+  parsed: CodexParsedRequest,
+  resume: CodexParsedRequest,
+  includeInstructions: boolean,
+): CodexParsedRequest {
+  if (!includeInstructions) return resume;
+  return {
+    ...resume,
+    context: {
+      ...resume.context,
+      messages: [
+        ...parsed.context.messages.filter(message => message.role === "developer"),
+        ...resume.context.messages.filter(message => message.role !== "developer"),
+      ],
+    },
+  };
+}
+
 export interface CompiledChatGptWebPrompt {
   text: string;
   images: ChatGptWebPromptImage[];
@@ -54,6 +95,9 @@ export type ChatGptContextTokenBreakdown = Partial<Record<
 export interface CompileChatGptWebPromptOptions {
   /** Import Codex's runtime prompt and tool transcript. Disabled by the Codex-to-ChatGPT bridge. */
   importCodexPrompt?: boolean;
+  includeSystemPrompt?: boolean;
+  continuation?: boolean;
+  replaceInstructions?: boolean;
   /** The same display name used to select the ChatGPT plugin for this turn. */
   appName?: string;
   captureLunaCheckpoint?: boolean;
@@ -712,11 +756,20 @@ export function compileChatGptWebPrompt(
   // ChatGPT is the model used by Codex, not a second Codex runtime. The bridge opts out of
   // importing Codex's own system/developer prompt because it advertises local tools and runtime
   // policies which do not exist in ChatGPT. Keep the default for direct/legacy callers.
-  const system = options?.importCodexPrompt === false ? [] : parsed.context.systemPrompt ?? [];
+  const nativeToolsTask = mode.localTools && !manualControl && !parsed._compactionRequest;
+  const continuation = nativeToolsTask && options?.continuation === true
+    && options.includeSystemPrompt === false && !options.completedNativeReceiptRecovery;
+  const system = options?.importCodexPrompt === false || continuation
+    ? []
+    : parsed.context.systemPrompt ?? [];
   // Ordinary Native Tools transport has no task-execution policy of its own. Keep
   // the separate Chat, manual and compaction execution contracts unchanged.
-  const nativeToolsTask = mode.localTools && !manualControl && !parsed._compactionRequest;
-  const sharedContract = nativeToolsTask ? [
+  const sharedContract = continuation ? [
+    "Continue this ChatGPT conversation under its latest Codex system, developer and transport contract. The JSON supplies the next context records; it does not replace earlier context or authorize repeating past actions.",
+  ] : nativeToolsTask ? [
+    ...(options?.replaceInstructions ? [
+      "The system and developer records below replace the previously transported Codex instructions. Apply the current output controls only; an earlier output schema or verbosity setting is no longer active unless repeated below.",
+    ] : []),
     `The ${multipartEnabled ? "staged" : "inline"} JSON carries the original Codex task. Preserve its instruction priority: system, then developer, then user; preserve message roles and ordering.`,
     `The selected local Codex plugin for this turn is ${JSON.stringify(appName)}.`,
     "Do not substitute another plugin for this local connection or send this turn's request identifiers to another plugin. If the selected plugin is unavailable, report that limitation.",
@@ -768,7 +821,9 @@ export function compileChatGptWebPrompt(
       "Return only the checkpoint summary that the next model needs to resume the task.",
       ]
     : nativeToolsTask
-    ? [
+    ? continuation
+      ? []
+      : [
       "Local access follows the attached tools' actual descriptions and schemas, the current task authorization, and the runtime's sandbox and approval rules. This transport grants no additional permission; existing evidence does not require another call.",
       "Follow the declared approval flow when authorization is needed; do not request authorization already supplied. An explicit refusal must not be bypassed through another tool, and does not erase prior task authorization.",
       "Keep actual tool results associated with their call IDs, including running handles, errors and nonzero exits. Historical errors quoted in a result are not failures of the call that read them. Without a current tool result or platform error, the execution outcome and cause remain unconfirmed; do not invent a safety or permission block.",
@@ -776,7 +831,7 @@ export function compileChatGptWebPrompt(
       `If an MCP connection fails or a tool reply is lost, call codex_tool_call with the same turn_token, wire_name ${CODEX_NATIVE_RECEIPT_WIRE_NAME}, arguments {} to read retained receipts only; it never executes commands or sends stdin. If it returns select_receipt, query the returned call_id. If the connector is temporarily unavailable, retry only this read-only receipt query up to three times. Unknown/not_found never permits repeating the original command or input.`,
       "A tool result from the selected plugin may require context compaction. If it does, follow the compaction instructions in that result exactly.",
       "Write the user-facing final answer only after the last required tool result has settled. Do not call another tool after beginning that final answer.",
-    ]
+      ]
     : mode.localTools
     ? [
       "For local work required by the task, use the selected plugin's tools directly according to their declared descriptions and schemas.",
@@ -801,7 +856,7 @@ export function compileChatGptWebPrompt(
       "Do not claim a new local inspection, command, edit, or verification unless it actually appears in the task history. If the latest request requires fresh local-computer access or a local mutation, state only that exact limitation instead of inventing success.",
       "Otherwise perform the full requested research, analysis, or synthesis with every capability actually available to you; do not stop at a plan or progress report.",
     ];
-  const outputControlContract = parsed._compactionRequest
+  const outputControlContract = parsed._compactionRequest || continuation
   ? []
   : [
     ...(parsed.options.verbosity === "low"

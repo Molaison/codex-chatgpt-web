@@ -36,6 +36,29 @@ function parsed(modelId: string, reasoning = "medium"): CodexParsedRequest {
 }
 
 describe("fixed ChatGPT Web model routes", () => {
+  test("all four GPT-6 selectors accept low and GPT-5.6 selectors reject it", () => {
+    const config = { ...defaultConfig("full"), browserHost: "launcher" as const, mcpProvider: "external-http" as const, proAvailable: true, extraHighAvailable: true };
+    for (const family of ["6", "5.6"] as const) {
+      const routes = CHATGPT_WEB_SELECTOR_ROUTES.filter(route => route.interactionMode === "automatic" && route.modelFamily === family);
+      expect(routes).toHaveLength(4);
+      for (const route of routes) {
+        const request = parsed(route.slug, "low");
+        if (family === "6") {
+          expect(route.supportedCodexEfforts).toEqual(["low", "high", "xhigh", "max"]);
+          expect(routeChatGptWebRequest(request, config).adapterEffort).toBe("low");
+          expect(request.options.reasoning).toBe("low");
+          expect(request._chatgptSessionMode).toBe(route.sessionMode);
+          expect(request._chatgptLocalTools).toBe(route.toolAccess === "tools");
+          expect(route.description).toContain("instant /");
+        } else {
+          expect(route.supportedCodexEfforts).toEqual(["high", "xhigh", "max"]);
+          expect(() => routeChatGptWebRequest(request, config)).toThrow("does not support effort");
+          expect(route.description).not.toContain("instant /");
+        }
+      }
+    }
+  });
+
   const plus = { solAvailable: true, extraHighAvailable: false, proAvailable: false };
   const pro = { solAvailable: true, extraHighAvailable: true, proAvailable: true };
 

@@ -10,8 +10,9 @@ test("original eight selectors, Pro in max, legacy sessions hidden and preserved
  expect(visible).toHaveLength(8);
  for (const m of visible) {
   expect(m.slug).toMatch(/gpt-(5\.6|6)-(chat|tools)-(persist|temp)$/);
-  expect(m.supported_reasoning_levels.map((x:any)=>x.effort)).toEqual(["high","xhigh","max"]);
-  expect(m.supported_reasoning_levels[2].description).toBe("Pro");
+  const gpt6 = String(m.slug).includes("-6-");
+  expect(m.supported_reasoning_levels.map((x:any)=>x.effort)).toEqual(gpt6 ? ["low","high","xhigh","max"] : ["high","xhigh","max"]);
+  expect(m.supported_reasoning_levels[gpt6 ? 3 : 2].description).toBe("Pro");
   expect(m.default_reasoning_level).toBe("xhigh");
   expect(m.multi_agent_version).toBe("v1");
   if(m.slug.includes("-chat-")) {

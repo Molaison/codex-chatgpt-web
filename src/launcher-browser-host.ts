@@ -1,12 +1,49 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright-core";
+import { chromium, type Browser, type BrowserContext, type CDPSession, type Page } from "playwright-core";
 import { expandUserPath } from "./config";
 import { processRunning } from "./process";
 
 export const LAUNCHER_BROWSER_HOST_KIND = "codex-web-gpt-launcher";
 export const LAUNCHER_BROWSER_IDLE_URL = "data:text/html;charset=utf-8,%3C!doctype%20html%3E%3Chtml%3E%3Chead%3E%3Cmeta%20charset%3D%22utf-8%22%3E%3Ctitle%3ECodex%20Web%20GPT%3C%2Ftitle%3E%3C%2Fhead%3E%3Cbody%3E%3C%2Fbody%3E%3C%2Fhtml%3E#codex-web-gpt-browser-host";
 export type LauncherBrowserHostProfile = "production" | "development";
+
+// A configured Playwright viewport alone is not proof of the hidden native surface's
+// current size. Watch native resize/swap events before reusing a DOM-verified result.
+const browserViewportObservations = new WeakMap<Page, Promise<{ revision: number; observing: boolean }>>();
+
+export function observeBrowserViewport(page: Page, existingSession?: CDPSession) {
+  let observation = browserViewportObservations.get(page);
+  if (observation) return observation;
+  observation = (async () => {
+    const state = { revision: 0, observing: false };
+    const invalidate = () => { state.revision++; };
+    let closed = false;
+    const stopObserving = () => { closed = true; state.observing = false; invalidate(); };
+    let session: CDPSession | undefined;
+    try {
+      session = existingSession ?? await page.context().newCDPSession(page);
+      session.on("Page.frameResized", invalidate);
+      session.on("Page.frameStartedLoading", invalidate);
+      session.on("Page.frameNavigated", invalidate);
+      // Conservatively include same-document navigation and subframe swaps. Losing
+      // reuse is preferable to retaining proof for a replaced hidden renderer.
+      session.on("Page.frameDetached", invalidate);
+      session.on("close", stopObserving);
+      page.on("framenavigated", frame => { if (frame === page.mainFrame()) invalidate(); });
+      page.on("crash", invalidate);
+      page.on("close", stopObserving);
+      await session.send("Page.enable");
+      state.observing = !closed;
+    } catch {
+      // Unsupported/unavailable CDP observation disables reuse, never validation.
+      if (session && !existingSession) await session.detach().catch(() => {});
+    }
+    return state;
+  })();
+  browserViewportObservations.set(page, observation);
+  return observation;
+}
 
 export class LauncherBrowserTurnCancelledError extends Error {
   constructor(message: string) {
@@ -300,7 +337,12 @@ export async function connectLauncherBrowserHost(
     // focus emulation for input while its Electron view is in the background.
     if (!readOnly) {
       const inputSession = await context.newCDPSession(page);
-      await inputSession.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+      // Subscribe alongside existing focus preparation, without another serial
+      // page round trip or another session on the launcher path.
+      await Promise.all([
+        inputSession.send("Emulation.setFocusEmulationEnabled", { enabled: true }),
+        observeBrowserViewport(page, inputSession),
+      ]);
     }
     // The browser connection owns this session; disconnect releases the override.
     return { descriptor, browser, context, page };
@@ -594,6 +636,7 @@ export type LauncherTurnActivity =
       surfaceId?: string;
       conversationKey?: string;
       conversationUrl?: string;
+      newChatUrl?: string;
       leaseFencing?: boolean;
       connectorIdentity?: string;
       requireRetainedConversation?: boolean;
@@ -622,8 +665,8 @@ export type LauncherTurnActivity =
       connectorBound?: boolean;
     };
 
-// Startup must outlast the launcher's ten-second idle bootstrap. This is not a model-turn budget.
-export const LAUNCHER_TURN_START_TIMEOUT_MS = 30_000;
+// A cold surface may load its ChatGPT route for up to sixty seconds. This is not a model-turn budget.
+export const LAUNCHER_TURN_START_TIMEOUT_MS = 65_000;
 export const LAUNCHER_TURN_HEARTBEAT_INTERVAL_MS = 10_000;
 export const LAUNCHER_TURN_HEARTBEAT_TIMEOUT_MS = 5_000;
 export const LAUNCHER_TURN_END_TIMEOUT_MS = 15_000;

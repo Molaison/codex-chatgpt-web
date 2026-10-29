@@ -547,10 +547,10 @@ export const CHATGPT_WEB_SELECTOR_ROUTES: readonly ChatGptWebModelRoute[] =
     (["persistent", "temporary"] as const).map(sessionMode => ({
       slug: `chatgpt-web/gpt-${family}-${toolAccess}-${sessionMode === "persistent" ? "persist" : "temp"}`,
       displayName: `GPT-${family} (Web) · ${toolAccess === "chat" ? "Chat" : "Tools"} · ${sessionMode === "persistent" ? "Persist" : "Temporary"}`,
-      description: `${toolAccess}; ${sessionMode === "persistent" ? "save chat history" : "temporary chat"}; high / xhigh / max (Pro)`,
+      description: `${toolAccess}; ${sessionMode === "persistent" ? "save chat history" : "temporary chat"}; ${family === "6" ? "instant / " : ""}high / xhigh / max (Pro)`,
       interactionMode: "automatic" as const, backendModel: CHATGPT_WEB_BACKEND_MODEL,
       codexEffort: "xhigh" as const, adapterEffort: "xhigh" as const, modelFamily: family,
-      supportedCodexEfforts: ["high", "xhigh", "max"] as const,
+      supportedCodexEfforts: family === "6" ? ["low", "high", "xhigh", "max"] as const : ["high", "xhigh", "max"] as const,
       requiresPro: false, toolAccess, sessionMode,
     }))));
 

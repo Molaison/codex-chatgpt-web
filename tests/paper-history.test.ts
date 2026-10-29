@@ -116,13 +116,14 @@ function setup(reader: PaperHistoryReader, backendHandler?: () => Promise<Respon
   const config: QaPoolConfig = { host: "127.0.0.1", port: 0, databasePath: join(root, "pool.sqlite"),
     clients: [{ id: "cpr", keyFile: join(root, "key") }, { id: "other", keyFile: join(root, "other-key") }],
     accounts: [{ id: accountId, origin: backend.url.origin, models: ["standard"], conversationStoreDirectory: join(root, "store"), browserHostDescriptorPath: join(root, "unused-descriptor") }],
-    projectRoutes: [{ name: "papers", accountId, projectId, sessionNamespace: "papers" }, { name: "other", accountId, projectId }],
+    projectRoutes: [{ name: "papers", accountId, projectId, sessionNamespace: "papers", paperRegistry: true }, { name: "other", accountId, projectId }],
   };
   const pool = createQaPool(config, { paperHistoryReader: reader, paperRecoveryReader: recoveryReader });
   const db = new Database(config.databasePath);
   const sessionHash = poolSessionHash(["cpr", "papers"], threadId);
   db.query("INSERT INTO sessions(session_hash,account_id,created_at,project_id,project_name) VALUES(?,?,?,?,?)").run(sessionHash, accountId, "2026-01-01", projectId, "papers");
-  db.query("INSERT INTO papers VALUES(?,?,?,?,?,?,?,?,?,?,?)").run(paperId, accountId, projectId, threadId, sessionHash, "ready", null, null, conversationUrl, "b".repeat(64), 0);
+  db.query("INSERT INTO papers(paper_id,session_key,account_id,project_id,thread_id,session_hash,state,upload_token,expires_at,conversation_url,pdf_sha256,in_flight) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
+    .run(paperId, "", accountId, projectId, threadId, sessionHash, "ready", null, null, conversationUrl, "b".repeat(64), 0);
   db.query("INSERT INTO paper_aliases VALUES(?,?)").run(aliasId, paperId);
   const store = new ChatGptConversationStore(config.accounts[0].conversationStoreDirectory!, accountId);
   const nativeKey = chatGptQuestionAnswerKey("qa-pool-" + sessionHash, chatGptQuestionAnswerNamespace(accountId));
@@ -150,7 +151,7 @@ test("JSON and SSE share completed Responses, zero usage, alias identity and ver
     const response = await json.json();
     expect(response.status).toBe("completed");
     expect(response.usage).toEqual({ input_tokens: 0, output_tokens: 0, total_tokens: 0 });
-    const expected = { paper_id: paperId, thread_id: threadId, conversation_url: conversationUrl, title: "Existing paper", messages: [
+    const expected = { paper_id: paperId, paper_registry_version: 2, paper_session_id: "", thread_id: threadId, conversation_url: conversationUrl, title: "Existing paper", messages: [
       { id: "msg-user", role: "user", text: "Question", created_at: 1700000000125 },
       { id: "msg-answer", role: "assistant", text: "Answer", created_at: 1700000001000 },
     ] };

@@ -5,8 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createContext, runInContext } from "node:vm";
 import type { Page } from "playwright-core";
-import { CHATGPT_BROWSER_OBSERVATION_PROBE_TIMEOUT_MS, CHATGPT_COMPLETION_SETTLE_MS, CHATGPT_EXTERNAL_PROGRESS_CLOCK_SKEW_MS, CHATGPT_EXTERNAL_PROGRESS_STALL_CEILING_MS, ChatGptCompletionTracker, chatGptExternalProgressSuppressesDomHealth, CHATGPT_RESPONSE_DOM_GRACE_MS, MAX_CHATGPT_INTERNAL_OBSERVATION_FAULTS, CHATGPT_COMPOSER_DOCUMENT_END_KEY, CHATGPT_COMPOSER_SELECT_ALL_KEY, ChatGptBrowserObservationTimeoutError, ChatGptBrowserWorker, ChatGptSubmissionRejectionObserver, ChatGptPromptAttachmentIntegrityError, ChatGptTurnDomHealthTracker, ChatGptVisibleTraceTracker, MAX_CHATGPT_BROWSER_PAGE_REBINDS, MAX_CHATGPT_BROWSER_TABS, MAX_CHATGPT_CONNECTOR_TRIGGER_ATTEMPTS, assertChatGptWebInputWithinLimits, assertChatGptWebMultipartInputWithinLimits, browserDiagnosticCheckpoint, chatGptNewTurnIdentity, chatGptReboundTurnIdentity, chatGptSubmissionEvidence, connectAfterClosingBrowserConnection, isChatGptTraceControl, redactChatGptUiDiagnostic, resolveBrowserConfig, resolveChatGptToolConfirmation, resolveChatGptWebMultipartStagingMode, sanitizeChatGptBrowserDiagnosticState, setChatGptThinkMode, stripChatGptTraceControlSuffix, throwIfChatGptRateLimitDialog, throwIfChatGptSessionFailureAlert, throwIfChatGptTerminalErrorAlert, withChatGptBrowserObservationTimeout, CHATGPT_MULTIPART_RESPONSE_DOM_GRACE_MS, browserStageTimeouts, ChatGptSuspensionClock, remainingStageBudgetMs } from "../src/adapters/chatgpt-web/browser-worker";
+import { CHATGPT_BROWSER_OBSERVATION_PROBE_TIMEOUT_MS, CHATGPT_COMPLETION_SETTLE_MS, CHATGPT_EXTERNAL_PROGRESS_CLOCK_SKEW_MS, CHATGPT_EXTERNAL_PROGRESS_STALL_CEILING_MS, ChatGptCompletionTracker, chatGptCompletionStableMs, chatGptExternalProgressSuppressesDomHealth, CHATGPT_RESPONSE_DOM_GRACE_MS, MAX_CHATGPT_INTERNAL_OBSERVATION_FAULTS, CHATGPT_COMPOSER_DOCUMENT_END_KEY, CHATGPT_COMPOSER_SELECT_ALL_KEY, ChatGptBrowserObservationTimeoutError, ChatGptBrowserWorker, ChatGptSubmissionRejectionObserver, ChatGptPromptAttachmentIntegrityError, ChatGptTurnDomHealthTracker, ChatGptVisibleTraceTracker, MAX_CHATGPT_BROWSER_PAGE_REBINDS, MAX_CHATGPT_BROWSER_TABS, MAX_CHATGPT_CONNECTOR_TRIGGER_ATTEMPTS, assertChatGptWebInputWithinLimits, assertChatGptWebMultipartInputWithinLimits, browserDiagnosticCheckpoint, chatGptNewTurnIdentity, chatGptReboundTurnIdentity, chatGptSubmissionEvidence, connectAfterClosingBrowserConnection, isChatGptTraceControl, redactChatGptUiDiagnostic, resolveBrowserConfig, resolveChatGptToolConfirmation, resolveChatGptWebMultipartStagingMode, sanitizeChatGptBrowserDiagnosticState, setChatGptThinkMode, stripChatGptTraceControlSuffix, throwIfChatGptRateLimitDialog, throwIfChatGptSessionFailureAlert, throwIfChatGptTerminalErrorAlert, withChatGptBrowserObservationTimeout, waitForOperationalChatGptViewport, CHATGPT_MULTIPART_RESPONSE_DOM_GRACE_MS, browserStageTimeouts, ChatGptSuspensionClock, remainingStageBudgetMs } from "../src/adapters/chatgpt-web/browser-worker";
 import { chatGptUnavailableProDetail } from "../src/adapters/chatgpt-web/browser-worker";
+import { waitForChatGptCompletionPoll } from "../src/adapters/chatgpt-web/browser-worker";
 import { chatGptStoppedThinkingError } from "../src/adapters/chatgpt-web/adapter-error";
 import { CHATGPT_STOPPED_THINKING_LABELS } from "../src/adapters/chatgpt-web/ui-labels";
 import { CHATGPT_WEB_MODEL_ID } from "../src/adapters/chatgpt-web/model";
@@ -541,6 +542,34 @@ test("launcher page acquisition proves a nonzero operational viewport before DOM
   expect(viewport).toBeGreaterThan(connect);
   expect(acquired).toBeGreaterThan(viewport);
   expect(workerSource).toContain("innerWidth >= width && innerHeight >= height");
+  expect(workerSource).toContain("if (!readySurface) await waitForOperationalChatGptViewport(page, abortSignal);");
+});
+
+test("an already operational launcher viewport is observed without a second resize", async () => {
+  let resizes = 0;
+  const page = {
+    evaluate: async () => ({ width: 1280, height: 900 }),
+    setViewportSize: async () => { resizes += 1; },
+    waitForFunction: async () => {},
+  };
+  const timing = await waitForOperationalChatGptViewport(page as never);
+  expect(timing.applied).toBeFalse();
+  expect(timing.readMs).toBeGreaterThanOrEqual(0);
+  expect(timing.applyMs).toBe(0);
+  expect(timing.waitMs).toBe(0);
+  expect(resizes).toBe(0);
+});
+
+test("a missing launcher viewport is repaired once", async () => {
+  let resizes = 0;
+  const page = {
+    evaluate: async () => ({ width: 0, height: 0 }),
+    setViewportSize: async () => { resizes += 1; },
+    waitForFunction: async () => {},
+  };
+  const timing = await waitForOperationalChatGptViewport(page as never);
+  expect(timing.applied).toBeTrue();
+  expect(resizes).toBe(1);
 });
 
 test("Luna turns without a retained conversation never send connector identity alone", () => {
@@ -600,6 +629,59 @@ test("a stalled DOM observation fails within its probe budget", async () => {
     5,
   )).rejects.toBeInstanceOf(ChatGptBrowserObservationTimeoutError);
 
+});
+
+test("Instant uses the shortened completion settle while standard effort keeps its fence window", () => {
+  expect(chatGptCompletionStableMs("low")).toBe(150);
+  expect(chatGptCompletionStableMs("high")).toBe(CHATGPT_COMPLETION_SETTLE_MS);
+});
+
+test("completion waits wake on abort, including an already aborted turn", async () => {
+  const abort = new AbortController();
+  const waiting = waitForChatGptCompletionPoll(60_000, abort.signal);
+  abort.abort();
+  await expect(waiting).rejects.toMatchObject({ name: "AbortError" });
+  await expect(waitForChatGptCompletionPoll(60_000, abort.signal))
+    .rejects.toMatchObject({ name: "AbortError" });
+});
+
+test("completion waits wake for a tool batch that arrives during sleep or before registration", async () => {
+  for (const beforeWait of [false, true]) {
+    const progress = new ChatGptExternalTurnProgress();
+    const revision = progress.snapshot().revision;
+    if (beforeWait) progress.recordToolBatch(1);
+    const waiting = waitForChatGptCompletionPoll(60_000, undefined, progress, revision);
+    if (!beforeWait) progress.recordToolBatch(1);
+    await waiting;
+    expect(progress.snapshot().activeToolCalls).toBe(1);
+    // Waking never acknowledges a batch; the next fresh DOM read owns its boundary.
+    const abort = new AbortController();
+    const observation = progress.waitForToolBatchObservation(progress.snapshot().lastToolBatchRevision, abort.signal);
+    abort.abort();
+    await expect(observation).rejects.toMatchObject({ name: "AbortError" });
+  }
+});
+
+test("completion polling disposes the losing progress waiter after timeout and abort", async () => {
+  for (const cancel of [false, true]) {
+    const abort = new AbortController();
+    let waiterSignal: AbortSignal | undefined;
+    const progress = {
+      snapshot: () => ({ revision: 0, lastToolBatchRevision: 0, activeToolCalls: 0 }),
+      acknowledgeToolBatch: async () => {},
+      waitForChange: (_revision: number, signal?: AbortSignal) => {
+        waiterSignal = signal;
+        return new Promise<never>((_resolve, reject) => {
+          signal!.addEventListener("abort", () => reject(new DOMException("cancelled waiter", "AbortError")), { once: true });
+        });
+      },
+    };
+    const waiting = waitForChatGptCompletionPoll(cancel ? 60_000 : 1, abort.signal, progress);
+    if (cancel) abort.abort();
+    if (cancel) await expect(waiting).rejects.toMatchObject({ name: "AbortError" });
+    else await waiting;
+    expect(waiterSignal?.aborted).toBeTrue();
+  }
 });
 
 test("an accepted Full-mode send survives one stalled DOM probe and a later MCP batch without resending", async () => {
@@ -2313,14 +2395,20 @@ test("image attachment readiness uses exact file tiles and not localized remove-
     },
   };
   const composerForm = {
-    getByRole: (role: string, options: { name: string; exact: boolean }) => {
-      expect(role).toBe("group");
-      expect(options).toEqual({ name: "codex-input-image-1.png", exact: true });
+    getByRole: (role: string, options: { name: string | RegExp; exact?: boolean }) => {
+      if (typeof options.name === "string") {
+        expect(role).toBe("group");
+        expect(options).toEqual({ name: "codex-input-image-1.png", exact: true });
+      } else {
+        expect(["group", "button"]).toContain(role);
+        expect(options.name.test("codex-input-image-1(1).png")).toBeTrue();
+      }
       return {
         or() { return this; },
+        and() { return this; },
         waitFor: async (state: { state: string; timeout: number }) => {
           expect(state).toEqual({ state: "visible", timeout: 300_000 });
-          calls.push(["fileTile", options.name]);
+          calls.push(["fileTile", String(options.name)]);
         },
       };
     },
@@ -2746,7 +2834,7 @@ test("unrelated ChatGPT dialogs are left untouched", async () => {
   expect(fixture.pressed).toEqual([]);
 });
 
-test("the known terminal ChatGPT error alert returns a structured retryable failure", async () => {
+test("the known terminal ChatGPT error alert does not replay an accepted turn", async () => {
   const fixture = dialogPage(
     "Something went wrong. If this issue persists please contact us through our help center at help.openai.com.",
   );
@@ -2755,8 +2843,8 @@ test("the known terminal ChatGPT error alert returns a structured retryable fail
     name: "ChatGptWebAdapterError",
     status: 502,
     errorType: "server_error",
-    code: "upstream_server_error",
-    retryable: true,
+    code: "chatgpt_bound_turn_incomplete",
+    retryable: false,
   });
   expect(fixture.pressed).toEqual([]);
 });
@@ -2846,8 +2934,7 @@ test("completed SSE size errors reject only their current submission, not model 
   expect(reads).toBe(0);
   for (const body of [
     sse({ message: { content: { parts: [JSON.stringify(error)] } } }),
-    sse({ v: error }), sse({ ...error, error_code: "unknown_error" }),
-    sse({ ...error, error_reason: "unknown_reason" }), sse(null), "data: malformed\n\n",
+    sse({ v: error }), sse(null), "data: malformed\n\n",
   ]) {
     page.emit("requestfinished", stream(body));
   }
@@ -2902,7 +2989,7 @@ test("the current response error action identifies short and localized failures 
     const fixture = dialogPage(text, "Retry", true);
     await expect(throwIfChatGptTerminalErrorAlert(fixture.page)).rejects.toMatchObject({
       name: "ChatGptWebAdapterError",
-      code: "upstream_server_error",
+      code: "chatgpt_bound_turn_incomplete",
     });
     expect(fixture.pressed).toEqual([]);
     await throwIfChatGptTerminalErrorAlert(dialogPage(text, "Retry", false).page);
@@ -3080,7 +3167,7 @@ test("effort menu waiting stops when ChatGPT reports an expired session", async 
 
 test("terminal model errors are scoped to the new assistant turn instead of global page alerts", () => {
   const workerSource = readFileSync(new URL("../src/adapters/chatgpt-web/browser-worker.ts", import.meta.url), "utf8");
-  expect(workerSource).toContain("throwIfChatGptTerminalErrorAlert(page.locator(chatGptTurnContainerSelector(responseTurn.identity)))");
+  expect(workerSource).toContain("throwIfChatGptTerminalErrorAlert(page.locator(chatGptTurnContainerSelector(responseTurn.identity)),");
   expect(workerSource).not.toContain("throwIfChatGptTerminalErrorAlert(page)");
 });
 

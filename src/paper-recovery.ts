@@ -6,6 +6,7 @@ import { chatGptQuestionAnswerKey, chatGptQuestionAnswerNamespace } from "./adap
 import { PaperError } from "./paper-registry";
 import {
   connectLauncherBrowserHost, notifyLauncherTurn, LAUNCHER_TURN_HEARTBEAT_INTERVAL_MS,
+  LauncherBrowserWriterConflictError,
   type LauncherBrowserConnection,
 } from "./launcher-browser-host";
 
@@ -159,6 +160,35 @@ async function installPaperRecoveryTextRequests(page: Pick<Page, "route">) {
   await page.route("**/*", handler);
   return handler;
 }
+
+async function acquirePaperRecoveryLease(
+  descriptor: string,
+  owner: { traceId: string; helperPid: number },
+  conversationKey: string,
+  signal: AbortSignal,
+) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await notifyLauncherTurn(descriptor, { phase: "start", ...owner, conversationKey }, undefined, signal);
+    } catch (error) {
+      // The preceding paper turn can finish its HTTP body before the launcher has
+      // released the same retained conversation document. This is a bounded handoff
+      // wait, not permission to open, resend, or replace the saved conversation.
+      if (!(error instanceof LauncherBrowserWriterConflictError) || attempt >= 5) throw error;
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = () => {
+          clearTimeout(timer);
+          reject(signal.reason instanceof Error ? signal.reason : new DOMException("Aborted", "AbortError"));
+        };
+        const timer = setTimeout(() => {
+          signal.removeEventListener("abort", onAbort);
+          resolve();
+        }, 200 * 2 ** attempt);
+        signal.addEventListener("abort", onAbort, { once: true });
+      });
+    }
+  }
+}
 export async function withPaperRecoveryTextRequests<T>(page: Pick<Page, "route" | "unroute">, read: () => Promise<T>): Promise<T> {
   const handler = await installPaperRecoveryTextRequests(page);
   try { return await read(); }
@@ -180,7 +210,7 @@ export const readLauncherPaperRecovery: PaperRecoveryReader = async request => {
   let onAbort: (() => void) | undefined;
   try {
     signal.throwIfAborted();
-    const lease = await notifyLauncherTurn(descriptor, { phase: "start", ...owner, conversationKey }, undefined, signal);
+    const lease = await acquirePaperRecoveryLease(descriptor, owner, conversationKey, signal);
     acquired = true;
     connectorBound = lease.connectorBound === true;
     if (!lease.surfaceId) throw new PaperError("paper_recovery_unavailable", "Launcher did not lease a recovery surface", 503);

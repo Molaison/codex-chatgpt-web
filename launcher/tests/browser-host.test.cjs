@@ -424,6 +424,7 @@ test("primary browser initialization keeps its view offscreen but visible until 
   };
   const hiddenBounds = { x: 1121, y: 721, width: 1120, height: 720 };
   const fixture = Object.assign(Object.create(BrowserHost.prototype), {
+    startedAt: Date.now(),
     view: {
       setBounds: bounds => calls.push(["bounds", bounds]),
       setVisible: visible => calls.push(["visible", visible]),
@@ -439,6 +440,9 @@ test("primary browser initialization keeps its view offscreen but visible until 
 
   await BrowserHost.prototype.initializePrimaryView.call(fixture);
 
+  const initialized = calls.find(call => Array.isArray(call) && call[0] === "browser.initialized")[1];
+  assert.ok(Number.isFinite(initialized.durationMs) && initialized.durationMs >= 0);
+  assert.ok(Number.isFinite(initialized.processUptimeMs) && initialized.processUptimeMs >= 0);
   assert.deepEqual(calls, [
     ["bounds", hiddenBounds],
     ["visible", true],
@@ -446,7 +450,7 @@ test("primary browser initialization keeps its view offscreen but visible until 
     "owned",
     "sync",
     "descriptor",
-    ["browser.initialized", { url: IDLE_BROWSER_URL }],
+    ["browser.initialized", { url: IDLE_BROWSER_URL, durationMs: initialized.durationMs, processUptimeMs: initialized.processUptimeMs }],
     "standby",
   ]);
 });
@@ -687,6 +691,281 @@ test("browser surface reactivation preserves its last measured bounds", () => {
     { active: true, boundsReady: true },
   ]);
   assert.equal(fixture.boundsReady, true);
+});
+
+function standbyViewportFixture({ onLoad } = {}) {
+  const { createContext, runInContext } = require("node:vm");
+  const views = [];
+  const logs = [];
+  class StandbyViewportView {
+    constructor() {
+      views.push(this);
+      this.emulations = [];
+      this.webContents = Object.assign(new EventEmitter(), {
+        url: "about:blank", destroyed: false, empty: true, loads: [], scripts: [],
+        getURL() { return this.url; },
+        isDestroyed() { return this.destroyed; },
+        async loadURL(url) {
+          this.loads.push(url);
+          this.emit("did-start-navigation", {}, url, false, true);
+          await onLoad?.(url);
+          this.url = url;
+          this.emit("did-finish-load");
+        },
+        executeJavaScript: async script => {
+          this.webContents.scripts.push(script);
+          return runInContext(script, this.realm);
+        },
+        insertCSS: async () => "viewport-css",
+        enableDeviceEmulation: options => this.emulations.push(options),
+        disableDeviceEmulation: () => assert.fail("viewport reuse must preserve menu state"),
+        setZoomFactor() {}, stop() {},
+        close() { this.destroyed = true; this.emit("destroyed"); },
+      });
+      const contents = this.webContents;
+      this.realm = createContext({
+        location: { get href() { return contents.url; }, get origin() { return new URL(contents.url).origin; } },
+        document: {
+          readyState: "complete", documentElement: { dataset: {} },
+          querySelectorAll: selector => selector.includes("modal-beacon") ? [] : [{
+            getClientRects: () => [1], getAttribute: () => "true",
+            get textContent() { return contents.empty ? "" : "existing prompt"; },
+          }],
+          querySelector: () => null,
+        },
+        MutationObserver: class { observe() {} },
+      });
+    }
+    setBounds(bounds) { this.bounds = bounds; }
+    setVisible(visible) { this.visible = visible; }
+  }
+  const hostPath = require.resolve("../electron/browser-host.cjs");
+  const hostRequire = require("node:module").createRequire(hostPath);
+  const hostModule = { exports: {} };
+  new Function("require", "module", "exports", "__dirname", "__filename", fs.readFileSync(hostPath, "utf8"))(
+    name => name === "electron" ? { WebContentsView: StandbyViewportView } : hostRequire(name),
+    hostModule, hostModule.exports, require("node:path").dirname(hostPath), hostPath,
+  );
+  const host = Object.assign(Object.create(hostModule.exports.BrowserHost.prototype), {
+    partition: "persist:viewport-test", state: { zoomFactor: 1 },
+    turnTabs: new Map(), standbyViews: new Map(), boundsReady: true,
+    bounds: { x: 280, y: 64, width: 840, height: 656 },
+    window: { getContentSize: () => [1120, 720], contentView: { addChildView() {}, removeChildView() {} } },
+    logger: {
+      info: (event, detail) => logs.push({ event, ...detail }),
+      warn: (event, detail) => logs.push({ event, ...detail }), error() {},
+    },
+    testViews: views, testLogs: logs,
+    standbyLimit: () => 1, syncPowerSaveBlocker() {}, bindShellZoomShortcuts() {},
+    bindTurnContents() {}, prepareStandbyView: async () => {},
+    removeTurnTab(tab) { this.turnTabs.delete(tab.id); tab.view.webContents.close(); },
+  });
+  return host;
+}
+
+test("standby pool preserves three keyed documents including the saved or project spare", async () => {
+  for (const project of [undefined, "https://chatgpt.com/", "https://chatgpt.com/?temporary-chat=true",
+    `https://chatgpt.com/g/g-p-${"a".repeat(32)}/project`]) {
+    const host = standbyViewportFixture();
+    delete host.prepareStandbyView;
+    host.standbyLimit = () => 3;
+    host.standbyProjectUrl = project;
+    await host.prepareStandbyView();
+    const expected = ["https://chatgpt.com/", "https://chatgpt.com/?temporary-chat=true", project ?? "https://chatgpt.com/"];
+    assert.deepEqual([...host.standbyViews.keys()], [expected[0], expected[1], `${expected[2]}#spare-2`]);
+    assert.ok([...host.standbyViews.values()].every(page => page.ready));
+    assert.deepEqual(host.testViews.flatMap(view => view.webContents.loads), expected);
+    await host.prepareStandbyView();
+    assert.equal(host.testViews.length, expected.length, "ready routes never load again during replenishment");
+  }
+});
+
+test("standby cold loads are serial and concurrent replenishment calls share the same operation", async () => {
+  const started = [];
+  let release;
+  const host = standbyViewportFixture({ onLoad: url => {
+    started.push(url);
+    return new Promise(resolve => { release = resolve; });
+  } });
+  delete host.prepareStandbyView;
+  host.standbyLimit = () => 3;
+  const first = host.prepareStandbyView();
+  const concurrent = host.prepareStandbyView();
+  assert.deepEqual(started, ["https://chatgpt.com/"]);
+  release();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(started, ["https://chatgpt.com/", "https://chatgpt.com/?temporary-chat=true"]);
+  assert.equal(host.standbyViews.get(started[0]).ready, true);
+  release();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(started, ["https://chatgpt.com/", "https://chatgpt.com/?temporary-chat=true", "https://chatgpt.com/"]);
+  assert.equal(host.standbyViews.get(started[1]).ready, true);
+  assert.equal(host.standbyViews.get("https://chatgpt.com/#spare-2").ready, false);
+  release();
+  await Promise.all([first, concurrent]);
+  assert.equal(host.testViews.length, 3);
+  assert.equal(host.standbyPreparation, null);
+});
+
+test("standby replenishment stops between cold routes when a turn starts and resumes after release", async () => {
+  let release;
+  const host = standbyViewportFixture({ onLoad: () => new Promise(resolve => { release = resolve; }) });
+  delete host.prepareStandbyView;
+  host.standbyLimit = () => 3;
+  const warming = host.prepareStandbyView();
+  host.turnTabs.set("active", { status: "running" });
+  release();
+  await warming;
+  assert.equal(host.testViews.length, 1, "no second cold renderer starts beside an active turn");
+  await host.prepareStandbyView();
+  assert.equal(host.testViews.length, 1);
+  host.turnTabs.delete("active");
+  const resumed = host.prepareStandbyView();
+  await new Promise(resolve => setImmediate(resolve));
+  release();
+  await new Promise(resolve => setImmediate(resolve));
+  release();
+  await resumed;
+  assert.equal(host.testViews.length, 3);
+  assert.ok([...host.standbyViews.values()].every(page => page.ready));
+});
+
+test("standby saved and temporary claims use one renderer call without reload or competing replenishment", async () => {
+  const host = standbyViewportFixture();
+  delete host.prepareStandbyView;
+  host.standbyLimit = () => 3;
+  await host.prepareStandbyView();
+  for (const route of ["https://chatgpt.com/", "https://chatgpt.com/?temporary-chat=true", "https://chatgpt.com/"]) {
+    const standby = [...host.standbyViews.values()].find(candidate => candidate.targetUrl === route);
+    const scriptsBefore = standby.view.webContents.scripts.length;
+    const tab = await host.createTurnTab(`warm-${route}`, 123, "conversation", "connector",
+      undefined, undefined, undefined, route);
+    assert.equal(tab.view, standby.view);
+    assert.equal(tab.bootstrapReady, true);
+    assert.equal(standby.view.webContents.scripts.length - scriptsBefore, 1);
+    assert.equal(standby.view.realm.__CODEX_WEB_GPT_SURFACE_ID__, tab.surfaceId);
+    assert.equal(standby.view.realm.document.documentElement.dataset.codexWebGptSurface, tab.surfaceId);
+    assert.deepEqual(standby.view.webContents.loads, [route]);
+  }
+  await host.prepareStandbyView();
+  assert.equal(host.standbyViews.size, 0);
+  assert.equal(host.testViews.length, 3);
+  const readyLogs = host.testLogs.filter(log => log.event === "browser.new_tab_prepared");
+  assert.equal(readyLogs.length, 3);
+  assert.ok(readyLogs.every(log => log.standbyHit && log.durationMs >= 0));
+  assert.ok(host.testLogs.filter(log => log.event === "browser.standby_ready")
+    .every(log => log.navigationMs >= 0 && log.composerMs >= 0));
+});
+
+test("standby claim propagates renderer errors and cleans up the failed turn", async () => {
+  const host = standbyViewportFixture();
+  await host.prepareStandbyRoute("https://chatgpt.com/");
+  const contents = host.standbyViews.get("https://chatgpt.com/").view.webContents;
+  const failure = new Error("claim renderer evaluation failed");
+  contents.executeJavaScript = async () => { throw failure; };
+  await assert.rejects(host.createTurnTab("failed-claim", 123), error => error === failure);
+  assert.equal(host.turnTabs.size, 0);
+  assert.equal(contents.destroyed, true);
+  assert.equal(contents.listenerCount("did-start-navigation"), 1);
+  assert.equal(contents.listenerCount("render-process-gone"), 1);
+  assert.equal(host.testLogs.some(log => log.event === "browser.new_tab_prepared"), false);
+});
+
+test("standby claim keeps navigation, renderer, ownership and abort fences after the combined proof", async () => {
+  for (const change of ["navigation", "renderer", "surfaceId", "helperPid", "traceId", "status", "abort"]) {
+    const host = standbyViewportFixture();
+    await host.prepareStandbyRoute("https://chatgpt.com/");
+    const controller = new AbortController();
+    const reason = new Error("caller cancelled claim");
+    const mark = host.markTurnTabSurface;
+    host.markTurnTabSurface = async (tab, url) => {
+      const ready = await mark.call(host, tab, url);
+      assert.equal(ready, true);
+      if (change === "navigation") tab.view.webContents.emit("did-start-navigation", {}, url, false, true);
+      else if (change === "renderer") tab.view.webContents.emit("render-process-gone");
+      else if (change === "abort") controller.abort(reason);
+      else tab[change] = "changed";
+      return ready;
+    };
+    await assert.rejects(host.createTurnTab(`fenced-${change}`, 123, undefined, undefined, controller.signal),
+      error => change === "abort" ? error === reason : error.code === "browser_writer_conflict");
+    assert.equal(host.turnTabs.size, 0, change);
+    assert.equal(host.testLogs.some(log => log.event === "browser.new_tab_prepared"), false);
+  }
+});
+
+test("standby preparation establishes the offscreen renderer viewport before readiness", async () => {
+  const host = standbyViewportFixture();
+  await host.prepareStandbyRoute("https://chatgpt.com/");
+  const standby = host.standbyViews.get("https://chatgpt.com/");
+  assert.equal(standby.ready, true);
+  assert.equal(standby.deviceEmulationDirty, false);
+  assert.deepEqual(standby.deviceEmulationViewport, { width: 840, height: 656 });
+  assert.deepEqual(standby.view.emulations, [{
+    screenPosition: "desktop", screenSize: { width: 840, height: 656 },
+    viewPosition: { x: 0, y: 0 }, deviceScaleFactor: 0,
+    viewSize: { width: 840, height: 656 }, scale: 1,
+  }]);
+  assert.deepEqual(standby.view.bounds, { x: 1121, y: 721, width: 840, height: 656 });
+  assert.equal(standby.view.visible, true);
+});
+
+test("standby claim and selection reuse emulation until the pane size changes", async () => {
+  const host = standbyViewportFixture();
+  await host.prepareStandbyRoute("https://chatgpt.com/");
+  const standby = host.standbyViews.get("https://chatgpt.com/");
+  const tab = await host.createTurnTab("viewport-trace", 123, "conversation", "connector");
+  assert.equal(tab.view, standby.view);
+  assert.equal(tab.rendererReady, true);
+  assert.equal(host.standbyViews.size, 0);
+  host.presentTurnView(tab, true);
+  host.presentTurnView(tab, false);
+  assert.equal(tab.view.emulations.length, 1);
+  host.bounds = { ...host.bounds, width: 900, height: 640 };
+  host.presentTurnView(tab, false);
+  host.presentTurnView(tab, true);
+  assert.equal(tab.view.emulations.length, 2);
+  assert.deepEqual(tab.deviceEmulationViewport, { width: 900, height: 640 });
+});
+
+test("standby claim refreshes emulation when the window changed during prewarming", async () => {
+  const host = standbyViewportFixture();
+  await host.prepareStandbyRoute("https://chatgpt.com/");
+  host.bounds = { ...host.bounds, width: 900, height: 640 };
+  const tab = await host.createTurnTab("resized-trace", 123, "conversation", "connector");
+  assert.equal(tab.view.emulations.length, 2);
+  assert.deepEqual(tab.deviceEmulationViewport, { width: 900, height: 640 });
+  assert.equal(tab.deviceEmulationDirty, false);
+});
+
+test("standby emulation is invalidated only by a main-frame document navigation", async () => {
+  const host = standbyViewportFixture();
+  await host.prepareStandbyRoute("https://chatgpt.com/");
+  const standby = host.standbyViews.get("https://chatgpt.com/");
+  const contents = standby.view.webContents;
+  contents.emit("did-start-navigation", {}, contents.url, true, true);
+  contents.emit("did-start-navigation", {}, contents.url, false, false);
+  assert.equal(standby.deviceEmulationDirty, false);
+  contents.emit("did-start-navigation", {}, contents.url, false, true);
+  assert.equal(standby.deviceEmulationDirty, true);
+  const tab = await host.createTurnTab("navigated-trace", 123, "conversation", "connector");
+  assert.equal(tab.view.emulations.length, 2);
+  assert.equal(tab.deviceEmulationDirty, false);
+});
+
+test("nonempty standby falls back to document initialization without claiming readiness", async () => {
+  const host = standbyViewportFixture();
+  await host.prepareStandbyRoute("https://chatgpt.com/");
+  const standby = host.standbyViews.get("https://chatgpt.com/");
+  standby.view.webContents.empty = false;
+  const initialized = [];
+  host.initializeTurnTab = async (tab, signal, url) => initialized.push({ tab, url });
+  const tab = await host.createTurnTab("fallback-trace", 123, "conversation", "connector");
+  assert.equal(initialized.length, 1);
+  assert.equal(initialized[0].tab, tab);
+  assert.equal(initialized[0].url, "https://chatgpt.com/");
+  assert.equal(tab.rendererReady, false);
+  assert.equal(tab.view.emulations.length, 1);
 });
 
 test("hidden turn tabs receive an explicit renderer viewport before moving offscreen", () => {
@@ -2476,7 +2755,6 @@ test("removing the final turn tab keeps the descriptor-owned idle host attached 
     "contents-close",
     ["home-bounds", hiddenBounds],
     ["home-visible", true],
-    ["home-bounds", hiddenBounds],
     ["home-visible", true],
   ]);
 });
@@ -3056,7 +3334,7 @@ test("a retained conversation is not reused for a different connector identity",
     turnTabs: new Map([[retained.id, retained]]),
     userCancelledTurnOwners: new Map(),
     createTurnTab: (...args) => {
-      assert.deepEqual(args, ["trace_next", 222, conversationKey, "Other Connector", undefined]);
+      assert.deepEqual(args, ["trace_next", 222, conversationKey, "Other Connector", undefined, undefined, false, "https://chatgpt.com/"]);
       return created;
     },
     writeDescriptor() {},

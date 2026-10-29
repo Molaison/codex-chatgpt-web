@@ -14,6 +14,7 @@ import { BrowserObservationDetached, observationUnavailable } from "../src/adapt
 import { ChatGptWebAdapterError, ChatGptCompactionHandoffAccepted } from "../src/adapters/chatgpt-web/adapter-error";
 import type { CodexParsedRequest } from "../src/types";
 import { retainedForwardWorkerPolicy } from "../src/adapters/chatgpt-web/retained-forward-surface";
+import { chatGptNewChatUrl } from "../src/chatgpt-session";
 
 const evidence = process.env.Q39_TEST_ROOT ?? mkdtempSync(join(tmpdir(), "native-evidence-"));
 afterAll(() => { if (!process.env.Q39_TEST_ROOT) rmSync(evidence, { recursive: true, force: true }); });
@@ -168,7 +169,7 @@ test("preparation cancellation does not extend generation and remains available 
 
 for (const endFails of [false, true]) test("actual runExclusive releases empty lease only after explicit preparation cancellation end ACK: endFails=" + endFails, async () => {
   const f = fixture(), abort = new AbortController(), controls: Array<Record<string, unknown>> = [], Noop = class extends Error {};
-  const env = { retainedForwardWorkerPolicy, persistentConversationContext: () => undefined,
+  const env = { retainedForwardWorkerPolicy, chatGptNewChatUrl, persistentConversationContext: () => undefined,
     notifyLauncherTurn: async (_path: unknown, request: Record<string, unknown>) => {
       controls.push(request); if (request.phase === "start") return { surfaceId: "s".repeat(32) };
       if (request.phase === "end" && endFails) throw Error("original empty lease end ACK lost");
@@ -190,7 +191,8 @@ for (const endFails of [false, true]) test("actual runExclusive releases empty l
   };
   const run = worker.runExclusive({ ...f.callbacks, traceId: f.scope.traceId, capabilities: {}, onTextDelta() {}, abortSignal: abort.signal });
   const session = new ChatGptTurnSession(runtime(f, run));
-  await bounded(session.browserOutcome);
+  const outcome = await bounded(session.browserOutcome);
+  expect(outcome.type).toBe("error");
   if (endFails) await expect(bounded(session.waitForPhysicalSettlement())).rejects.toThrow("release");
   else await bounded(session.waitForPhysicalSettlement());
   expect(controls.at(-1)).toMatchObject({ phase: "end", status: "aborted" });
@@ -200,5 +202,6 @@ for (const endFails of [false, true]) test("actual runExclusive releases empty l
   expect(!!f.journal.unresolvedOwner(f.record.ownerKey!, "next")).toBe(endFails);
   expect(f.record.error).toMatchObject({ code: "client_cancelled", retryable: false });
   writeFileSync(join(evidence!, endFails ? "end_failure.json" : "end_success.json"),
-    JSON.stringify({ controls, physicalSettled: session.isPhysicallySettled(), record: f.record }, null, 2));
+    JSON.stringify({ outcome: outcome.type === "error" ? String(outcome.error) : outcome.type,
+      controls, physicalSettled: session.isPhysicallySettled(), record: f.record }, null, 2));
 });

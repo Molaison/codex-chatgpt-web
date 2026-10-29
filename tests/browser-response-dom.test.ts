@@ -1,10 +1,486 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
-import type { Locator } from "playwright-core";
+import { EventEmitter } from "node:events";
+import { createRequire } from "node:module";
+import type { Locator, Page } from "playwright-core";
+import { chatGptAttachmentNameMatches, chatGptCompletionStableMs, waitForOperationalChatGptViewport } from "../src/adapters/chatgpt-web/browser-worker";
+import { CHATGPT_SEND_BUTTON_SELECTOR } from "../src/chatgpt-session";
 import { ChatGptBrowserWorker, ChatGptCompletionTracker, ChatGptTurnDomHealthTracker, chatGptTurnIsComplete, ChatGptVisibleTraceTracker, CHATGPT_COMPLETION_SETTLE_MS } from "../src/adapters/chatgpt-web/browser-worker";
 import { chatGptHtmlToMarkdown, ChatGptMarkdownBuffer, ChatGptMarkdownConsistencyError, type ChatGptMarkdownSegment } from "../src/adapters/chatgpt-web/markdown";
 import { parseChatGptChartWidgets } from "../src/adapters/chatgpt-web/rich-widget";
+
+test.each([
+  ["a.pdf", "a.pdf", true],
+  ["a.pdf", "a(1).pdf", true],
+  ["a.pdf", "a(12).pdf", true],
+  ["a.pdf", "a(1).txt", false],
+  ["a.pdf", "xa(1).pdf", false],
+  ["a.pdf", "a(1)(2).pdf", false],
+  ["a.pdf", "a (1).pdf", false],
+  ["a.pdf", "a(1).pdf(2)", false],
+  ["a.pdf", "a(-1).pdf", false],
+  ["a.pdf", "a().pdf", false],
+  ["a.pdf", "a(1).pdf\n", false],
+  ["a.pdf", "a(1).PDF", false],
+  ["a .pdf", "a (1).pdf", true],
+  ["a .pdf", "a(1).pdf", false],
+  ["a[1]+.pdf", "a[1]+(12).pdf", true],
+  ["a[1]+.pdf", "a1(12).pdf", false],
+  ["a.tar.gz", "a.tar(1).gz", true],
+  ["a.tar.gz", "a(1).tar.gz", false],
+  ["a(1).pdf", "a(1)(2).pdf", true],
+  ["README", "README(1)", true],
+])("attachment name %s matches %s: %s", (staged, observed, expected) => {
+  expect(chatGptAttachmentNameMatches(staged, observed)).toBe(expected);
+});
+
+// Exercise attachFiles itself against role/name queries over a composer DOM and owned upload events.
+async function attachmentChipFixture(role: "group" | "button", observed: string, filenames = ["a.pdf"]) {
+  const { createWindow } = require("@mixmark-io/domino");
+  const document: Document = createWindow('<form><input type="file" multiple><button data-testid="send-button"></button></form>').document;
+  const chip = document.createElement(role === "button" ? "button" : "div");
+  chip.setAttribute("role", role);
+  chip.setAttribute("aria-label", observed);
+  chip.className = "composer-attachment-surface";
+  document.querySelector("form")!.appendChild(chip);
+  const calls = { sendEnabled: 0, uploaded: [] as string[], disposed: false, waited: [] as string[] };
+  const elements = Array.from(document.querySelector("form")!.children);
+  type ChipLocator = {
+    matches(element: Element): boolean;
+    or(other: ChipLocator): ChipLocator;
+    and(other: ChipLocator): ChipLocator;
+    waitFor(options: { state: string; timeout: number }): Promise<void>;
+  };
+  function locator(matches: (element: Element) => boolean): ChipLocator {
+    return {
+      or(other: ChipLocator): ChipLocator {
+        return locator(element => matches(element) || other.matches(element));
+      },
+      and(other: ChipLocator): ChipLocator {
+        return locator(element => matches(element) && other.matches(element));
+      },
+      matches,
+      async waitFor(options: { state: string; timeout: number }) {
+        expect(options).toEqual({ state: "visible", timeout: 300_000 });
+        const found = elements.filter(matches);
+        if (found.length !== 1) throw new Error("attachment chip not found");
+        calls.waited.push(found[0]!.getAttribute("aria-label")!);
+      },
+    };
+  }
+  let uploadEvent: (event: { method: string; params: unknown }) => void = () => {};
+  const form = {
+    getByRole(queryRole: string, options: { name: string | RegExp; exact?: boolean }) {
+      return locator(element => {
+        const elementRole = element.getAttribute("role") ?? (element.tagName === "BUTTON" ? "button" : "");
+        const name = element.getAttribute("aria-label") ?? element.textContent ?? "";
+        return elementRole === queryRole && (typeof options.name === "string" ? name === options.name : options.name.test(name));
+      });
+    },
+    locator(selector: string) {
+      if (selector.startsWith("input")) return {
+        waitFor: async (options: unknown) => expect(options).toEqual({ state: "attached", timeout: 20_000 }),
+        setInputFiles: async (files: Array<{ name: string }>) => {
+          calls.uploaded = files.map(file => file.name);
+          for (const file of files) {
+            uploadEvent({ method: "Network.requestWillBeSent", params: { frameId: "owned", requestId: file.name,
+              request: { method: "POST", url: "https://chatgpt.com/backend-api/files/process_upload_stream", postData: JSON.stringify({ file_name: file.name }) } } });
+            uploadEvent({ method: "Network.responseReceived", params: { requestId: file.name, response: { status: 200 } } });
+          }
+        },
+      };
+      if (selector === CHATGPT_SEND_BUTTON_SELECTOR) return { isEnabled: async () => { calls.sendEnabled++; return true; } };
+      return locator(element => element.matches(selector));
+    },
+  };
+  const page = {
+    url: () => "https://chatgpt.com/",
+    context: () => ({ newCDPSession: async () => ({
+      on: (_event: string, listener: typeof uploadEvent) => { uploadEvent = listener; },
+      off: () => {}, detach: async () => { calls.disposed = true; },
+      send: async (method: string) => method === "Page.getFrameTree" ? { frameTree: { frame: { id: "owned" } } }
+        : method === "Network.streamResourceContent" ? { bufferedData: Buffer.from('{"event":"file.processing.completed"}\n').toString("base64") } : {},
+    }) }),
+    locator: () => ({ allInnerTexts: async () => [] }),
+  };
+  const attachFiles = (ChatGptBrowserWorker.prototype as unknown as {
+    attachFiles(page: unknown, prompt: unknown): Promise<void>;
+  }).attachFiles;
+  const result = attachFiles.call({ activeComposer: async () => ({ locator: () => form }) }, page, {
+    images: [], files: filenames.map(filename => ({ filename, fileData: Buffer.from("PDF fixture").toString("base64") })),
+  });
+  return { result, calls };
+}
+
+for (const role of ["group", "button"] as const) {
+  test.each(["a.pdf", "a(1).pdf", "a(12).pdf"])(`attachFiles accepts ${role} chip %s and reaches send readiness`, async observed => {
+    const { result, calls } = await attachmentChipFixture(role, observed);
+    await result;
+    expect(calls).toEqual({ uploaded: ["a.pdf"], waited: [observed], sendEnabled: 1, disposed: true });
+  });
+  test.each(["a(1).txt", "xa(1).pdf", "a(1)(2).pdf", "a (1).pdf"])(`attachFiles rejects foreign ${role} chip %s before send`, async observed => {
+    const { result, calls } = await attachmentChipFixture(role, observed);
+    await expect(result).rejects.toThrow("ChatGPT did not accept all prompt attachments");
+    expect(calls.sendEnabled).toBe(0);
+    expect(calls.disposed).toBeTrue();
+  });
+}
+
+test("attachFiles still requires every file chip before send readiness", async () => {
+  const { result, calls } = await attachmentChipFixture("group", "a(1).pdf", ["a.pdf", "b.pdf"]);
+  await expect(result).rejects.toThrow("ChatGPT did not accept all prompt attachments");
+  expect(calls.uploaded).toEqual(["a.pdf", "b.pdf"]);
+  expect(calls.sendEnabled).toBe(0);
+  expect(calls.disposed).toBeTrue();
+});
+
+function viewportPage(initial = { width: 1280, height: 900 }) {
+  const events = new EventEmitter();
+  const native = new EventEmitter();
+  const mainFrame = {};
+  const counts = { read: 0, apply: 0, wait: 0, subscribe: 0 };
+  const state = { viewport: initial, configured: null as null | { width: number; height: number },
+    applyError: undefined as Error | undefined, waitError: undefined as Error | undefined,
+    observerError: false, duringSubscribe: undefined as (() => void) | undefined,
+    duringRead: undefined as (() => void) | undefined,
+    duringWait: undefined as (() => void) | undefined };
+  const session = Object.assign(native, {
+    send: async (method: string) => {
+      expect(method).toBe("Page.enable");
+      counts.subscribe++;
+      state.duringSubscribe?.();
+      if (state.observerError) throw new Error("CDP unavailable");
+    },
+    detach: async () => {},
+  });
+  const page = Object.assign(events, {
+    mainFrame: () => mainFrame,
+    context: () => ({ newCDPSession: async () => session }),
+    viewportSize: () => state.configured,
+    evaluate: async () => { counts.read++; const result = state.viewport; state.duringRead?.(); return result; },
+    setViewportSize: async (size: { width: number; height: number }) => {
+      counts.apply++;
+      if (state.applyError) throw state.applyError;
+      state.configured = size;
+      state.viewport = size;
+      native.emit("Page.frameResized");
+    },
+    waitForFunction: async (predicate: Function, size: unknown, options: unknown) => {
+      counts.wait++;
+      expect(options).toEqual({ polling: 25, timeout: 10_000 });
+      if (state.waitError) throw state.waitError;
+      expect(runInContext(`(${predicate.toString()})(size)`, createContext({
+        innerWidth: state.viewport.width, innerHeight: state.viewport.height, size,
+      }))).toBeTrue();
+      state.duringWait?.();
+    },
+  }) as unknown as Page;
+  return { page, counts, state, native, events, mainFrame };
+}
+
+test("operational viewport proof eliminates all subsequent document round trips", async () => {
+  const fixture = viewportPage();
+  expect((await waitForOperationalChatGptViewport(fixture.page)).cacheHit).toBeFalse();
+  for (let step = 0; step < 3; step++) {
+    expect(await waitForOperationalChatGptViewport(fixture.page)).toEqual({
+      readMs: 0, applyMs: 0, waitMs: 0, applied: false, cacheHit: true,
+      readCount: 0, applyCount: 0, waitCount: 0,
+    });
+  }
+  expect(fixture.counts).toEqual({ read: 1, apply: 0, wait: 0, subscribe: 1 });
+});
+
+test("repaired viewport is reused without duplicate resize or wait", async () => {
+  const fixture = viewportPage({ width: 0, height: 0 });
+  expect((await waitForOperationalChatGptViewport(fixture.page)).applied).toBeTrue();
+  expect((await waitForOperationalChatGptViewport(fixture.page)).cacheHit).toBeTrue();
+  expect(fixture.counts).toEqual({ read: 1, apply: 1, wait: 1, subscribe: 1 });
+});
+
+test("main-frame navigation including same-URL reload invalidates viewport proof", async () => {
+  const fixture = viewportPage();
+  await waitForOperationalChatGptViewport(fixture.page);
+  fixture.events.emit("framenavigated", {}); // An iframe does not change this document.
+  expect((await waitForOperationalChatGptViewport(fixture.page)).cacheHit).toBeTrue();
+  fixture.state.viewport = { width: 0, height: 0 };
+  fixture.events.emit("framenavigated", fixture.mainFrame);
+  expect((await waitForOperationalChatGptViewport(fixture.page)).applied).toBeTrue();
+  expect(fixture.counts).toEqual({ read: 2, apply: 1, wait: 1, subscribe: 1 });
+});
+
+test("native resize and renderer swap invalidate viewport proof", async () => {
+  for (const event of ["Page.frameResized", "Page.frameStartedLoading", "Page.frameNavigated", "Page.frameDetached", "crash"]) {
+    const fixture = viewportPage();
+    await waitForOperationalChatGptViewport(fixture.page);
+    fixture.state.viewport = { width: 1, height: 1 };
+    if (event === "crash") fixture.events.emit(event);
+    else fixture.native.emit(event);
+    expect((await waitForOperationalChatGptViewport(fixture.page)).applied).toBeTrue();
+    expect(fixture.counts.apply).toBe(1);
+  }
+});
+
+test("configured size changes are checked even before native resize arrives", async () => {
+  const fixture = viewportPage();
+  await waitForOperationalChatGptViewport(fixture.page);
+  fixture.state.configured = { width: 200, height: 100 };
+  fixture.state.viewport = fixture.state.configured;
+  expect((await waitForOperationalChatGptViewport(fixture.page)).applied).toBeTrue();
+  expect((await waitForOperationalChatGptViewport(fixture.page)).cacheHit).toBeTrue();
+});
+
+test("viewport set failures propagate and cannot populate the cache", async () => {
+  const fixture = viewportPage({ width: 0, height: 0 });
+  fixture.state.applyError = new Error("resize failed");
+  await expect(waitForOperationalChatGptViewport(fixture.page)).rejects.toThrow("resize failed");
+  fixture.state.applyError = undefined;
+  expect((await waitForOperationalChatGptViewport(fixture.page)).applied).toBeTrue();
+  expect(fixture.counts).toEqual({ read: 2, apply: 2, wait: 1, subscribe: 1 });
+});
+
+test("failed viewport verification keeps its error and is retried after recovery", async () => {
+  const fixture = viewportPage({ width: 0, height: 0 });
+  fixture.state.waitError = new Error("still hidden");
+  await expect(waitForOperationalChatGptViewport(fixture.page)).rejects.toThrow("operational viewport: still hidden");
+  fixture.state.waitError = undefined;
+  fixture.state.viewport = { width: 0, height: 0 };
+  expect((await waitForOperationalChatGptViewport(fixture.page)).applied).toBeTrue();
+  expect(fixture.counts.wait).toBe(2);
+});
+
+test("navigation racing a viewport read cannot bless the previous document", async () => {
+  const fixture = viewportPage();
+  fixture.state.duringRead = () => {
+    fixture.state.duringRead = undefined;
+    fixture.state.viewport = { width: 0, height: 0 };
+    fixture.events.emit("framenavigated", fixture.mainFrame);
+  };
+  const timing = await waitForOperationalChatGptViewport(fixture.page);
+  expect(timing.applied).toBeTrue();
+  expect([timing.readCount, timing.applyCount, timing.waitCount]).toEqual([2, 1, 1]);
+  expect(fixture.counts.read).toBe(2);
+});
+
+test("navigation racing a viewport wait cannot bless the previous document", async () => {
+  const fixture = viewportPage({ width: 0, height: 0 });
+  fixture.state.duringWait = () => {
+    fixture.state.duringWait = undefined;
+    fixture.state.viewport = { width: 0, height: 0 };
+    fixture.events.emit("framenavigated", fixture.mainFrame);
+  };
+  const timing = await waitForOperationalChatGptViewport(fixture.page);
+  expect([timing.readCount, timing.applyCount, timing.waitCount]).toEqual([2, 2, 2]);
+  expect(fixture.counts.apply).toBe(2);
+  expect((await waitForOperationalChatGptViewport(fixture.page)).cacheHit).toBeTrue();
+});
+
+test("observer failure or disconnect falls back to page verification every time", async () => {
+  for (const failedSetup of [true, false]) {
+    const fixture = viewportPage();
+    fixture.state.observerError = failedSetup;
+    await waitForOperationalChatGptViewport(fixture.page);
+    if (!failedSetup) fixture.native.emit("close");
+    await waitForOperationalChatGptViewport(fixture.page);
+    expect(fixture.counts.read).toBe(2);
+  }
+});
+
+test("viewport observer closing during subscription cannot enable stale cache reuse", async () => {
+  const fixture = viewportPage();
+  fixture.state.duringSubscribe = () => fixture.native.emit("close");
+  await waitForOperationalChatGptViewport(fixture.page);
+  expect((await waitForOperationalChatGptViewport(fixture.page)).cacheHit).toBeFalse();
+  expect(fixture.counts.read).toBe(2);
+});
+
+test("aborted viewport cache hits preserve cancellation", async () => {
+  const fixture = viewportPage();
+  await waitForOperationalChatGptViewport(fixture.page);
+  const controller = new AbortController();
+  controller.abort();
+  await expect(waitForOperationalChatGptViewport(fixture.page, controller.signal)).rejects.toHaveProperty("name", "AbortError");
+});
+
+test("native viewport bounds and emulation are applied once until size or document changes", () => {
+  // Load the real host with an inert Electron import; no window, network or model.
+  const require = createRequire(import.meta.url);
+  const hostPath = require.resolve("../launcher/electron/browser-host.cjs");
+  const hostRequire = createRequire(hostPath);
+  const hostModule = { exports: {} as { BrowserHost?: { prototype: Record<string, Function> } } };
+  new Function("require", "module", "exports", readFileSync(hostPath, "utf8"))(
+    (name: string) => name === "electron" ? {} : hostRequire(name), hostModule, hostModule.exports,
+  );
+  const prototype = hostModule.exports.BrowserHost!.prototype;
+  const calls = { bounds: 0, emulation: 0 };
+  let actual = { x: 900, y: 700, width: 800, height: 600 };
+  const view = {
+    getBounds: () => actual,
+    setBounds: (bounds: typeof actual) => { calls.bounds++; actual = { ...bounds }; },
+    setVisible: () => {},
+    webContents: { enableDeviceEmulation: () => { calls.emulation++; } },
+  };
+  const host = { bounds: { x: 0, y: 0, width: 800, height: 600 },
+    hiddenTurnBounds: () => ({ x: 900, y: 700, width: host.bounds.width, height: host.bounds.height }),
+    enableBrowserViewport: prototype.enableBrowserViewport };
+  const tab = { view, rendererReady: true, status: "running", interactionMode: "automatic",
+    deviceEmulationDirty: true, deviceEmulationViewport: null };
+  prototype.presentTurnView!.call(host, tab, false);
+  prototype.presentTurnView!.call(host, tab, false);
+  expect(calls).toEqual({ bounds: 0, emulation: 1 });
+  host.bounds.width = 900;
+  prototype.presentTurnView!.call(host, tab, false);
+  prototype.presentTurnView!.call(host, tab, false);
+  expect(calls).toEqual({ bounds: 1, emulation: 2 });
+  tab.deviceEmulationDirty = true; // Navigation/renderer replacement, same dimensions.
+  prototype.presentTurnView!.call(host, tab, false);
+  expect(calls).toEqual({ bounds: 1, emulation: 3 });
+  prototype.presentTurnView!.call(host, tab, true); // Position is part of native bounds.
+  expect(calls).toEqual({ bounds: 2, emulation: 3 });
+
+  tab.deviceEmulationDirty = true;
+  const emulate = view.webContents.enableDeviceEmulation;
+  view.webContents.enableDeviceEmulation = () => { throw new Error("native emulation failed"); };
+  expect(() => prototype.presentTurnView!.call(host, tab, true)).toThrow("native emulation failed");
+  expect(tab.deviceEmulationDirty).toBeTrue();
+  view.webContents.enableDeviceEmulation = emulate;
+  prototype.presentTurnView!.call(host, tab, true);
+  expect(calls.emulation).toBe(4);
+
+  const setBounds = view.setBounds;
+  host.bounds.width = 1000;
+  view.setBounds = () => { throw new Error("native bounds failed"); };
+  expect(() => prototype.presentTurnView!.call(host, tab, true)).toThrow("native bounds failed");
+  view.setBounds = setBounds;
+  prototype.presentTurnView!.call(host, tab, true);
+  expect(calls).toEqual({ bounds: 3, emulation: 5 });
+});
+
+test("operational viewport skips resizing at the minimum and above", async () => {
+  for (const viewport of [{ width: 320, height: 240 }, { width: 1280, height: 900 }]) {
+    const page = {
+      evaluate: async () => viewport,
+      setViewportSize: async () => { throw new Error("unexpected resize"); },
+      waitForFunction: async () => { throw new Error("unexpected wait"); },
+    } as unknown as Page;
+    const timing = await waitForOperationalChatGptViewport(page);
+    expect(timing.applied).toBeFalse();
+    expect(timing.applyMs).toBe(0);
+    expect(timing.waitMs).toBe(0);
+  }
+});
+
+test("undersized viewport is repaired and its operational dimensions verified", async () => {
+  for (const viewport of [{ width: 319, height: 900 }, { width: 1280, height: 239 }]) {
+    const operations: unknown[] = [];
+    const page = {
+      evaluate: async () => viewport,
+      setViewportSize: async (size: unknown) => { operations.push(size); },
+      waitForFunction: async (predicate: Function, size: unknown, options: unknown) => {
+        operations.push({ size, options });
+        const context = createContext({ innerWidth: 1280, innerHeight: 900, size });
+        expect(runInContext(`(${predicate.toString()})(size)`, context)).toBeTrue();
+        expect(runInContext(`(${predicate.toString()})({width:1281,height:900})`, context)).toBeFalse();
+        expect(runInContext(`(${predicate.toString()})({width:1280,height:901})`, context)).toBeFalse();
+      },
+    } as unknown as Page;
+    expect((await waitForOperationalChatGptViewport(page)).applied).toBeTrue();
+    expect(operations).toEqual([
+      { width: 1280, height: 900 },
+      { size: { width: 320, height: 240 }, options: { polling: 25, timeout: 10_000 } },
+    ]);
+  }
+});
+
+test("viewport repair cannot silently accept failed verification", async () => {
+  const page = {
+    evaluate: async () => ({ width: 0, height: 0 }),
+    setViewportSize: async () => {},
+    waitForFunction: async () => { throw new Error("still hidden"); },
+  } as unknown as Page;
+  await expect(waitForOperationalChatGptViewport(page)).rejects.toThrow("operational viewport: still hidden");
+});
+
+test("only non-Pro low effort uses the 150ms Instant stability window", () => {
+  for (const effort of ["low", "high", "max", "medium", undefined]) {
+    const stableMs = effort === "low" ? 150 : 1000;
+    expect(chatGptCompletionStableMs(effort)).toBe(stableMs);
+    const tracker = new ChatGptCompletionTracker(chatGptCompletionStableMs(effort));
+    const state = { responsePresent: true, running: false, currentText: "answer", completionActionVisible: true };
+    expect(tracker.update(state, 0)).toBeFalse();
+    expect(tracker.nextStabilityDelayMs(0)).toBe(stableMs);
+    expect(tracker.update(state, stableMs - 1)).toBeFalse();
+    expect(tracker.update(state, stableMs)).toBeTrue();
+  }
+  expect(chatGptCompletionStableMs("low", true)).toBe(1000);
+});
+
+test("Instant candidate edits and tool batches restart stability and require a delayed final answer", () => {
+  const stableMs = chatGptCompletionStableMs("low");
+  const tracker = new ChatGptCompletionTracker(stableMs);
+  const state = { responsePresent: true, running: false, currentText: "before tool", currentHtml: "before tool", completionActionVisible: true };
+  expect(tracker.update(state, 0)).toBeFalse();
+  const edited = { ...state, currentHtml: "<p>before tool</p>" };
+  const editAt = stableMs - 1;
+  expect(tracker.update(edited, editAt)).toBeFalse();
+  expect(tracker.nextStabilityDelayMs(editAt)).toBe(stableMs);
+  expect(tracker.nextStabilityDelayMs(editAt + 1)).toBe(stableMs - 1);
+  expect(tracker.update(edited, editAt + stableMs - 1)).toBeFalse();
+  expect(tracker.update(edited, editAt + stableMs)).toBeTrue();
+  expect(tracker.observeToolBatch(1, state.currentText)).toBeTrue();
+  const toolAt = editAt + 2 * stableMs;
+  expect(tracker.nextStabilityDelayMs(toolAt)).toBeUndefined();
+  expect(tracker.update({ ...edited, externalToolCallsInFlight: true }, toolAt)).toBeFalse();
+  const idleAt = toolAt + stableMs;
+  expect(tracker.update(edited, idleAt)).toBeFalse();
+  expect(tracker.update(edited, idleAt + stableMs)).toBeFalse();
+  const final = { ...edited, currentText: "final after tool", currentHtml: "<p>final after tool</p>" };
+  const finalAt = idleAt + 2 * stableMs;
+  expect(tracker.update(final, finalAt)).toBeFalse();
+  expect(tracker.nextStabilityDelayMs(finalAt)).toBe(stableMs);
+  expect(tracker.update(final, finalAt + stableMs - 1)).toBeFalse();
+  expect(tracker.update(final, finalAt + stableMs)).toBeTrue();
+});
+
+test("Instant completion still waits for running generation, active streams, tools and completion actions", () => {
+  const stableMs = chatGptCompletionStableMs("low");
+  const final = { responsePresent: true, running: false, currentText: "final", completionActionVisible: true };
+  for (const active of [
+    { ...final, running: true },
+    { ...final, responseStreamActive: true },
+    { ...final, externalToolCallsInFlight: true },
+    { ...final, completionActionVisible: false },
+    { ...final, responsePresent: false },
+  ]) {
+    const tracker = new ChatGptCompletionTracker(stableMs);
+    expect(tracker.update(final, 0)).toBeFalse();
+    expect(tracker.update(active, stableMs)).toBeFalse();
+    expect(tracker.nextStabilityDelayMs(stableMs)).toBeUndefined();
+    const resumedAt = 2 * stableMs;
+    expect(tracker.update(final, resumedAt)).toBeFalse();
+    expect(tracker.nextStabilityDelayMs(resumedAt)).toBe(stableMs);
+    expect(tracker.update(final, resumedAt + stableMs - 1)).toBeFalse();
+    expect(tracker.update(final, resumedAt + stableMs)).toBeTrue();
+  }
+});
+
+test("completion candidates restart their full window after missing DOM, HTML edits or pending images", () => {
+  const final = { responsePresent: true, running: false, currentText: "answer",
+    currentHtml: "<p>answer</p>", completionActionVisible: true };
+  for (const interruption of [
+    { ...final, responsePresent: false },
+    { ...final, currentHtml: "<p><b>answer</b></p>" },
+    { ...final, pendingImages: true },
+  ]) {
+    const tracker = new ChatGptCompletionTracker(500);
+    expect(tracker.update(final, 0)).toBeFalse();
+    expect(tracker.update(interruption, 500)).toBeFalse();
+    expect(tracker.update(final, 600)).toBeFalse();
+    expect(tracker.nextStabilityDelayMs(600)).toBe(500);
+    expect(tracker.update(final, 1099)).toBeFalse();
+    expect(tracker.update(final, 1100)).toBeTrue();
+  }
+});
 
 const smokeHtml = readFileSync(new URL("./fixtures/chatgpt-dil-smoke.html", import.meta.url), "utf8");
 const powerCompleteHtml = readFileSync(new URL("./fixtures/chatgpt-power-complete.html", import.meta.url), "utf8");
@@ -888,4 +1364,108 @@ test("complete-prefix remount cannot hide changed links, text, order or missing 
     buffer.observe(changed!.markdownSegments, 1);
     expect(() => buffer.finish()).toThrow(ChatGptMarkdownConsistencyError);
   }
+});
+
+const unwrappedCompleteHtml = readFileSync(new URL("./fixtures/chatgpt-unwrapped-complete-2026-10-28.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+const unwrappedAnswer = "Configuration checked.\n\nThe configured model matches the requested model.";
+
+test("synthetic unwrapped reply requires a following completion action before delivery", async () => {
+  const complete = await snapshot(unwrappedCompleteHtml);
+  expect(complete.visibleText).toBe(unwrappedAnswer);
+  expect(complete.visibleText).not.toContain("go on");
+  expect(complete.completionActionVisible).toBeTrue();
+  expect(complete.traceBlocks.length).toBe(2);
+  expect(complete.traceBlocks.every(block => block.kind === "answer")).toBeTrue();
+  const tracker = new ChatGptCompletionTracker();
+  const state = { ...complete, running: false, currentText: complete.visibleText, currentHtml: complete.fullHtml };
+  expect(tracker.update(state, 0)).toBeFalse();
+  expect(tracker.update(state, CHATGPT_COMPLETION_SETTLE_MS)).toBeTrue();
+});
+
+test("streaming commentary without the site completion action is not promoted to an answer", async () => {
+  const streaming = await snapshot(unwrappedCompleteHtml
+    .replace(/<!--ASSISTANT_ACTIONS_START-->[\s\S]*?<!--ASSISTANT_ACTIONS_END-->/, ""));
+  expect(streaming.visibleText).toBe("");
+  expect(streaming.completionActionVisible).toBeFalse();
+});
+
+test("a completion action before the assistant message cannot prove it finished", async () => {
+  const actions = unwrappedCompleteHtml.match(/<!--ASSISTANT_ACTIONS_START-->[\s\S]*?<!--ASSISTANT_ACTIONS_END-->/)![0];
+  const moved = unwrappedCompleteHtml
+    .replace(actions, "")
+    .replace('<span hidden="" data-chatgpt-agent-turn-start=""></span>',
+      actions.replace(/<!--ASSISTANT_ACTIONS_(START|END)-->/g, "")
+      + '<span hidden="" data-chatgpt-agent-turn-start=""></span>');
+  const result = await snapshot(moved);
+  expect(result.visibleText).toBe("");
+  expect(result.completionActionVisible).toBeFalse();
+});
+
+test("legacy assistant turn markup still completes through the copied action", async () => {
+  const legacy = '<section id="turn"><div data-testid="conversation-turn-1" data-turn="assistant">'
+    + '<div class="markdown"><p>Legacy answer</p></div>'
+    + '<button data-testid="copy-turn-action-button"></button></div></section>';
+  const result = await snapshot(legacy);
+  expect(result.visibleText).toBe("Legacy answer");
+  expect(result.completionActionVisible).toBeTrue();
+});
+
+test("activity commentary with a preceding user footer and an alert is not a final answer", async () => {
+  const html = '<div id="turn" data-turn-key="captured-failure-shape">'
+    + '<div data-user-message-bubble>Long submitted prompt</div>'
+    + '<div class="turn-action-controls"><button aria-label="复制消息"></button>'
+    + '<button aria-label="共享提示"></button><button aria-label="编辑消息"></button></div>'
+    + '<div><span hidden data-chatgpt-agent-turn-start></span>'
+    + '<div data-markdown-text-style="assistant-message"><p>Continuing the check.</p></div>'
+    + '<div data-markdown-text-style="assistant-message"><p>I will inspect the configuration.</p></div></div>'
+    + '<div role="alert">Upstream response failed.</div></div>';
+  const result = await snapshot(html);
+  expect(result.visibleText).toBe("");
+  expect(result.completionActionVisible).toBeFalse();
+  expect(result.traceBlocks.filter(block => block.kind === "commentary")).toHaveLength(2);
+  expect(chatGptTurnIsComplete({
+    responsePresent: result.responsePresent, running: false, currentText: result.visibleText,
+    completionActionVisible: result.completionActionVisible,
+  })).toBeFalse();
+});
+
+test("activity, reasoning and user roots are not promoted by a following footer", async () => {
+  for (const wrapper of [
+    '<div><span hidden data-chatgpt-agent-turn-start></span>CONTENT</div>',
+    '<div data-streaming-response-status>CONTENT</div>',
+    '<div data-testid="cot-v5-content">CONTENT</div>',
+    '<div data-user-message-bubble>CONTENT</div>',
+    '<div data-content-search-unit-key="reply:user">CONTENT</div>',
+  ]) {
+    const content = '<div data-markdown-text-style="assistant-message"><p>Not a final answer.</p></div>';
+    const result = await snapshot('<div id="turn" data-turn-key="negative">'
+      + wrapper.replace("CONTENT", content)
+      + '<div class="turn-action-controls"><button aria-label="复制"></button></div></div>');
+    expect(result.visibleText).toBe("");
+    expect(result.completionActionVisible).toBeFalse();
+  }
+});
+
+test("unwrapped completion fails closed on an alert or a disabled or hidden action", async () => {
+  for (const html of [
+    unwrappedCompleteHtml.replace('<!--ASSISTANT_ACTIONS_START-->', '<div role="alert">Failure</div>'),
+    unwrappedCompleteHtml.replaceAll('type="button" aria-label="复制"', 'type="button" disabled aria-label="复制"')
+      .replaceAll('type="button" aria-label="重新生成回复"', 'type="button" disabled aria-label="重新生成回复"'),
+    unwrappedCompleteHtml.replaceAll('type="button" aria-label="复制"', 'type="button" hidden aria-label="复制"')
+      .replaceAll('type="button" aria-label="重新生成回复"', 'type="button" hidden aria-label="重新生成回复"'),
+  ]) {
+    const result = await snapshot(html);
+    expect(result.visibleText).toBe("");
+    expect(result.completionActionVisible).toBeFalse();
+  }
+});
+
+test("an action outside the bound turn cannot complete another turn", async () => {
+  const result = await snapshot('<div id="turn" data-turn-key="owned">'
+    + '<span hidden data-chatgpt-agent-turn-start></span>'
+    + '<div data-markdown-text-style="assistant-message"><p>Unfinished.</p></div></div>'
+    + '<div data-turn-key="foreign"><div class="turn-action-controls">'
+    + '<button aria-label="复制"></button></div></div>');
+  expect(result.visibleText).toBe("");
+  expect(result.completionActionVisible).toBeFalse();
 });

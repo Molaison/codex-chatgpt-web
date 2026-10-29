@@ -19,9 +19,10 @@ function effortTestPage<T extends object>(page: T, initial = { width: 1280, heig
   let viewport = { ...initial };
   return {
     ...page,
-    evaluate: async (callback: Function) => runInNewContext(
-      `(${callback.toString()})()`,
-      { innerWidth: viewport.width, innerHeight: viewport.height },
+    evaluate: async (callback: Function, argument?: unknown) => runInNewContext(
+      `(${callback.toString()})(argument)`,
+      { argument, innerWidth: viewport.width, innerHeight: viewport.height,
+        document: { querySelectorAll: () => [{ getClientRects: () => [1], getAttribute: () => "true", textContent: "" }], querySelector: () => null } },
     ),
     waitForFunction: async (callback: Function, argument: unknown) => {
       const ready = runInNewContext(`(${callback.toString()})(argument)`, {
@@ -68,6 +69,26 @@ test("explicit temporary and project URLs keep their session boundary", async ()
     await expect(assertNewChatPage({ url: () => chatGptNewChatUrl(options) } as any, options)).resolves.toBeUndefined();
     await expect(assertNewChatPage({ url: () => CHATGPT_NEW_CHAT_URL } as any, options)).rejects.toThrow("requested new chat");
   }
+});
+
+test("project preparation uses the private project id without reading localized sidebar labels", async () => {
+  const projectId = `g-p-${"b".repeat(32)}`;
+  const prepare = (ChatGptBrowserWorker.prototype as any).prepareChatSurface;
+  let url = CHATGPT_NEW_CHAT_URL;
+  const navigations: string[] = [];
+  const composer: any = { count: async () => 1, nth: () => composer, isVisible: async () => true };
+  const alert: any = { filter: () => alert, last: () => alert, isVisible: async () => false };
+  const page: any = effortTestPage({
+    url: () => url,
+    goto: async (next: string) => { url = next; navigations.push(next); },
+    locator: (selector: string) => selector === CHATGPT_COMPOSER_SELECTOR ? composer : alert,
+    getByRole: () => { throw new Error("project preparation must not search by visible role labels"); },
+    getByText: () => { throw new Error("project preparation must not search by visible text labels"); },
+  });
+  expect(await prepare.call({ activeComposer: async () => composer }, page, undefined, undefined,
+    { project: { id: projectId, name: "任意显示名" } })).toBe(composer);
+  expect(navigations).toEqual([`https://chatgpt.com/g/${projectId}/project`]);
+  await expect(assertNewChatPage(page, { projectId })).resolves.toBeUndefined();
 });
 
 test("composer and effort selectors exclude unrelated editable fields and menu buttons", () => {

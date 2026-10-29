@@ -1,7 +1,7 @@
 import type { NativeOperationScope, NativeCancelIntent, NativeCancelTerminal, NativeResultReady } from "./native-execution";
 import type { LauncherNativeSubmissionWatch } from "../../launcher-browser-host";
 import { createHash, randomUUID } from "node:crypto";
-import type { Page, Request } from "playwright-core";
+import type { Page, Request, Response } from "playwright-core";
 import { ChatGptWebAdapterError } from "./adapter-error";
 
 type ObservedId = { presence: "absent" } | { presence: "null" } | { presence: "value"; value: string };
@@ -51,7 +51,8 @@ export function submissionIdentityUnproven(reason: string, cause?: unknown): Cha
 }
 export function retainsBrowserExecution(error: unknown): boolean {
   return error instanceof ChatGptWebAdapterError && ["chatgpt_recovery_budget_exhausted",
-    "chatgpt_recovery_budget_missing", "chatgpt_submission_identity_unproven", "chatgpt_execution_retained", "chatgpt_browser_release_unconfirmed"].includes(error.code);
+    "chatgpt_recovery_budget_missing", "chatgpt_submission_identity_unproven", "chatgpt_execution_retained",
+    "chatgpt_browser_release_unconfirmed", "chatgpt_bound_turn_incomplete"].includes(error.code);
 }
 
 function field(body: Record<string, unknown>, key: string): ObservedId {
@@ -163,6 +164,13 @@ export class NativeSubmissionCollector {
   private page?: Page;
   private record?: NativeSubmissionRecord;
   private acknowledgedRecord?: NativeSubmissionRecord;
+  private readonly requests = new Set<Request>();
+  private responseAccepted = false;
+  private resolveResponseAccepted?: () => void;
+  private readonly responseAcceptedPromise = new Promise<void>(resolve => {
+    this.resolveResponseAccepted = resolve;
+  });
+  private dispatchedAt?: number;
   private posts = 0;
   private armed = false;
   private dispatchAttempted = false;
@@ -181,6 +189,7 @@ export class NativeSubmissionCollector {
     this.record = { version: 1, sendId: randomUUID(), revision: 1, phase: "send_activated", initialTurnIdentities: [...initialTurnIdentities], ...(expectedConversationId ? { expectedConversationId } : {}), ...(this.controls ? { binding: structuredClone(this.controls.binding) } : {}) };
     this.page = page;
     page.on("request", this.onRequest);
+    page.on("response", this.onResponse);
     const snapshot = parseNativeSubmission(this.record);
     await this.persist(snapshot);
     this.acknowledgedRecord = snapshot;
@@ -202,6 +211,7 @@ export class NativeSubmissionCollector {
   dispatching(): void {
     if (!this.armed || this.dispatchAttempted || this.failure) throw submissionIdentityUnproven("physical dispatch is unavailable or duplicated");
     this.dispatchAttempted = true;
+    this.dispatchedAt = performance.now();
   }
   didAttemptDispatch(): boolean { return this.dispatchAttempted; }
   acknowledgedSnapshot(): NativeSubmissionRecord | undefined {
@@ -304,8 +314,12 @@ export class NativeSubmissionCollector {
         || r.post.conversationId.value !== r.expectedConversationId)) {
         throw submissionIdentityUnproven("POST conversation differs from the original saved page");
       }
+      this.requests.add(request);
       r.phase = "post_observed";
       r.revision++;
+      console.info(`[chatgpt-web] native submission post_observed ${JSON.stringify({
+        sendId: r.sendId, postMs: this.dispatchedAt === undefined ? undefined : Math.round(performance.now() - this.dispatchedAt),
+      })}`);
       this.checkpoint();
     } catch (error) {
       this.failure = error instanceof ChatGptWebAdapterError ? error : submissionIdentityUnproven("POST identity could not be parsed");
@@ -314,6 +328,19 @@ export class NativeSubmissionCollector {
       this.checkpoint();
     }
   };
+  private readonly onResponse = (response: Response): void => {
+    const request = response.request();
+    if (!this.requests.delete(request) || this.responseAccepted) return;
+    if (response.status() !== 200 || !response.headers()["content-type"]?.includes("text/event-stream")) return;
+    this.responseAccepted = true;
+    console.info(`[chatgpt-web] native submission response_accepted ${JSON.stringify({
+      sendId: this.record?.sendId, responseMs: this.dispatchedAt === undefined ? undefined : Math.round(performance.now() - this.dispatchedAt),
+    })}`);
+    this.resolveResponseAccepted?.();
+  };
+  waitForResponseAccepted(): Promise<void> {
+    return this.responseAcceptedPromise;
+  }
   async observed(): Promise<NativeSubmissionRecord | undefined> {
     for (;;) {
       const queued = this.acknowledged;
@@ -341,9 +368,10 @@ export class NativeSubmissionCollector {
     if (!this.acknowledgedRecord?.post || !this.controls || !this.armed) throw submissionIdentityUnproven("original Page POST identity was not durably witnessed; execution remains retained");
     // Host continues watching while our Page transport is absent. Retire only this old listener.
     this.page?.off("request", this.onRequest);
+    this.page?.off("response", this.onResponse);
     const record = structuredClone(this.acknowledgedRecord);
     assertNativeHostWatch(record, await this.readHost(record));
-    this.page = page; page.on("request", this.onRequest);
+    this.page = page; page.on("request", this.onRequest); page.on("response", this.onResponse);
   }
   async acknowledgeStage(expected: string, actual: string): Promise<NativeSubmissionRecord> {
     const prior = await this.observed();
@@ -362,5 +390,10 @@ export class NativeSubmissionCollector {
     const completed = (await this.observed())!;
     return completed;
   }
-  dispose(): void { this.page?.off("request", this.onRequest); this.page = undefined; }
+  dispose(): void {
+    this.page?.off("request", this.onRequest);
+    this.page?.off("response", this.onResponse);
+    this.page = undefined;
+    this.requests.clear();
+  }
 }

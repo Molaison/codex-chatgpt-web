@@ -259,7 +259,7 @@ test("pool recovery shares canonical and alias resolves without generation and p
     host: "127.0.0.1", port: 0, databasePath: join(f.root, "pool.sqlite"),
     clients: [{ id: "cpr", keyFile }],
     accounts: [{ id: accountId, origin: backend.url.origin, models: ["standard"], conversationStoreDirectory: f.scope.directory }],
-    projectRoutes: [{ name: "papers", sessionNamespace: "papers", accountId, projectId }],
+    projectRoutes: [{ name: "papers", sessionNamespace: "papers", accountId, projectId, paperRegistry: true }],
   };
   const reader: PaperRecoveryReader = async request => {
     reads++;

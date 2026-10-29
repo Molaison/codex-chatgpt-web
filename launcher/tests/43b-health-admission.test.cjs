@@ -67,7 +67,7 @@ test("actual Host busy path uses session.fetch only and rejects foreign binding"
   const pinPath = path.join(root, "pin.json");
   fs.writeFileSync(pinPath, JSON.stringify({ version: 1, accountId: "account-a", profile: "development",
     partition: "persist:codex-web-gpt-dev-chatgpt", principalDigest: digestUserId("secret") }), { mode: 0o600 });
-  const events = new EventEmitter(); let authCalls = 0, pageCalls = 0, refreshCalls = 0;
+  const events = Object.assign(new EventEmitter(), { get: async () => [] }); let authCalls = 0, pageCalls = 0, refreshCalls = 0;
   const host = Object.assign(Object.create(BrowserHost.prototype), {
     observationInstanceId: "A".repeat(32), profile: "development", partition: "persist:codex-web-gpt-dev-chatgpt",
     getHealthPinPath: () => pinPath, getAccountId: () => "account-a", getBrowserInteractionMode: () => "automatic",
@@ -89,7 +89,9 @@ test("actual Host busy path uses session.fetch only and rejects foreign binding"
   await assert.rejects(host.readPassiveHealth({ ...request, expectedHost: { ...request.expectedHost, instanceId: "B".repeat(32) } }), /binding/);
   // Even overwrite events invalidate proof, independent of the legacy listener's early return.
   events.emit("changed", {}, { httpOnly: true, domain: ".chatgpt.com" }, "overwrite", true);
-  assert.equal((await host.readPassiveHealth(request)).state, "unknown");
+  assert.equal(host.passiveHealth.proof, null);
+  assert.equal((await host.readPassiveHealth(request)).state, "ready");
+  assert.equal(authCalls, 2, "invalidation permits an immediate fresh auth read");
   assert.equal(refreshCalls, 0);
   host.passiveHealth.pending = Promise.resolve();
   events.emit("changed", {}, { httpOnly: true, domain: ".chatgpt.com" }, "explicit", false);

@@ -3,27 +3,37 @@ import { parseChatGptSessionEffort as parseQaSessionEffort } from "./chatgpt-ses
 export { parseChatGptSessionEffort as parseQaSessionEffort } from "./chatgpt-session-effort";
 import { ReleaseAdmission, releaseTrackedResponse, type ReleaseControlConfig } from "./release-admission";
 import { createReceiptStore, receiptIdentity, replayReceipt, MAX_RECEIPT_BYTES, isQaCompactionRequest } from "./qa-pool-receipts";
-import { PaperRegistry, PaperError, normalizePaperId, poolSessionHash, type PaperScope, type PaperRow } from "./paper-registry";
+import { PaperRegistry, PaperError, normalizePaperId, normalizePaperSessionKey, poolSessionHash, type PaperScope, type PaperRow } from "./paper-registry";
 import type { PaperRecoveryReader } from "./paper-recovery";
 import { parsePaperHistory, readLauncherPaperHistory, type PaperHistoryReader } from "./paper-history";
 import { Database } from "bun:sqlite";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
-import { chmodSync, mkdirSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { chmodSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { gunzipSync, zstdDecompressSync } from "node:zlib";
 import type { ProviderNotice } from "./types";
 
-export interface QaPoolAccount { id: string; origin: string; models: string[]; enabled?: boolean; sessionModes?: boolean; conversationStoreDirectory?: string; browserHostDescriptorPath?: string; runtimeControlTokenFile?: string; qaHealthPinPath?: string }
+export interface QaPoolAccount { id: string; origin: string; models: string[]; enabled?: boolean; sessionModes?: boolean; conversationStoreDirectory?: string; browserHostDescriptorPath?: string; runtimeControlTokenFile?: string; qaHealthPinPath?: string; nativeApiTokenFile?: string }
 export interface QaPoolConfig {
   host: string; port: number; databasePath: string;
   releaseControl?: ReleaseControlConfig;
   clients: Array<{ id: string; keyFile: string; trustClientIdentity?: boolean }>;
   accounts: QaPoolAccount[];
   modelCatalogPath?: string;
-  projectRoutes?: Array<{ name: string; accountId: string; projectId: string; displayName?: string; sessionNamespace?: string; modelAliases?: Record<string, string> }>;
+  projectRoutes?: Array<{ name: string; accountId: string; projectId: string; displayName?: string; sessionNamespace?: string; modelAliases?: Record<string, string>; paperRegistry?: boolean }>;
 }
 const nonempty = (value: unknown): string | undefined => typeof value === "string" && value.trim() ? value.trim() : undefined;
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+function readAccountToken(path: string): string {
+  const stat = statSync(path);
+  if (!stat.isFile() || (process.platform !== "win32"
+    && ((stat.mode & 0o077) !== 0 || typeof process.getuid === "function" && stat.uid !== process.getuid()))) {
+    throw new Error("QA pool account token must be a private regular file");
+  }
+  const token = readFileSync(path, "utf8").replace(/\r?\n$/, "");
+  if (!/^[A-Za-z0-9_-]{43,128}$/.test(token)) throw new Error("Invalid QA pool account token");
+  return token;
+}
 // These adapter codes are emitted before Send. HTTP status alone is not proof.
 const PRE_SEND_ATTACHMENT_FAILURE = "prompt_attachments_not_submitted";
 function preSendAttachmentFailure(value: unknown, allowAdmissionFailure = false): boolean {
@@ -77,8 +87,11 @@ function configValid(config: QaPoolConfig): void {
   for (const account of config.accounts) {
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(account.id) || ids.has(account.id)
       || !Array.isArray(account.models) || !account.models.length
-      || account.models.some(model => typeof model !== "string" || !model)) throw new Error("Invalid QA pool account");
+      || account.models.some(model => typeof model !== "string" || !model)
+      || (account.nativeApiTokenFile !== undefined && (typeof account.nativeApiTokenFile !== "string"
+        || !isAbsolute(account.nativeApiTokenFile) || !account.nativeApiTokenFile.trim()))) throw new Error("Invalid QA pool account");
     ids.add(account.id);
+    if (account.nativeApiTokenFile !== undefined) readAccountToken(account.nativeApiTokenFile);
     const url = new URL(account.origin);
     if (url.protocol !== "http:" || !["127.0.0.1", "[::1]", "localhost"].includes(url.hostname)
       || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new Error("QA pool backends must be loopback HTTP origins");
@@ -93,7 +106,8 @@ function configValid(config: QaPoolConfig): void {
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(route.name) || routes.has(route.name)
       || !ids.has(route.accountId) || !/^g-p-[a-f0-9]{32}$/.test(route.projectId)
       || (route.displayName !== undefined && (typeof route.displayName !== "string" || !route.displayName.trim() || route.displayName.length > 128))
-      || (route.sessionNamespace !== undefined && (typeof route.sessionNamespace !== "string" || !route.sessionNamespace.trim()))) {
+      || (route.sessionNamespace !== undefined && (typeof route.sessionNamespace !== "string" || !route.sessionNamespace.trim()))
+      || (route.paperRegistry !== undefined && typeof route.paperRegistry !== "boolean")) {
       throw new Error("Invalid QA pool project route");
     }
     routes.add(route.name);
@@ -273,42 +287,47 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
     const receiptNative = typeof originalNative === "string" ? record(JSON.parse(originalNative)) : record(originalNative);
     const sessionScope = route?.sessionNamespace ? [client.id, route.sessionNamespace] : client.id;
     const paperMetadata = JSON.parse(record(normalized.payload.client_metadata)["x-codex-turn-metadata"] as string);
-    let paper: { id: string; scope: PaperScope; row: PaperRow } | undefined;
-    if (route?.name === "papers" && (paperMetadata.paper_id === undefined || paperMetadata.paper_operation === undefined)) return failure(400,"paper_id_required","Upgrade the papers client or provide paper_id and paper_operation; anonymous paper chats are disabled");
+    const paperRoute = route?.paperRegistry === true ? route : undefined;
+    let paper: { id: string; scope: PaperScope; row: PaperRow; sessionKey: string } | undefined;
+    if (paperRoute && (paperMetadata.paper_id === undefined || paperMetadata.paper_operation === undefined)) return failure(400,"paper_id_required","Upgrade the papers client or provide paper_id and paper_operation; anonymous paper chats are disabled");
     if (!admitted && (paperMetadata.paper_id !== undefined || paperMetadata.paper_operation !== undefined)) return failure(503, "pool_draining", "New paper work is fenced; existing work is preserved");
     if (paperMetadata.paper_id !== undefined || paperMetadata.paper_operation !== undefined) {
-      if (pathname !== "/v1/responses" || client.id !== "cpr" || route?.name !== "papers") return failure(409, "paper_route_required", "Paper operations require the authenticated papers project route");
-      const paperAccount = config.accounts.find(a => a.id === route.accountId);
+      if (pathname !== "/v1/responses" || !paperRoute) return failure(409, "paper_route_required", "Paper operations require a project route with paper registry enabled");
+      const paperAccount = config.accounts.find(a => a.id === paperRoute.accountId);
       if (!paperAccount?.conversationStoreDirectory || paperAccount.enabled === false) return failure(503, "paper_store_unconfigured", "Paper account conversation store is unavailable");
       const id = normalizePaperId(paperMetadata.paper_id);
-      const scope: PaperScope = { accountId:route.accountId, projectId:route.projectId, sessionScope, directory:paperAccount.conversationStoreDirectory };
+      const paperSessionKey = normalizePaperSessionKey(paperMetadata.paper_session_id);
+      let paperOperationKey = id + "\0" + paperSessionKey;
+      const scope: PaperScope = { accountId:paperRoute.accountId, projectId:paperRoute.projectId, sessionScope, directory:paperAccount.conversationStoreDirectory };
       if (paperMetadata.paper_operation === "resolve") {
-        let result = papers.resolve(id, scope, paperMetadata);
+        let result = papers.resolve(id, scope, paperMetadata, paperSessionKey);
         if (result.status === "uncertain" && paperAccount.browserHostDescriptorPath) {
-          const canonicalId = papers.get(id).paper_id;
-          if (activePaperReads.has(canonicalId)) return failure(409,"paper_busy","Wait for this paper's history read");
-          let recovery = paperRecoveries.get(canonicalId);
+          const canonicalId = papers.get(id, paperSessionKey).paper_id;
+          paperOperationKey = canonicalId + "\0" + paperSessionKey;
+          if (activePaperReads.has(paperOperationKey)) return failure(409,"paper_busy","Wait for this paper's history read");
+          let recovery = paperRecoveries.get(paperOperationKey);
           if (!recovery) {
             recovery = papers.reconcile(canonicalId, scope, {
               browserHostDescriptorPath: paperAccount.browserHostDescriptorPath,
               signal: request.signal, reader: options.paperRecoveryReader,
-            });
-            paperRecoveries.set(canonicalId, recovery);
+            }, paperSessionKey);
+            paperRecoveries.set(paperOperationKey, recovery);
           }
           try { await recovery; }
-          finally { if (paperRecoveries.get(canonicalId) === recovery) paperRecoveries.delete(canonicalId); }
-          result = papers.resolve(id, scope, paperMetadata);
+          finally { if (paperRecoveries.get(paperOperationKey) === recovery) paperRecoveries.delete(paperOperationKey); }
+          result = papers.resolve(id, scope, paperMetadata, paperSessionKey);
         }
         return paperResultResponse(result, payload);
       }
       if (paperMetadata.paper_operation === "history") {
-        const row = papers.get(id);
+        const row = papers.get(id, paperSessionKey);
         if (!row) return failure(404,"paper_history_not_found","No existing conversation for this paper");
+        paperOperationKey = row.paper_id + "\0" + paperSessionKey;
         if (row.account_id !== scope.accountId || row.project_id !== scope.projectId || row.session_hash !== poolSessionHash(scope.sessionScope,row.thread_id)) {
           return failure(409,"paper_scope_mismatch","Original paper account/project/session scope required");
         }
         if (!paperAccount.models.includes(model)) return failure(400,"session_model_unavailable","This paper account does not support the requested model");
-        if (row.in_flight || activePaperReads.has(row.paper_id) || paperRecoveries.has(row.paper_id)) return failure(409,"paper_busy","Wait for this paper's current operation");
+        if (row.in_flight || activePaperReads.has(paperOperationKey) || paperRecoveries.has(paperOperationKey)) return failure(409,"paper_busy","Wait for this paper's current operation");
         if (!nonempty(paperAccount.browserHostDescriptorPath)) return failure(503,"paper_history_unavailable","This account has no native history reader configured");
         let conversationUrl: string;
         try { conversationUrl = papers.mapping(row,scope); }
@@ -318,25 +337,29 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
           }
           throw error;
         }
-        activePaperReads.add(row.paper_id);
+        activePaperReads.add(paperOperationKey);
         try {
           request.signal.throwIfAborted();
           const raw = await readPaperHistory({accountId:paperAccount.id,sessionHash:row.session_hash,
             browserHostDescriptorPath:paperAccount.browserHostDescriptorPath!,conversationUrl,signal:request.signal});
           request.signal.throwIfAborted();
           const result = parsePaperHistory(raw,conversationUrl);
-          return paperResultResponse({paper_id:id,thread_id:row.thread_id,conversation_url:conversationUrl,...result},payload);
+          return paperResultResponse({
+            paper_id:id, paper_registry_version:2, paper_session_id:paperSessionKey,
+            thread_id:row.thread_id, conversation_url:conversationUrl, ...result,
+          },payload);
         } catch (error) {
           if (error instanceof PaperError) throw error;
           return failure(503,"paper_history_unavailable","Native conversation history could not be read; no message was sent");
-        } finally { activePaperReads.delete(row.paper_id); }
+        } finally { activePaperReads.delete(paperOperationKey); }
       }
       if (paperMetadata.paper_operation !== "chat") return failure(400,"paper_operation_invalid","Use resolve, history or chat");
-      const existingPaper = papers.get(id);
-      if (existingPaper && (activePaperReads.has(existingPaper.paper_id) || paperRecoveries.has(existingPaper.paper_id))) return failure(409,"paper_busy","Wait for this paper's current operation");
+      const existingPaper = papers.get(id, paperSessionKey);
+      if (existingPaper) paperOperationKey = existingPaper.paper_id + "\0" + paperSessionKey;
+      if (existingPaper && (activePaperReads.has(paperOperationKey) || paperRecoveries.has(paperOperationKey))) return failure(409,"paper_busy","Wait for this paper's current operation");
       if (parseQaSessionEffort(record(normalized.payload.reasoning).effort).mode === "temporary") return failure(400,"paper_persistent_required","Papers require persistent conversations");
-      const prepared = papers.prepare(id,scope,paperMetadata,normalized.payload.input);
-      paper = {id:prepared.row.paper_id,scope,row:prepared.row}; normalized.thread = prepared.row.thread_id; normalized.payload.input = prepared.input;
+      const prepared = papers.prepare(id,scope,paperMetadata,normalized.payload.input,paperSessionKey);
+      paper = {id:prepared.row.paper_id,scope,row:prepared.row,sessionKey:paperSessionKey}; normalized.thread = prepared.row.thread_id; normalized.payload.input = prepared.input;
       delete normalized.payload.previous_response_id;
       delete paperMetadata.parent_thread_id; delete paperMetadata.forked_from_thread_id;
       record(normalized.payload.client_metadata)["x-codex-turn-metadata"] = JSON.stringify({...paperMetadata,thread_id:normalized.thread});
@@ -466,7 +489,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
     delete metadata._chatgpt_project;
     delete metadata._chatgpt_session_mode;
     delete metadata._chatgpt_defer_text_until_complete;
-    if (route?.name === "papers") metadata._chatgpt_defer_text_until_complete = true;
+    if (paperRoute) metadata._chatgpt_defer_text_until_complete = true;
     if (account.sessionModes) metadata._chatgpt_session_mode = selection.mode;
     if (owner.project_id) {
       const title = paper && typeof paperMetadata.paper_title === "string"
@@ -483,6 +506,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
     }
     metadata["x-codex-turn-metadata"] = JSON.stringify({ ...native, thread_id: "qa-pool-" + hash });
     const headers = new Headers({ "content-type": "application/json" });
+    if (account.nativeApiTokenFile !== undefined) headers.set("authorization", "Bearer " + readAccountToken(account.nativeApiTokenFile));
     for (const name of ["accept", "openai-beta", "user-agent"]) {
       const value = request.headers.get(name); if (value) headers.set(name, value);
     }
@@ -516,7 +540,8 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
         historyReserved = false;
       }
       if (!paper) return;
-      if (notSubmitted && !paperCompleted) papers.release(paper.id); else papers.finish(paper.id, paperCompleted);
+      if (notSubmitted && !paperCompleted) papers.release(paper.id, paper.sessionKey);
+      else papers.finish(paper.id, paperCompleted, paper.sessionKey);
     };
     const commitHistory = db.transaction((value: unknown, wire?: Uint8Array, cacheable = true) => {
       const response = record(value);
@@ -533,7 +558,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
       const response = record(value);
       if (response.status !== "completed" || typeof response.id !== "string" || !Array.isArray(response.output)) return;
       if (paper) {
-        if (!paperCompleted) { papers.complete(paper.id, paper.scope); paperCompleted = true; }
+        if (!paperCompleted) { papers.complete(paper.id, paper.scope, paper.sessionKey); paperCompleted = true; }
         promoteHistory(hash);
         return;
       }
@@ -576,7 +601,7 @@ export function createQaPool(config: QaPoolConfig, options: { paperRecoveryReade
         }
       } catch { return failure(503, "temporary_history_unavailable", "The pending turn could not be persisted; no message was sent"); }
     }
-    if (paper) papers.begin(paper.id);
+    if (paper) papers.begin(paper.id, paper.sessionKey);
     if (retainHistory) activeHistories.add(hash);
     let receivedResponse = false;
     if (admission) {

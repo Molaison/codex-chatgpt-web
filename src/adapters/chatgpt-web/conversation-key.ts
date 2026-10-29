@@ -90,9 +90,26 @@ function submittedPrefixLength(parsed: CodexParsedRequest, previous?: CodexParse
 
 /** Private fingerprints bind a saved chat to full canonical input, including native item identity. */
 export function canonicalConversationHistory(parsed: CodexParsedRequest): string[] | undefined {
-  const raw = parsed._rawBody as { input?: unknown; previous_response_id?: unknown } | undefined;
+  const raw = parsed._rawBody as {
+    input?: unknown;
+    previous_response_id?: unknown;
+    client_metadata?: Record<string, unknown>;
+  } | undefined;
   // Incremental API continuations have a separately proved saved-response contract.
   if (!Array.isArray(raw?.input) || raw?.previous_response_id || parsed._chatgptSavedConversationContinuation) return undefined;
+  // A paper-registry chat is an append-only continuation of the one saved ChatGPT
+  // conversation bound to its local paper session. Its input is only the new local
+  // turn, not a full transcript, so it cannot serve as a rewind witness.
+  const turnMetadata = raw.client_metadata?.["x-codex-turn-metadata"];
+  let paperMetadata: unknown;
+  try {
+    paperMetadata = typeof turnMetadata === "string" ? JSON.parse(turnMetadata) : turnMetadata;
+  } catch {
+    paperMetadata = undefined;
+  }
+  if (paperMetadata && typeof paperMetadata === "object" && !Array.isArray(paperMetadata)
+    && (paperMetadata as Record<string, unknown>).paper_registry_version === 2
+    && (paperMetadata as Record<string, unknown>).paper_operation === "chat") return undefined;
   const messages = raw.input.filter((item): item is Record<string, unknown> => {
     if (!item || typeof item !== "object" || Array.isArray(item)) return false;
     const value = item as Record<string, unknown>;

@@ -44,7 +44,7 @@ type HelperMessage =
   | { type: "event"; id: string; event: "multipart_stage_acknowledged"; stageIndex: number }
   | { type: "event"; id: string; event: "completion_fence_begin"; requestId: number }
   | { type: "event"; id: string; event: "completion_fence_commit"; requestId: number; revision: number }
-  | { type: "event"; id: string; event: "prepared_selected"; reused: boolean }
+  | { type: "event"; id: string; event: "prepared_selected"; reused: boolean; includeInstructions?: boolean }
   | { type: "event"; id: string; event: "browser_lease_acquired"; surfaceId: string }
   | { type: "event"; id: string; event: "luna_checkpoint"; checkpoint: ChatGptLunaCheckpoint; answerHash: string }
   | { type: "event"; id: string; event: "conversation_restored" | "observation_resumed" | "reconnecting" | "conversation_recovered" | "recovery_fence"; reason?: "delivery_loss" | "receipt_only_failure" | "transport_retry" | "recovery_verified"; epoch?: number; requestId?: number; phase?: "connector_waiting" | "connector_refreshing" | "network_waiting" | "saved_conversation_waiting" | "model_selection_restoring" }
@@ -164,7 +164,11 @@ function parseHelperMessage(line: string): HelperMessage {
       if (typeof message.reused !== "boolean") {
         throw new Error("Launcher browser helper prompt selection is invalid");
       }
-      return { type: "event", id: message.id, event, reused: message.reused };
+      if (message.includeInstructions !== undefined && typeof message.includeInstructions !== "boolean") {
+        throw new Error("Launcher browser helper instruction selection is invalid");
+      }
+      return { type: "event", id: message.id, event, reused: message.reused,
+        ...(message.includeInstructions !== undefined ? { includeInstructions: message.includeInstructions } : {}) };
     }
     if (!["heartbeat", "generation_progress", "send_activated", "submitted", "reasoning", "commentary", "text"].includes(String(event))) {
       throw new Error("Launcher browser helper emitted an unknown event");
@@ -440,6 +444,8 @@ export class LauncherBrowserHelperClient {
             ...(turn.requireRetainedConversation ? { requireRetainedConversation: true } : {}),
             ...(turn.conversationKey ? { conversationKey: turn.conversationKey } : {}),
             ...(turn.canonicalHistory ? { canonicalHistory: turn.canonicalHistory } : {}),
+            ...(this.helperFeatures.has("instruction-dedup-v1") && turn.instructionFingerprint
+              ? { instructionFingerprint: turn.instructionFingerprint } : {}),
             ...(turn.compaction ? { compaction: true } : {}),
             ...(turn.captureLunaCheckpoint ? { captureLunaCheckpoint: true } : {}),
             ...(turn.externalProgress ? { externalProgress: true } : {}),
@@ -745,8 +751,12 @@ export class LauncherBrowserHelperClient {
           ));
       }
       else if (message.event === "prepared_selected") {
+        const includeInstructions = message.includeInstructions !== false
+          || !this.helperFeatures.has("instruction-dedup-v1") || !pending.turn.instructionFingerprint;
         const prepare = message.reused ? pending.turn.prepareResume : pending.turn.prepare;
-        void Promise.resolve().then(() => prepare?.()).then(prepared => {
+        void Promise.resolve().then(() => prepare?.({
+          includeSystemPrompt: includeInstructions,
+        })).then(prepared => {
           if (!prepared) throw new Error("Launcher browser helper selected an unavailable continuation prompt");
           if (this.pending.get(message.id) !== pending) {
             prepared.release();
@@ -757,7 +767,7 @@ export class LauncherBrowserHelperClient {
           if (prepared.skillFiles?.length && !this.helperFeatures.has("skill-attachments")) {
             throw new Error("Launcher browser helper does not support skill attachments; update or restart the launcher");
           }
-          return Promise.resolve(pending.turn.onPreparedSelected?.(message.reused)).then(() => {
+          return Promise.resolve(pending.turn.onPreparedSelected?.(message.reused, includeInstructions)).then(() => {
             if (this.pending.get(message.id) !== pending) return;
             return this.send({
               type: "prepared_selected_ack",

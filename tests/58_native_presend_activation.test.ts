@@ -13,6 +13,7 @@ import { ChatGptWebAdapterError, ChatGptCompactionHandoffAccepted } from "../src
 import type { NativeOperationScope } from "../src/adapters/chatgpt-web/native-execution";
 import type { CodexParsedRequest } from "../src/types";
 import { retainedForwardWorkerPolicy } from "../src/adapters/chatgpt-web/retained-forward-surface";
+import { chatGptNewChatUrl } from "../src/chatgpt-session";
 
 const evidence = process.env.Q39_TEST_ROOT ?? mkdtempSync(join(tmpdir(), "native-evidence-"));
 afterAll(() => { if (!process.env.Q39_TEST_ROOT) rmSync(evidence, { recursive: true, force: true }); });
@@ -73,7 +74,7 @@ test("actual runExclusive post-parent handshake heartbeat failure has zero slot/
   f.record.nativeScope = f.scope; f.op.checkpoint();
   let preparedAck = false, clicks = 0, collectors = 0;
   const controls: Array<Record<string, unknown>> = [], Noop = class extends Error {};
-  const env = { retainedForwardWorkerPolicy, persistentConversationContext: () => undefined,
+  const env = { retainedForwardWorkerPolicy, chatGptNewChatUrl, persistentConversationContext: () => undefined,
     notifyLauncherTurn: async (_path: unknown, request: Record<string, unknown>) => {
       controls.push(request);
       if (request.phase === "start") return { surfaceId: "s".repeat(32) };
@@ -97,10 +98,11 @@ test("actual runExclusive post-parent handshake heartbeat failure has zero slot/
   const session = registry.getOrCreate("original", () => ({ ...cancellable(run, f.op), operation: f.op,
     mode: "read-only", trace: new ChatGptTraceFeed(), text: new ChatGptTextFeed(), submission: f.submission }),
     f.scope.traceId, f.record.ownerKey);
-  await bounded(session.browserOutcome);
+  const outcome = await bounded(session.browserOutcome);
   let settlement = "resolved";
   try { await bounded(session.waitForPhysicalSettlement()); } catch (error) { settlement = String(error); }
-  const result = { clicks, collectors, nativeSlots: f.record.nativeSubmissions?.length ?? 0,
+  const result = { outcome: outcome.type === "error" ? String(outcome.error) : outcome.type,
+    clicks, collectors, nativeSlots: f.record.nativeSubmissions?.length ?? 0,
     submission: f.record.submission, hasNativeExecution: hasNativeExecution(f.record),
     physicalSettled: f.record.physicalSettled, unresolvedOwner: !!f.journal.unresolvedOwner(f.record.ownerKey!, "next"),
     controls: controls.map(({ phase, status }) => ({ phase, status })), settlement };

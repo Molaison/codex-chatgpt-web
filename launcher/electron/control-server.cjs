@@ -173,9 +173,11 @@ class BrowserControlServer {
         return;
       }
       if (isStandbyStatus) {
+        const pool = host.standbySnapshot();
         writeJson(response, 200, {
-          standbyReady: host.standbyView?.ready === true,
-          standbyPresent: Boolean(host.standbyView),
+          standbyReady: pool.pages.some(page => page.ready),
+          standbyPresent: pool.pages.length > 0,
+          pool,
           activeTurns: [...host.turnTabs.values()].filter(tab => tab.status === "running").length,
           tabs: host.snapshot().tabs,
         });
@@ -406,7 +408,8 @@ class BrowserControlServer {
             body.connectorIdentity,
             body.requireRetainedConversation === true,
             acquisition.signal,
-            ...(body.conversationUrl !== undefined || body.leaseFencing !== undefined ? [body.conversationUrl, body.leaseFencing] : []),
+            ...(body.conversationUrl !== undefined || body.leaseFencing !== undefined || body.newChatUrl !== undefined
+              ? [body.conversationUrl, body.leaseFencing, body.newChatUrl] : []),
           );
         } finally {
           response.off("close", onClose);
