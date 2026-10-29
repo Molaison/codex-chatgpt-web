@@ -63,7 +63,7 @@ jobs:
       - name: Prepare Chromium for DOM regression tests
         run: |
           bun node_modules/playwright-core/cli.js install --with-deps chromium
-          bun -e 'import { chromium } from "playwright-core"; import { appendFileSync } from "node:fs"; appendFileSync(process.env.GITHUB_ENV, `CHATGPT_DOM_TEST_BROWSER=${chromium.executablePath()}\n`);'
+          bun -e 'import { chromium } from "playwright-core"; import { appendFileSync } from "node:fs"; appendFileSync(process.env.GITHUB_ENV, "CHATGPT_DOM_TEST_BROWSER=" + chromium.executablePath() + "\n");'
       - run: bun run verify
       - run: bun run app:package
         env:
