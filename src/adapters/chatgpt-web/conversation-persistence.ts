@@ -203,6 +203,24 @@ export class ChatGptConversationStore {
     return record;
   }
 
+  invalidateInstructions(key: string, expected: SavedChatConversation): SavedChatConversation {
+    const current = this.lookup(key);
+    if (!current || current.claim !== expected.claim || current.account !== expected.account
+      || JSON.stringify(current.history) !== JSON.stringify(expected.history)
+      || current.instructionFingerprint !== expected.instructionFingerprint
+      || current.instructionHistoryFingerprint !== expected.instructionHistoryFingerprint) {
+      throw conversationPersistenceError("saved_conversation_conflict", "Only the current conversation checkpoint owner may invalidate its instructions.");
+    }
+    if (current.instructionFingerprint === undefined && current.instructionHistoryFingerprint === undefined) return current;
+    const { instructionFingerprint, instructionHistoryFingerprint, ...record } = current;
+    const temporary = this.writeTemporary(key, record);
+    try { renameSync(temporary, this.path(key)); this.flushDirectory(); } catch (error) {
+      try { unlinkSync(temporary); } catch {}
+      throw conversationPersistenceError("conversation_store_unavailable", "The rejected instruction checkpoint could not be invalidated.", error);
+    }
+    return record;
+  }
+
   finishProjectMove(key: string, url: string): SavedChatConversation {
     const current = this.lookup(key);
     const canonical = canonicalSavedChatUrl(url);

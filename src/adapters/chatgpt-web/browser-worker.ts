@@ -6610,7 +6610,17 @@ export class ChatGptBrowserWorker {
     const usageWrites: Promise<void>[] = [];
     const originalAbortSignal = turn.abortSignal;
     const rejectionAbort = new AbortController();
-    const submissionRejection = new ChatGptSubmissionRejectionObserver(error => rejectionAbort.abort(error));
+    let instructionInputRejected = false;
+    const submissionRejection = new ChatGptSubmissionRejectionObserver(error => {
+      if (error.code === "context_length_exceeded") {
+        instructionInputRejected = true;
+        if (persistent?.saved) {
+          try { persistent.saved = persistent.store.invalidateInstructions(persistent.key, persistent.saved); }
+          catch (checkpointError) { rejectionAbort.abort(checkpointError); return; }
+        }
+      }
+      rejectionAbort.abort(error);
+    });
     const nativeCollectors: NativeSubmissionCollector[] = [];
     const originalNativeSubmission = turn.onNativeSubmission;
     if (turn.nativeSubmissionIdentity) {
@@ -7296,7 +7306,8 @@ export class ChatGptBrowserWorker {
             }
             if (persistent?.saved && turn.canonicalHistory) {
               persistent.saved = persistent.store.recordHistory(
-                persistent.key, persistent.saved, turn.canonicalHistory, turn.instructionFingerprint,
+                persistent.key, persistent.saved, turn.canonicalHistory,
+                instructionInputRejected ? undefined : turn.instructionFingerprint,
               );
             }
           }, onSendActivated: async () => {
