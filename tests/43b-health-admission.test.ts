@@ -55,7 +55,7 @@ async function fixture() {
   const accountId = "synthetic-offline-only", key = "test-client-" + "k".repeat(40), token = "t".repeat(43);
   let userId = "synthetic-principal", authCalls = 0, dispatched = 0, draining = false;
   let corrupt: ((value: any) => any) | undefined, hostReadCorrupt: ((value: any) => any) | undefined;
-  const cookies = new EventEmitter();
+  const cookies = Object.assign(new EventEmitter(), { get: async () => [] });
   const pinPath = join(root, "pin.json"), descriptorPath = join(root, "host.json");
   writeFileSync(pinPath, JSON.stringify({ version: 1, accountId, profile: "development",
     partition: "persist:codex-web-gpt-dev-chatgpt", principalDigest: digestUserId(userId) }), { mode: 0o600 });
